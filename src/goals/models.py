@@ -198,6 +198,23 @@ class DecisionBrief(BaseModel):
     agent_handled_summary: str = ""
 
 
+class ProfessionalBoundaryReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str = ""
+    domain: Literal["general", "medical", "legal", "financial", "safety"] = "general"
+    detected_domains: list[str] = Field(default_factory=list)
+    title: str
+    plain_boundary: str
+    what_agent_can_do: list[str] = Field(default_factory=list)
+    needs_user_or_professional: list[str] = Field(default_factory=list)
+    evidence_expectations: list[str] = Field(default_factory=list)
+    safe_next_steps: list[str] = Field(default_factory=list)
+    suggested_user_message: str
+    confidence: float = 0.0
+    summary: str
+
+
 class GoalBriefAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -857,6 +874,7 @@ class GoalIssue(BaseModel):
     severity: Literal["p0", "p1", "p2"]
     area: Literal[
         "architecture",
+        "boundary",
         "decision",
         "evidence",
         "gate",

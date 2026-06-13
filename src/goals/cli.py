@@ -12,6 +12,7 @@ from goals.architecture import (
     build_architecture_brief,
     render_architecture_brief,
 )
+from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.decisions import (
     build_decision_brief,
@@ -94,6 +95,7 @@ from goals.storage import EventStore, GoalsError, atomic_write_text
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
+boundary_app = typer.Typer(help="Explain professional boundaries for high-stakes goals.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
@@ -104,6 +106,7 @@ roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
+app.add_typer(boundary_app, name="boundary")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
@@ -383,6 +386,44 @@ def architecture_update(
         architecture_path = emit_architecture(Path.cwd())
         emit_dashboard(Path.cwd())
         typer.echo(f"Updated architecture map: {architecture_path}")
+
+    _handle(run)
+
+
+@boundary_app.command("explain")
+def boundary_explain(
+    domain: str = typer.Option(
+        "auto",
+        help="auto, general, medical, legal, financial, or safety.",
+    ),
+    level: str = typer.Option(
+        "basic",
+        help="basic, detailed, or technical.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Explain the safe professional boundary for a high-stakes goal."""
+
+    def run():
+        selected_domain = _validate_choice(
+            domain,
+            {"auto", "general", "medical", "legal", "financial", "safety"},
+            "domain",
+        )
+        selected_level = _validate_choice(level, {"basic", "detailed", "technical"}, "level")
+        report = build_professional_boundary_report(
+            _optional_snapshot(Path.cwd()),
+            domain=selected_domain,  # type: ignore[arg-type]
+        )
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(
+                render_professional_boundary_report(
+                    report,
+                    level=selected_level,  # type: ignore[arg-type]
+                )
+            )
 
     _handle(run)
 

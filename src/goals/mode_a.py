@@ -76,6 +76,7 @@ def recommended_checks(worktree: Path) -> list[str]:
     checks.extend(
         [
             "uv run goals brief",
+            "uv run goals boundary explain --domain auto",
             "uv run goals merge-check",
             "uv run goals source freshness --strict",
             "uv run goals validate",
@@ -141,6 +142,10 @@ Local ecosystem discovery:
 Permission policy:
 - Before using an external service, connector, paid tool, production-affecting action, or destructive command, run `goals permission check NAME --kind plugin --action "plain-language action"`.
 - If the permission report says `agent_decide`, proceed with a reversible local action and record evidence. If it says `ask_user`, use `goals brief` wording before asking. If it says `deny`, stop and choose a safer local alternative unless the user explicitly approves.
+
+Professional boundaries:
+- If the work touches medical, legal, financial, safety, compliance, or other professional judgment, run `goals boundary explain --domain auto` before giving guidance or asking the user.
+- Use the boundary report's suggested wording, evidence expectations, and safe next steps. Do not turn a professional judgment into an agent-only decision.
 
 Self-evolution memory:
 {memory}
