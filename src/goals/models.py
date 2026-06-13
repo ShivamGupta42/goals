@@ -370,6 +370,33 @@ class ScenarioEvaluation(BaseModel):
     summary: str
 
 
+class ScenarioDogfoodCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    category: str
+    objective: str
+    status: Literal["pass", "fail"]
+    plain_summary: str
+    user_decision_count: int = 0
+    agent_decision_count: int = 0
+    surfaced_questions: list[str] = Field(default_factory=list)
+    agent_handled_decisions: list[str] = Field(default_factory=list)
+    required_evidence: list[str] = Field(default_factory=list)
+    missing_capabilities: list[str] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
+
+
+class ScenarioDogfoodReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    passed: bool
+    summary: str
+    cases: list[ScenarioDogfoodCase] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class ScanResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

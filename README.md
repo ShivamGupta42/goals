@@ -40,6 +40,7 @@ uv run goals ecosystem sync
 uv run goals source list
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
+uv run goals eval dogfood --adapter claude
 uv run goals adapter check codex
 ```
 
@@ -147,6 +148,11 @@ experience of decisions and visualization, not just backend state:
 
 ```bash
 uv run goals eval scenarios --adapter claude
+uv run goals eval dogfood --adapter claude
 ```
+
+`eval dogfood` prints a plain-language report for each synthetic goal type:
+what the user sees, what the agent can decide, what proof is required, and which
+gaps would block the goal.
 
 See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.
