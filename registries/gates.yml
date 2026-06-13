@@ -1,0 +1,10 @@
+version: 1
+kind: gates
+gates:
+  phase-review:
+    label: Phase review
+    result_type: pass_fail_blocked
+  safety-check:
+    label: Public safety check
+    scanners: [secrets, local_paths, license, prompt_injection, destructive_ops, public_repo_hygiene, supply_chain]
+

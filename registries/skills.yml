@@ -1,0 +1,7 @@
+version: 1
+kind: skills
+skills:
+  decision-explainer:
+    label: Decision Explainer
+    use_when: [technical decision, non-technical user, high-risk tradeoff]
+

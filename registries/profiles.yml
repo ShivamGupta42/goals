@@ -1,0 +1,10 @@
+version: 1
+kind: profiles
+profiles:
+  generic:
+    label: Generic project
+    gates: [phase-review, safety-check]
+  web-app:
+    label: Web app
+    gates: [phase-review, safety-check, ux-review]
+

@@ -1,0 +1,8 @@
+version: 1
+kind: adapters
+adapters:
+  claude:
+    label: Claude Code native goal adapter
+  codex:
+    label: Codex native goal adapter
+

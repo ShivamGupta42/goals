@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Generated local goal state can contain machine paths and private run history.
+.agent-workflow/goals/
+.goals-worktrees/
+

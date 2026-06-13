@@ -1,0 +1,10 @@
+version: 1
+kind: agents
+agents:
+  goal-manager:
+    label: Goal Manager
+    responsibilities: [state, phase routing, status]
+  quality-evaluator:
+    label: Quality Evaluator
+    responsibilities: [evidence, gate results, acceptance]
+
