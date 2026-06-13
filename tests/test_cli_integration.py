@@ -96,6 +96,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals issues" in run_prompt.stdout
     assert "goals brief" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
+    assert "goals boundary explain --domain auto" in run_prompt.stdout
     assert "goals source freshness" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
@@ -129,6 +130,23 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Permission Policy Report" in permission.stdout
     assert "Needs The User" in permission.stdout
     assert "Approve use of this external service or connector?" in permission.stdout
+    boundary = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "boundary",
+            "explain",
+            "--domain",
+            "financial",
+            "--level",
+            "basic",
+        ],
+        worktree,
+    )
+    assert "Professional Boundary" in boundary.stdout
+    assert "financial" in boundary.stdout
+    assert "money or long-term obligations" in boundary.stdout
     audit = run(["python", "-m", "goals.cli", "ecosystem", "audit"], worktree)
     assert "Ecosystem Quality Audit" in audit.stdout
     skill_root = tmp_path / "skills"

@@ -39,6 +39,7 @@ uv run goals dashboard
 uv run goals architecture show
 uv run goals architecture brief
 uv run goals decision brief
+uv run goals boundary explain --domain auto
 uv run goals ecosystem recommend
 uv run goals ecosystem merge
 uv run goals ecosystem discover
@@ -89,7 +90,13 @@ Agents can explain only important decisions with active goal history:
 uv run goals brief
 uv run goals decision brief
 uv run goals decision explain --file decision.json --level basic
+uv run goals boundary explain --domain auto
 ```
+
+For medical, legal, financial, safety, or similar high-stakes goals, agents can
+use `goals boundary explain` to get simple wording for what the agent can do,
+what needs the user or a qualified professional, what evidence is expected, and
+which next steps are safe to take.
 
 `brief` is the first non-technical view. It answers: what is happening, what
 needs your answer, what the agent can do next, what proof exists, and what

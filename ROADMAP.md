@@ -173,7 +173,10 @@ registry-backed way to keep local/reversible choices moving while escalating
 external, costly, destructive, or production-affecting actions. Cross-project
 memory sync can now inspect another Goals project or memory file, dry-run
 sanitized lesson imports, and apply them to the current project's local memory
-only when requested.
+only when requested. Professional boundary templates now give Mode A agents
+plain-language wording for medical, legal, financial, safety, and general
+high-stakes goals, including what the agent can do, what needs the user or a
+qualified professional, expected evidence, and safe next steps.
 
 ### Direction
 
@@ -198,6 +201,8 @@ only when requested.
 - Use `goals permission check` before external connectors, destructive commands,
   paid tools, or production-affecting actions; keep the report understandable to
   non-technical users.
+- Use `goals boundary explain --domain auto` before high-stakes medical, legal,
+  financial, safety, or professional-judgment guidance.
 - Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
   is tested, not only described.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can
@@ -249,34 +254,34 @@ decision.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Professional Boundary Templates** (`p1`)
-  - Source: self-check
-  - Capability: `professional_boundary_templates`
-  - Why: Self-check recommends professional boundary templates as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible professional boundary templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Asset Provenance Checks** (`p2`)
+- **Asset Provenance Checks** (`p1`)
   - Source: self-check
   - Capability: `asset_provenance_checks`
   - Why: Self-check recommends asset provenance checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible asset provenance checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Citation Quality Review** (`p2`)
   - Source: self-check
   - Capability: `citation_quality_review`
   - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Code Derived Architecture Checks** (`p2`)
   - Source: self-check
   - Capability: `code_derived_architecture_checks`
   - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Creative Variant Comparison** (`p2`)
   - Source: self-check
   - Capability: `creative_variant_comparison`
   - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Handoff Owner Registry** (`p2`)
+  - Source: self-check
+  - Capability: `handoff_owner_registry`
+  - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

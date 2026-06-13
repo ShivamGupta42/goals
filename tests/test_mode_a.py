@@ -47,6 +47,8 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals ecosystem merge" in plan.prompt
     assert "Permission policy:" in plan.prompt
     assert "goals permission check" in plan.prompt
+    assert "Professional boundaries:" in plan.prompt
+    assert "goals boundary explain --domain auto" in plan.prompt
     assert "Self-evolution memory:" in plan.prompt
     assert "goals memory sync" in plan.prompt
     assert "goals roadmap suggest" in plan.prompt
@@ -55,6 +57,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals source add" in plan.prompt
     assert "goals source freshness" in plan.prompt
     assert "uv run goals source freshness --strict" in plan.recommended_checks
+    assert "uv run goals boundary explain --domain auto" in plan.recommended_checks
     assert "uv run pytest -q" in plan.recommended_checks
     assert "uv run goals brief" in plan.recommended_checks
     assert "source_ids" in plan.evidence_template.model_dump()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from goals.boundaries import detect_professional_domains
 from goals.decisions import should_surface_decision
 from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -20,6 +21,7 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_phase_issues(snapshot))
     issues.extend(_decision_issues(snapshot))
     issues.extend(_source_issues(snapshot))
+    issues.extend(_boundary_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
     issues.extend(_architecture_issues(snapshot))
     issues.extend(_merge_readiness_issues(snapshot))
@@ -312,6 +314,31 @@ def _risk_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             suggested_action="Mitigate, accept, or convert this risk into a clear decision.",
         )
         for risk in snapshot.risks
+    ]
+
+
+def _boundary_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    text = " ".join(
+        [
+            snapshot.objective,
+            snapshot.why,
+            *snapshot.definition_of_done,
+            *snapshot.risks,
+            *(claim.claim for claim in snapshot.source_claims),
+        ]
+    )
+    domains = detect_professional_domains(text)
+    if not domains:
+        return []
+    return [
+        GoalIssue(
+            severity="p1",
+            area="boundary",
+            summary=f"Professional boundary template needed for {domains[0]} goal.",
+            detail=f"Detected high-stakes domain(s): {', '.join(domains)}.",
+            suggested_action=f"Run `goals boundary explain --domain {domains[0]}` and use the suggested plain wording before giving guidance.",
+            evidence_refs=[f"boundary:{domain}" for domain in domains],
+        )
     ]
 
 

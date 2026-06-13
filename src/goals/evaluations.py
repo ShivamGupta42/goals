@@ -71,6 +71,7 @@ CURRENT_CAPABILITIES = {
     "phase_plan",
     "permission_policy_registry",
     "project_history_decision_context",
+    "professional_boundary_templates",
     "registry_awareness",
     "registry_sync_workflow",
     "review_gate",
@@ -112,6 +113,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "important_decision_filter",
             "simple_decision_format",
             "project_history_decision_context",
+            "professional_boundary_templates",
         ],
         future_capabilities=[],
         decisions=[
@@ -410,8 +412,9 @@ DEFAULT_GOAL_USE_CASES = [
             "source_registry",
             "important_decision_filter",
             "simple_decision_format",
+            "professional_boundary_templates",
         ],
-        planned_capabilities=["professional_boundary_templates", "mandatory_external_review_gate"],
+        planned_capabilities=["mandatory_external_review_gate"],
         important_user_decisions=["Whether to consult a professional", "Risk tolerance"],
         agent_can_decide=["Question list", "Information organization", "Source summary"],
         proof_required=["Sources", "Uncertainty list", "Boundary statement"],
@@ -1655,6 +1658,8 @@ def _supported_capabilities(
         supported.add("cross_agent_recommendation_merge")
     if "goals permission check" in prompt:
         supported.add("permission_policy_registry")
+    if "goals boundary explain" in prompt:
+        supported.add("professional_boundary_templates")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:

@@ -194,3 +194,27 @@ def test_issue_report_surfaces_high_stakes_stale_source(tmp_path) -> None:
     report = analyze_goal_issues(snapshot)
 
     assert "Source may be stale: Old legal memo" in report.user_questions
+
+
+def test_issue_report_suggests_professional_boundary_template(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Prepare financial options for a retirement decision.",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[],
+        current_phase=None,
+        definition_of_done=["Done"],
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert any(issue.area == "boundary" for issue in report.issues)
+    assert "Professional boundary template needed for financial goal." not in report.user_questions
+    assert any(
+        "goals boundary explain --domain financial" in action for action in report.agent_actions
+    )

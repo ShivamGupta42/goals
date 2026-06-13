@@ -122,6 +122,19 @@ friction. It is a dry run by default and imports only sanitized suggestions with
 Memory is local generated state under `.agent-workflow/self-evolution/`. It is
 not meant for public commits.
 
+## Professional Boundaries
+
+High-stakes goals need clear limits in plain language. Agents can run:
+
+```bash
+uv run goals boundary explain --domain auto
+```
+
+The report explains what the agent can safely do, what needs the user or a
+qualified professional, what evidence should be recorded, and suggested wording
+for medical, legal, financial, safety, or general professional judgment
+boundaries.
+
 ## Source Evidence
 
 Research and business goals need proof that is easy to inspect. Agents can
