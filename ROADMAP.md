@@ -182,7 +182,11 @@ sanitized lesson imports, and apply them to the current project's local memory
 only when requested. Professional boundary templates now give Mode A agents
 plain-language wording for medical, legal, financial, safety, and general
 high-stakes goals, including what the agent can do, what needs the user or a
-qualified professional, expected evidence, and safe next steps.
+qualified professional, expected evidence, and safe next steps. Mandatory
+external review gates now let Mode A agents record required, requested, passed,
+failed, blocked, or waived external review so missing review proof stays with
+the agent while failed, blocked, waived, or reviewer-selection decisions remain
+visible to the user.
 
 ### Direction
 
@@ -209,6 +213,9 @@ qualified professional, expected evidence, and safe next steps.
   non-technical users.
 - Use `goals boundary explain --domain auto` before high-stakes medical, legal,
   financial, safety, or professional-judgment guidance.
+- Use `goals external-review check --strict` before accepting high-stakes,
+  regulated, security, privacy, production, public-claim, or irreversible
+  phases.
 - Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
   is tested, not only described.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can
@@ -319,34 +326,28 @@ the dashboard.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Mandatory External Review Gate** (`p1`)
-  - Source: self-check
-  - Capability: `mandatory_external_review_gate`
-  - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Optional Calendar Context** (`p2`)
+- **Optional Calendar Context** (`p1`)
   - Source: self-check
   - Capability: `optional_calendar_context`
   - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Private Memory Boundary** (`p2`)
   - Source: self-check
   - Capability: `private_memory_boundary`
   - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Recurring Goal Templates** (`p2`)
   - Source: self-check
   - Capability: `recurring_goal_templates`
   - Why: Self-check recommends recurring goal templates as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible recurring goal templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Spaced Recall Outputs** (`p2`)
   - Source: self-check
   - Capability: `spaced_recall_outputs`
   - Why: Self-check recommends spaced recall outputs as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible spaced recall outputs slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[4]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

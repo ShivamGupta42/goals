@@ -22,6 +22,7 @@ from goals.decisions import (
     should_surface_decision,
 )
 from goals.ecosystem import recommend_ecosystem_tools
+from goals.external_reviews import analyze_external_reviews
 from goals.git_ops import source_commit
 from goals.handoffs import analyze_handoff_owners
 from goals.issues import analyze_goal_issues
@@ -63,6 +64,7 @@ def render_dashboard(
     memory = _memory_html(snapshot)
     assets = _assets_html(snapshot)
     creative = _creative_html(snapshot)
+    external_reviews = _external_reviews_html(snapshot)
     handoffs = _handoffs_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
@@ -142,6 +144,7 @@ def render_dashboard(
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#creative">Creative</a>
+    <a href="#external-reviews">External Reviews</a>
     <a href="#handoffs">Handoffs</a>
     <a href="#evidence">Evidence</a>
     <a href="#assets">Assets</a>
@@ -179,6 +182,10 @@ def render_dashboard(
   <section id="creative" class="panel">
     <h2>Creative Variants</h2>
     {creative}
+  </section>
+  <section id="external-reviews" class="panel">
+    <h2>External Reviews</h2>
+    {external_reviews}
   </section>
   <section id="handoffs" class="panel">
     <h2>Handoff Owners</h2>
@@ -625,6 +632,77 @@ def _creative_html(snapshot: GoalSnapshot) -> str:
         f"<h3>Comparison</h3>{findings_html}"
         f"<p><strong>Recommended variant:</strong> <code>{escape(recommended)}</code></p>"
         f'<h3>Recorded Variants</h3><ul class="node-list">{variant_items}</ul>'
+    )
+
+
+def _external_reviews_html(snapshot: GoalSnapshot) -> str:
+    report = analyze_external_reviews(snapshot)
+    if not snapshot.external_reviews:
+        return f"<h3>Review Gate</h3><p>{escape(report.summary)}</p>" + (
+            "<ul>"
+            + "".join(
+                "<li>"
+                f"<strong>{escape(finding.summary)}</strong>"
+                f"<p>{escape(finding.detail)}</p>"
+                f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+                "</li>"
+                for finding in report.findings[:5]
+            )
+            + "</ul>"
+            if report.findings
+            else ""
+        )
+    review_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(review.title)}</strong>"
+        f"<p>{escape(review.summary or review.review_notes or 'No summary recorded.')}</p>"
+        f'<span class="pill">{escape(review.review_id)}</span> '
+        f'<span class="pill">{escape(review.risk_domain)}</span> '
+        f'<span class="pill">{escape(review.reviewer_type)}</span> '
+        f'<span class="status-label {escape(review.status)}">{escape(review.status)}</span>'
+        + (
+            f"<p><strong>Reviewer:</strong> {escape(review.reviewer)}</p>"
+            if review.reviewer
+            else ""
+        )
+        + (
+            f"<p><strong>Scope:</strong> {escape(', '.join(review.scope))}</p>"
+            if review.scope
+            else ""
+        )
+        + (
+            f"<p><strong>Evidence:</strong> {escape(', '.join(review.evidence_refs))}</p>"
+            if review.evidence_refs
+            else ""
+        )
+        + (
+            f"<p><strong>Waiver:</strong> {escape(review.waiver_reason)}</p>"
+            if review.waiver_reason
+            else ""
+        )
+        + "</li>"
+        for review in snapshot.external_reviews
+    )
+    finding_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in report.findings[:5]
+    )
+    findings_html = (
+        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
+        if report.findings
+        else f"<p>{escape(report.summary)}</p>"
+    )
+    return (
+        f"<h3>Review Gate</h3>{findings_html}"
+        f'<h3>Recorded Reviews</h3><ul class="node-list">{review_items}</ul>'
     )
 
 

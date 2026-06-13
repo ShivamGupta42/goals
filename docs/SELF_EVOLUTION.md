@@ -135,6 +135,33 @@ qualified professional, what evidence should be recorded, and suggested wording
 for medical, legal, financial, safety, or general professional judgment
 boundaries.
 
+## External Review Gate
+
+Boundaries explain safe language; external reviews prove that high-risk work was
+actually reviewed or that the user consciously accepted the risk. Agents can
+record review requirements and outcomes:
+
+```bash
+uv run goals external-review add "Security review" \
+  --reviewer "Security lead" \
+  --reviewer-type security \
+  --risk-domain security \
+  --status passed \
+  --phase-id P2 \
+  --scope "Prompt injection checks" \
+  --summary "Security lead approved the mitigation." \
+  --evidence evidence:P2
+uv run goals external-review check
+uv run goals external-review list
+```
+
+Mode A prompts include an external review block. The check keeps missing scope,
+summary, phase ids, and evidence refs as agent-side repair work. It surfaces
+only material user decisions: no review path for a high-stakes goal, a reviewer
+that must be chosen, a blocked or failed review, or a high-stakes waiver. The
+dashboard shows an External Reviews view so non-technical users can see whether
+review is still waiting, passed, blocked, failed, or waived.
+
 ## Source Evidence
 
 Research and business goals need proof that is easy to inspect. Agents can

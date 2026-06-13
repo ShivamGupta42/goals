@@ -9,6 +9,7 @@ from goals.assets import render_asset_summary
 from goals.citations import render_citation_quality_summary
 from goals.creative import render_creative_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.external_reviews import render_external_review_summary
 from goals.handoffs import render_handoff_summary
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
@@ -82,6 +83,7 @@ def recommended_checks(worktree: Path) -> list[str]:
             "uv run goals brief",
             "uv run goals architecture check --strict",
             "uv run goals boundary explain --domain auto",
+            "uv run goals external-review check --strict",
             "uv run goals asset provenance --strict",
             "uv run goals creative compare --strict",
             "uv run goals handoff check --strict",
@@ -106,6 +108,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     citations = render_citation_quality_summary(snapshot)
     assets = render_asset_summary(snapshot)
     creative = render_creative_summary(snapshot)
+    external_reviews = render_external_review_summary(snapshot)
     handoffs = render_handoff_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
@@ -160,6 +163,11 @@ Permission policy:
 Professional boundaries:
 - If the work touches medical, legal, financial, safety, compliance, or other professional judgment, run `goals boundary explain --domain auto` before giving guidance or asking the user.
 - Use the boundary report's suggested wording, evidence expectations, and safe next steps. Do not turn a professional judgment into an agent-only decision.
+
+External review gate:
+{external_reviews}
+- If this phase touches medical, legal, financial, safety, security, compliance, privacy, production rollout, public claims, or irreversible user/business impact, record the review need with `goals external-review add "Review title" --risk-domain safety --status required --scope "what must be checked"`.
+- Run `goals external-review check --strict` before review. Fill missing scope, summaries, evidence refs, phase ids, and review notes yourself. Ask the user only when a reviewer must be chosen, review is blocked or failed, or the user wants to waive a high-stakes review.
 
 Asset provenance:
 {assets}

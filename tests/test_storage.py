@@ -5,6 +5,7 @@ from goals.models import (
     CreativeVariantScore,
     Event,
     EventType,
+    ExternalReview,
     GoalArchitectureMap,
     HandoffOwner,
     SourceClaim,
@@ -204,6 +205,49 @@ def test_creative_variant_replays_into_snapshot(tmp_path: Path) -> None:
 
     assert derived.creative_variants[0].variant_id == "VAR-demo"
     assert derived.creative_variants[0].scores[0].criterion == "clarity"
+
+
+def test_external_review_replays_into_snapshot(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    review = ExternalReview(
+        review_id="REV-demo",
+        title="Security review",
+        reviewer="Security lead",
+        reviewer_type="security",
+        risk_domain="security",
+        status="passed",
+        scope=["Prompt injection"],
+        summary="Approved.",
+        evidence_refs=["evidence:P2"],
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.EXTERNAL_REVIEW_RECORDED,
+            payload={"review": review.model_dump()},
+        )
+    )
+
+    derived = store.snapshot()
+
+    assert derived.external_reviews[0].review_id == "REV-demo"
+    assert derived.external_reviews[0].status == "passed"
 
 
 def test_handoff_owner_replays_into_snapshot(tmp_path: Path) -> None:

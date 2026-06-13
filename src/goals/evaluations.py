@@ -61,6 +61,7 @@ CURRENT_CAPABILITIES = {
     "end_user_decision_experience",
     "end_user_visualization",
     "evidence_contract",
+    "mandatory_external_review_gate",
     "handoff_owner_registry",
     "important_decision_filter",
     "issue_discovery",
@@ -119,6 +120,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "simple_decision_format",
             "project_history_decision_context",
             "professional_boundary_templates",
+            "mandatory_external_review_gate",
         ],
         future_capabilities=[],
         decisions=[
@@ -425,8 +427,9 @@ DEFAULT_GOAL_USE_CASES = [
             "important_decision_filter",
             "simple_decision_format",
             "professional_boundary_templates",
+            "mandatory_external_review_gate",
         ],
-        planned_capabilities=["mandatory_external_review_gate"],
+        planned_capabilities=["optional_calendar_context"],
         important_user_decisions=["Whether to consult a professional", "Risk tolerance"],
         agent_can_decide=["Question list", "Information organization", "Source summary"],
         proof_required=["Sources", "Uncertainty list", "Boundary statement"],
@@ -965,6 +968,7 @@ def _rank_capabilities(counter: Counter[str]) -> list[tuple[str, int]]:
         "source_freshness_gate": 6,
         "cross_project_memory_sync": 7,
         "professional_boundary_templates": 8,
+        "mandatory_external_review_gate": 9,
     }
     return sorted(
         counter.items(),
@@ -1680,6 +1684,10 @@ def _supported_capabilities(
         supported.add("permission_policy_registry")
     if "goals boundary explain" in prompt:
         supported.add("professional_boundary_templates")
+    if "goals external-review check" in prompt or any(
+        "goals external-review check" in check for check in recommended_checks
+    ):
+        supported.add("mandatory_external_review_gate")
     if "goals asset provenance" in prompt:
         supported.add("asset_provenance_checks")
     if "goals creative compare" in prompt or any(

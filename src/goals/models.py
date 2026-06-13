@@ -48,6 +48,7 @@ class EventType(StrEnum):
     ARCHITECTURE_UPDATED = "architecture_updated"
     ASSET_RECORDED = "asset_recorded"
     CREATIVE_VARIANT_RECORDED = "creative_variant_recorded"
+    EXTERNAL_REVIEW_RECORDED = "external_review_recorded"
     HANDOFF_OWNER_RECORDED = "handoff_owner_recorded"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
@@ -646,6 +647,73 @@ class HandoffOwnerReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class ExternalReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_id: str = Field(default_factory=lambda: f"REV-{uuid4().hex[:8]}")
+    title: str
+    reviewer: str = ""
+    reviewer_type: Literal[
+        "user",
+        "professional",
+        "security",
+        "legal",
+        "financial",
+        "medical",
+        "compliance",
+        "team",
+        "external",
+        "other",
+    ] = "other"
+    risk_domain: Literal[
+        "general",
+        "medical",
+        "legal",
+        "financial",
+        "safety",
+        "security",
+        "compliance",
+        "privacy",
+        "production",
+        "other",
+    ] = "general"
+    status: Literal["required", "requested", "passed", "failed", "waived", "blocked"] = "required"
+    phase_ids: list[str] = Field(default_factory=list)
+    scope: list[str] = Field(default_factory=list)
+    summary: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    requested_at: str = Field(default_factory=utc_now)
+    completed_at: str | None = None
+    waiver_reason: str = ""
+    review_notes: str = ""
+
+
+class ExternalReviewFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    review_id: str
+    title: str
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class ExternalReviewReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    reviews_checked: int = 0
+    high_stakes_domains: list[str] = Field(default_factory=list)
+    findings: list[ExternalReviewFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1085,6 +1153,7 @@ class GoalIssue(BaseModel):
         "creative",
         "decision",
         "evidence",
+        "external_review",
         "gate",
         "handoff",
         "merge",
@@ -1156,6 +1225,7 @@ class GoalSnapshot(BaseModel):
     decisions: list[Decision] = Field(default_factory=list)
     assets: list[AssetRecord] = Field(default_factory=list)
     creative_variants: list[CreativeVariant] = Field(default_factory=list)
+    external_reviews: list[ExternalReview] = Field(default_factory=list)
     handoff_owners: list[HandoffOwner] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)

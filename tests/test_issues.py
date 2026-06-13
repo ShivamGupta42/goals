@@ -5,6 +5,7 @@ from goals.models import (
     Decision,
     DecisionOption,
     Evidence,
+    ExternalReview,
     GateResult,
     GateVerdict,
     GoalArchitectureMap,
@@ -126,6 +127,46 @@ def test_clean_goal_has_no_issue_findings(tmp_path) -> None:
 
     assert report.passed is True
     assert report.issues == []
+
+
+def test_issue_report_includes_external_review_blockers(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Update legal terms",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Review terms",
+                goal="Check legal risk",
+                status=PhaseStatus.IN_PROGRESS,
+            )
+        ],
+        current_phase="P1",
+        external_reviews=[
+            ExternalReview(
+                title="Legal review",
+                reviewer="Counsel",
+                reviewer_type="legal",
+                risk_domain="legal",
+                status="failed",
+                scope=["Terms update"],
+            )
+        ],
+    )
+
+    report = analyze_goal_issues(snapshot)
+    rendered = render_issue_report(report)
+
+    assert report.passed is False
+    assert any(issue.area == "external_review" and issue.needs_user for issue in report.issues)
+    assert any("External review failed" in question for question in report.user_questions)
+    assert "[external_review user]" in rendered
 
 
 def test_issue_report_includes_stale_source_as_agent_repair(tmp_path) -> None:

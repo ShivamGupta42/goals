@@ -115,6 +115,27 @@ use `goals boundary explain` to get simple wording for what the agent can do,
 what needs the user or a qualified professional, what evidence is expected, and
 which next steps are safe to take.
 
+Agents can also record external review requirements and outcomes:
+
+```bash
+uv run goals external-review add "Security review" \
+  --reviewer "Security lead" \
+  --reviewer-type security \
+  --risk-domain security \
+  --status passed \
+  --phase-id P2 \
+  --scope "Prompt injection checks" \
+  --summary "Security lead approved the mitigation." \
+  --evidence evidence:P2
+uv run goals external-review check
+uv run goals external-review list
+```
+
+`external-review check` keeps routine proof cleanup with the agent: missing
+scope, summaries, phase links, and evidence references. It asks the user only
+when a reviewer must be chosen, review is blocked or failed, or the user wants
+to waive a high-stakes review.
+
 `brief` is the first non-technical view. It answers: what is happening, what
 needs your answer, what the agent can do next, what proof exists, and what
 technical details are available if someone wants to inspect them.
@@ -213,6 +234,28 @@ uv run goals creative variants
 checks linked asset rights, and recommends the best current direction. Routine
 variant cleanup stays with the agent. Brand direction, publishing approval, and
 restricted or blocked asset rights stay as simple user-facing decisions.
+
+Agents can require or record external review when a phase touches high-stakes
+domains, production rollout, security, compliance, privacy, public claims, or an
+irreversible user/business decision:
+
+```bash
+uv run goals external-review add "Legal review" \
+  --reviewer "Counsel" \
+  --reviewer-type legal \
+  --risk-domain legal \
+  --status requested \
+  --phase-id P2 \
+  --scope "Terms update" \
+  --summary "Waiting on counsel to review the changed terms."
+uv run goals external-review check
+uv run goals external-review list
+```
+
+`external-review check` turns missing review proof into agent repair work, while
+failed, blocked, or high-stakes waived review stays visible as an important
+user decision. The dashboard includes an External Reviews view so non-technical
+users can see what was reviewed and what is still waiting.
 
 Agents can record handoff owners when work changes hands:
 

@@ -8,6 +8,7 @@ from goals.boundaries import detect_professional_domains
 from goals.citations import analyze_citation_quality
 from goals.creative import analyze_creative_variants
 from goals.decisions import should_surface_decision
+from goals.external_reviews import analyze_external_reviews
 from goals.gates import review_phase
 from goals.handoffs import analyze_handoff_owners
 from goals.merge_readiness import analyze_merge_readiness
@@ -31,6 +32,7 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_citation_issues(snapshot))
     issues.extend(_asset_issues(snapshot))
     issues.extend(_creative_issues(snapshot))
+    issues.extend(_external_review_issues(snapshot))
     issues.extend(_handoff_issues(snapshot))
     issues.extend(_boundary_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
@@ -393,6 +395,22 @@ def _creative_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
         GoalIssue(
             severity=finding.severity,
             area="creative",
+            summary=finding.summary,
+            detail=finding.detail,
+            suggested_action=finding.suggested_action,
+            needs_user=finding.needs_user,
+            evidence_refs=finding.evidence_refs,
+        )
+        for finding in report.findings
+    ]
+
+
+def _external_review_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    report = analyze_external_reviews(snapshot)
+    return [
+        GoalIssue(
+            severity=finding.severity,
+            area="external_review",
             summary=finding.summary,
             detail=finding.detail,
             suggested_action=finding.suggested_action,
