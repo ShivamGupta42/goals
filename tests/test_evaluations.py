@@ -11,6 +11,8 @@ from goals.evaluations import (
     render_dogfood_report,
     render_issue_stress_report,
     render_rehearsal_report,
+    render_self_check_report,
+    run_self_check,
     stress_goal_issue_discovery,
 )
 
@@ -146,6 +148,42 @@ def test_issue_stress_checks_repair_actions_and_user_decision_filter(tmp_path: P
     assert merge_readiness.agent_action_count >= 1
     assert "Goal Issue Stress Report" in rendered
     assert "unsafe-review-escalation: pass" in rendered
+
+
+def test_self_check_summarizes_all_evaluation_suites(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    for name, kind in {
+        "adapters.yml": "adapters",
+        "agents.yml": "agents",
+        "gates.yml": "gates",
+        "plugins.yml": "plugins",
+        "profiles.yml": "profiles",
+        "skills.yml": "skills",
+    }.items():
+        (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (True, f"{name} ready"))
+
+    report = run_self_check(tmp_path, adapters=["claude"])
+    rendered = render_self_check_report(report)
+
+    assert report.passed is True
+    assert len(report.adapters) == 1
+    result = report.adapters[0]
+    assert result.adapter == "claude"
+    assert result.scenarios_passed is True
+    assert result.dogfood_passed is True
+    assert result.coverage_passed is True
+    assert result.rehearsal_passed is True
+    assert result.issue_stress_passed is True
+    assert result.user_decision_count == 5
+    assert result.agent_repair_action_count >= 1
+    assert report.next_slices
+    assert report.next_slices[0] == "Explore planned capability: automatic gap-to-roadmap patches"
+    assert "Goals Self-Check Report" in rendered
+    assert "Recommended Next Slices" in rendered
+    assert "User Experience Findings" in rendered
 
 
 def test_dogfood_report_checks_decision_burden_and_evidence(monkeypatch, tmp_path: Path) -> None:

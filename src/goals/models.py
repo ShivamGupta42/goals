@@ -599,6 +599,38 @@ class GoalIssueStressReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class SelfCheckSuiteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    scenarios_passed: bool
+    dogfood_passed: bool
+    coverage_passed: bool
+    rehearsal_passed: bool
+    issue_stress_passed: bool
+    user_decision_count: int = 0
+    agent_decision_count: int = 0
+    agent_repair_action_count: int = 0
+    covered_use_cases: int = 0
+    partial_use_cases: int = 0
+    failed_rehearsals: list[str] = Field(default_factory=list)
+    failed_issue_stress_cases: list[str] = Field(default_factory=list)
+    missing_capabilities: list[str] = Field(default_factory=list)
+    planned_capabilities: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class SelfCheckReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    passed: bool
+    summary: str
+    adapters: list[SelfCheckSuiteResult] = Field(default_factory=list)
+    next_slices: list[str] = Field(default_factory=list)
+    user_experience_findings: list[str] = Field(default_factory=list)
+    ecosystem_findings: list[str] = Field(default_factory=list)
+
+
 class MergeReadinessFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

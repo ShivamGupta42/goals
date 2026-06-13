@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
@@ -31,6 +32,8 @@ from goals.models import (
     ScenarioDogfoodCase,
     ScenarioDogfoodReport,
     ScenarioEvaluation,
+    SelfCheckReport,
+    SelfCheckSuiteResult,
     SourceClaim,
     SourceRecord,
     WorktreeLease,
@@ -483,6 +486,103 @@ def evaluate_use_case_coverage(
     )
 
 
+def run_self_check(
+    worktree: Path,
+    adapters: list[str] | None = None,
+    *,
+    max_user_decisions: int = 2,
+) -> SelfCheckReport:
+    """Run the core self-evolution evaluation matrix and summarize next slices."""
+
+    selected = adapters or ["claude", "codex"]
+    results = [
+        _self_check_one(worktree.resolve(), adapter, max_user_decisions=max_user_decisions)
+        for adapter in selected
+    ]
+    failed = [result for result in results if not _suite_passed(result)]
+    next_slices = _self_check_next_slices(results)
+    user_findings = _self_check_user_findings(results)
+    ecosystem_findings = _self_check_ecosystem_findings(results)
+    summary = (
+        f"Ran self-check across {len(results)} adapter shape(s): "
+        f"{len(results) - len(failed)} pass, {len(failed)} fail. "
+        f"Next suggested slice: {next_slices[0] if next_slices else 'keep dogfooding real goals'}."
+    )
+    return SelfCheckReport(
+        passed=not failed,
+        summary=summary,
+        adapters=results,
+        next_slices=next_slices,
+        user_experience_findings=user_findings,
+        ecosystem_findings=ecosystem_findings,
+    )
+
+
+def render_self_check_report(report: SelfCheckReport) -> str:
+    lines = [
+        "# Goals Self-Check Report",
+        "",
+        f"Overall: {'pass' if report.passed else 'fail'}",
+        "",
+        report.summary,
+    ]
+    for result in report.adapters:
+        lines.extend(
+            [
+                "",
+                f"## {result.adapter}: {'pass' if _suite_passed(result) else 'fail'}",
+                "",
+                "### Suite Results",
+                _bullets(
+                    [
+                        f"Scenarios: {'pass' if result.scenarios_passed else 'fail'}",
+                        f"Dogfood: {'pass' if result.dogfood_passed else 'fail'}",
+                        f"Coverage: {'pass' if result.coverage_passed else 'fail'}",
+                        f"Rehearsal: {'pass' if result.rehearsal_passed else 'fail'}",
+                        f"Issue stress: {'pass' if result.issue_stress_passed else 'fail'}",
+                    ]
+                ),
+                "",
+                "### Experience Signals",
+                _bullets(
+                    [
+                        f"User-facing decisions: {result.user_decision_count}",
+                        f"Agent-handled decisions: {result.agent_decision_count}",
+                        f"Agent repair actions: {result.agent_repair_action_count}",
+                        f"Use cases covered: {result.covered_use_cases}",
+                        f"Use cases partial: {result.partial_use_cases}",
+                    ]
+                ),
+                "",
+                "### Current Gaps",
+                _bullets(result.missing_capabilities or ["No current capability gaps found."]),
+                "",
+                "### Planned Capability Themes",
+                _bullets(result.planned_capabilities or ["No planned future themes found."]),
+                "",
+                "### Recommendations",
+                _bullets(result.recommendations),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Recommended Next Slices",
+            "",
+            _bullets(report.next_slices or ["Keep dogfooding real goals and record friction."]),
+            "",
+            "## User Experience Findings",
+            "",
+            _bullets(report.user_experience_findings),
+            "",
+            "## Ecosystem Findings",
+            "",
+            _bullets(report.ecosystem_findings),
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def rehearse_goal_lifecycles(
     adapter: ModeAAdapter = "claude",
     scenarios: list[GoalScenario] | None = None,
@@ -682,6 +782,166 @@ def render_coverage_report(report: GoalUseCaseCoverageReport) -> str:
         )
     lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
     return "\n".join(lines) + "\n"
+
+
+def _self_check_one(
+    worktree: Path,
+    adapter: str,
+    *,
+    max_user_decisions: int,
+) -> SelfCheckSuiteResult:
+    scenarios = evaluate_goal_scenarios(worktree, adapter=adapter)  # type: ignore[arg-type]
+    dogfood = dogfood_goal_scenarios(
+        worktree,
+        adapter=adapter,  # type: ignore[arg-type]
+        max_user_decisions=max_user_decisions,
+    )
+    coverage = evaluate_use_case_coverage(worktree, adapter=adapter)  # type: ignore[arg-type]
+    rehearsal = rehearse_goal_lifecycles(adapter=adapter)  # type: ignore[arg-type]
+    issue_stress = stress_goal_issue_discovery(worktree, adapter=adapter)  # type: ignore[arg-type]
+    missing = sorted(
+        {capability for result in scenarios for capability in result.missing_capabilities}
+        | {capability for case in coverage.cases for capability in case.missing_capabilities}
+    )
+    planned = sorted(
+        {capability for result in scenarios for capability in result.planned_capabilities}
+        | {capability for case in coverage.cases for capability in case.planned_capabilities}
+    )
+    failed_rehearsals = [case.scenario_id for case in rehearsal.cases if case.status == "fail"]
+    failed_issue_stress = [case.stress_id for case in issue_stress.cases if not case.passed]
+    recommendations = _dedupe(
+        [
+            *dogfood.recommendations,
+            *coverage.recommendations,
+            *rehearsal.recommendations,
+            *issue_stress.recommendations,
+        ]
+    )
+    return SelfCheckSuiteResult(
+        adapter=adapter,  # type: ignore[arg-type]
+        scenarios_passed=all(result.current_supported for result in scenarios),
+        dogfood_passed=dogfood.passed,
+        coverage_passed=coverage.passed,
+        rehearsal_passed=rehearsal.passed,
+        issue_stress_passed=issue_stress.passed,
+        user_decision_count=sum(case.user_decision_count for case in dogfood.cases),
+        agent_decision_count=sum(case.agent_decision_count for case in dogfood.cases),
+        agent_repair_action_count=sum(case.agent_action_count for case in issue_stress.cases),
+        covered_use_cases=len([case for case in coverage.cases if case.status == "covered"]),
+        partial_use_cases=len([case for case in coverage.cases if case.status == "partial"]),
+        failed_rehearsals=failed_rehearsals,
+        failed_issue_stress_cases=failed_issue_stress,
+        missing_capabilities=missing,
+        planned_capabilities=planned,
+        recommendations=recommendations,
+    )
+
+
+def _suite_passed(result: SelfCheckSuiteResult) -> bool:
+    return all(
+        [
+            result.scenarios_passed,
+            result.dogfood_passed,
+            result.coverage_passed,
+            result.rehearsal_passed,
+            result.issue_stress_passed,
+        ]
+    )
+
+
+def _self_check_next_slices(results: list[SelfCheckSuiteResult]) -> list[str]:
+    missing = Counter(
+        capability for result in results for capability in result.missing_capabilities
+    )
+    if missing:
+        return [
+            f"Close current capability gap: {_human_capability(capability)}"
+            for capability, _ in missing.most_common(5)
+        ]
+    planned = Counter(
+        capability for result in results for capability in result.planned_capabilities
+    )
+    return [
+        f"Explore planned capability: {_human_capability(capability)}"
+        for capability, _ in _rank_capabilities(planned)[:5]
+    ]
+
+
+def _self_check_user_findings(results: list[SelfCheckSuiteResult]) -> list[str]:
+    findings = []
+    for result in results:
+        findings.append(
+            f"{result.adapter} surfaced {result.user_decision_count} important user decision(s) "
+            f"and kept {result.agent_decision_count} routine decision(s) with the agent."
+        )
+        findings.append(
+            f"{result.adapter} issue stress produced {result.agent_repair_action_count} "
+            "agent-side repair action(s)."
+        )
+    return findings
+
+
+def _self_check_ecosystem_findings(results: list[SelfCheckSuiteResult]) -> list[str]:
+    findings = []
+    for result in results:
+        planned = [
+            capability
+            for capability in result.planned_capabilities
+            if "ecosystem" in capability
+            or "plugin" in capability
+            or "registry" in capability
+            or "permission" in capability
+        ]
+        if planned:
+            findings.append(
+                f"{result.adapter} ecosystem future themes: "
+                + ", ".join(_human_capability(capability) for capability in planned[:4])
+            )
+        else:
+            findings.append(f"{result.adapter} has no current ecosystem capability gap.")
+    return findings
+
+
+def _human_capability(capability: str) -> str:
+    labels = {
+        "asset_provenance_checks": "asset provenance checks",
+        "automatic_gap_to_roadmap_patch": "automatic gap-to-roadmap patches",
+        "citation_quality_review": "citation quality review",
+        "code_derived_architecture_checks": "code-derived architecture checks",
+        "cross_agent_recommendation_merge": "cross-agent recommendation merge",
+        "cross_project_memory_sync": "cross-project memory sync",
+        "handoff_owner_registry": "handoff owner registry",
+        "mandatory_external_review_gate": "mandatory external review gate",
+        "optional_calendar_context": "optional calendar context",
+        "parallel_worktree_merge_gates": "parallel worktree merge gates",
+        "permission_policy_registry": "permission policy registry",
+        "private_memory_boundary": "private memory boundary",
+        "professional_boundary_templates": "professional boundary templates",
+        "recurring_goal_templates": "recurring goal templates",
+        "source_freshness_gate": "source freshness gate",
+        "spaced_recall_outputs": "spaced recall outputs",
+    }
+    return labels.get(capability, capability.replace("_", " "))
+
+
+def _rank_capabilities(counter: Counter[str]) -> list[tuple[str, int]]:
+    priority = {
+        "automatic_gap_to_roadmap_patch": 0,
+        "parallel_worktree_merge_gates": 1,
+        "cross_agent_recommendation_merge": 2,
+        "permission_policy_registry": 3,
+        "source_freshness_gate": 4,
+        "cross_project_memory_sync": 5,
+        "professional_boundary_templates": 6,
+    }
+    return sorted(
+        counter.items(),
+        key=lambda item: (-item[1], priority.get(item[0], 100), item[0]),
+    )
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in items if item))
 
 
 def _rehearse_one(scenario: GoalScenario) -> GoalRehearsalCase:

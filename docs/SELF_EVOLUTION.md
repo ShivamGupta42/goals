@@ -15,6 +15,7 @@ uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
 uv run goals eval issue-stress --adapter claude
+uv run goals eval self-check
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -53,6 +54,11 @@ runtime behavior, not only static scenario descriptions.
 missing proof, failed gates, unresolved source claims, architecture questions,
 unsafe reviews, and high-impact user decisions. It also verifies that routine
 repair work stays with the agent instead of becoming unnecessary user prompts.
+
+`eval self-check` runs the full matrix for Claude and Codex adapter shapes and
+summarizes whether Goals is meeting its original promise. It is the first
+command to run during self-evolution work; the individual eval commands are
+drill-down views when the roll-up finds a gap or a promising next slice.
 
 ## Ecosystem Discovery
 

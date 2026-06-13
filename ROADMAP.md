@@ -154,7 +154,9 @@ ecosystem, and self-evolution goals. Lifecycle rehearsal now creates temporary
 Git repositories and drives representative goals through evidence, issue
 discovery, review, acceptance, and dashboard rendering. Issue stress evaluation
 now injects broken goal states to verify missing proof, failed gates, source
-gaps, unsafe reviews, merge-readiness risks, and user-decision filtering.
+gaps, unsafe reviews, merge-readiness risks, and user-decision filtering. The
+self-check roll-up now runs the evaluation matrix across Claude and Codex
+adapter shapes and summarizes recommended next product slices.
 
 ### Direction
 
@@ -167,6 +169,8 @@ gaps, unsafe reviews, merge-readiness risks, and user-decision filtering.
   registries after dogfood runs.
 - Use coverage reports to spot goal families that need new scenarios, gates, or
   public product boundaries.
+- Use `goals eval self-check` as the default self-evolution health report before
+  and after product changes.
 - Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
   is tested, not only described.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can

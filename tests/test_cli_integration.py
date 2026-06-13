@@ -272,6 +272,12 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Goal Issue Stress Report" in issue_stress.stdout
     assert "decision-filter: pass" in issue_stress.stdout
     assert "unsafe-review-escalation: pass" in issue_stress.stdout
+    self_check = run(
+        ["python", "-m", "goals.cli", "eval", "self-check", "--adapter", "claude"],
+        worktree,
+    )
+    assert "Goals Self-Check Report" in self_check.stdout
+    assert "Recommended Next Slices" in self_check.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )
