@@ -30,6 +30,7 @@ from goals.models import (
     SelfEvolutionEntry,
 )
 from goals.registry import validate_registries
+from goals.registry_sync import apply_registry_sync, plan_registry_sync, render_registry_sync_plan
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -292,6 +293,32 @@ def ecosystem_discover(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_discovery_report(report))
+
+    _handle(run)
+
+
+@ecosystem_app.command("sync")
+def ecosystem_sync(
+    apply: bool = typer.Option(False, "--apply", help="Write proposed registry additions."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+    skill_root: Optional[list[Path]] = typer.Option(
+        None,
+        "--skill-root",
+        help="Skill root to inspect. Repeat for multiple roots.",
+    ),
+    max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
+) -> None:
+    """Plan or apply portable registry additions from local discovery."""
+
+    def run():
+        plan = plan_registry_sync(Path.cwd(), skill_roots=skill_root, max_skills=max_skills)
+        result = apply_registry_sync(Path.cwd(), plan) if apply else plan
+        if json_output:
+            typer.echo(result.model_dump_json(indent=2))
+        else:
+            typer.echo(render_registry_sync_plan(result))
+            if not apply and result.changes:
+                typer.echo("Run again with --apply to update registries after review.")
 
     _handle(run)
 

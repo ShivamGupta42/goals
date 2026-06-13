@@ -200,6 +200,24 @@ class EcosystemDiscoveryReport(BaseModel):
     summary: str
 
 
+class RegistrySyncChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    registry: str
+    kind: Literal["skill", "plugin", "adapter"]
+    name: str
+    action: Literal["add"] = "add"
+    entry: dict[str, Any] = Field(default_factory=dict)
+
+
+class RegistrySyncPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    changes: list[RegistrySyncChange] = Field(default_factory=list)
+    dry_run: bool = True
+    summary: str
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

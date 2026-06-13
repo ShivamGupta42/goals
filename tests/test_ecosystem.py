@@ -4,6 +4,7 @@ import pytest
 
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.registry_sync import apply_registry_sync, plan_registry_sync
 from goals.models import GoalSnapshot, WorktreeLease
 from goals.registry import validate_registry_file
 from goals.runtime import default_phases
@@ -137,3 +138,32 @@ def test_discovery_json_is_sanitized(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
     assert str(tmp_path) not in report.model_dump_json()
     assert report.missing_from_registry
+
+
+def test_registry_sync_dry_run_and_apply(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    (registry_root / "skills.yml").write_text("version: 1\nkind: skills\nskills: {}\n")
+    (registry_root / "adapters.yml").write_text("version: 1\nkind: adapters\nadapters: {}\n")
+    skill_root = tmp_path / "skills"
+    skill = skill_root / "migration-helper"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: Migration Helper\n"
+        "description: Helps coordinate database migrations safely.\n---\n"
+    )
+    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
+
+    plan = plan_registry_sync(tmp_path, skill_roots=[skill_root])
+
+    assert plan.dry_run is True
+    assert any(change.name == "migration-helper" for change in plan.changes)
+    assert "migration-helper" not in (registry_root / "skills.yml").read_text()
+
+    applied = apply_registry_sync(tmp_path, plan)
+
+    assert applied.dry_run is False
+    text = (registry_root / "skills.yml").read_text()
+    assert "migration-helper" in text
+    assert str(tmp_path) not in text
+    validate_registry_file(registry_root / "skills.yml")

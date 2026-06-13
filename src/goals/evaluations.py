@@ -27,6 +27,7 @@ CURRENT_CAPABILITIES = {
     "phase_plan",
     "project_history_decision_context",
     "registry_awareness",
+    "registry_sync_workflow",
     "review_gate",
     "self_evolution_memory",
     "simple_decision_format",
@@ -203,6 +204,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "important_decision_filter",
             "automatic_skill_selection",
             "local_ecosystem_discovery",
+            "registry_sync_workflow",
         ],
         future_capabilities=["plugin_capability_discovery"],
         decisions=[
@@ -298,6 +300,8 @@ def _supported_capabilities(
         supported.add("automatic_skill_selection")
     if "goals ecosystem discover" in prompt:
         supported.add("local_ecosystem_discovery")
+    if "goals ecosystem sync" in prompt:
+        supported.add("registry_sync_workflow")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:

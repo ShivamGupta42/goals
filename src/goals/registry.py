@@ -37,6 +37,9 @@ ENTRY_KEYS = {
         "risk",
         "requires_user_approval",
     },
+    "adapters": {
+        "label",
+    },
 }
 
 

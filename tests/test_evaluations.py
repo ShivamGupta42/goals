@@ -34,6 +34,7 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert any("automatic_skill_selection" in result.supported_capabilities for result in results)
     assert all("automatic_skill_selection" not in result.planned_capabilities for result in results)
     assert any("local_ecosystem_discovery" in result.supported_capabilities for result in results)
+    assert any("registry_sync_workflow" in result.supported_capabilities for result in results)
     assert any("self_evolution_memory" in result.supported_capabilities for result in results)
     assert all("self_evolution_memory" not in result.planned_capabilities for result in results)
     for result in results:

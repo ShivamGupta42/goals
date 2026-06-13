@@ -23,15 +23,16 @@ def init_repo(path: Path) -> None:
     (path / "LICENSE").write_text("MIT\n")
     registry_root = path / "registries"
     registry_root.mkdir()
-    for name in (
-        "adapters.yml",
-        "agents.yml",
-        "gates.yml",
-        "plugins.yml",
-        "profiles.yml",
-        "skills.yml",
-    ):
-        (registry_root / name).write_text("version: 1\nkind: profiles\nprofiles: {}\n")
+    registry_kinds = {
+        "adapters.yml": "adapters",
+        "agents.yml": "agents",
+        "gates.yml": "gates",
+        "plugins.yml": "plugins",
+        "profiles.yml": "profiles",
+        "skills.yml": "skills",
+    }
+    for name, kind in registry_kinds.items():
+        (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
     run(["git", "add", "README.md", "LICENSE", "registries"], path)
     run(["git", "commit", "-m", "init"], path)
 
@@ -113,6 +114,36 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert "migration-helper" in discovered.stdout
     assert str(tmp_path) not in discovered.stdout
+    sync = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "sync",
+            "--skill-root",
+            str(skill_root),
+        ],
+        worktree,
+    )
+    assert "dry run" in sync.stdout
+    assert "migration-helper" in sync.stdout
+    assert "migration-helper" not in (worktree / "registries" / "skills.yml").read_text()
+    sync_apply = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "sync",
+            "--skill-root",
+            str(skill_root),
+            "--apply",
+        ],
+        worktree,
+    )
+    assert "Applied" in sync_apply.stdout
+    assert "migration-helper" in (worktree / "registries" / "skills.yml").read_text()
     run(
         [
             "python",
