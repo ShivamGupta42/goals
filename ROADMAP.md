@@ -152,7 +152,7 @@ ecosystem, and self-evolution goals. Lifecycle rehearsal now creates temporary
 Git repositories and drives representative goals through evidence, issue
 discovery, review, acceptance, and dashboard rendering. Issue stress evaluation
 now injects broken goal states to verify missing proof, failed gates, source
-gaps, unsafe reviews, and user-decision filtering.
+gaps, unsafe reviews, merge-readiness risks, and user-decision filtering.
 
 ### Direction
 
@@ -169,6 +169,9 @@ gaps, unsafe reviews, and user-decision filtering.
   is tested, not only described.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can
   find bad states and avoid unnecessary user interruptions.
+- Keep `goals merge-check` in coordinator merge flows so migration ordering,
+  branch drift, and parallel-worktree reconciliation are checked before humans
+  are asked to resolve only genuinely high-risk choices.
 
 ### Open Questions
 

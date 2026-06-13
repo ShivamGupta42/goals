@@ -570,6 +570,29 @@ class GoalIssueStressReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class MergeReadinessFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    area: Literal["migration", "branch", "parallel", "evidence", "decision", "architecture"]
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class MergeReadinessReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    findings: list[MergeReadinessFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class GoalIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -579,6 +602,7 @@ class GoalIssue(BaseModel):
         "decision",
         "evidence",
         "gate",
+        "merge",
         "phase",
         "source",
         "state",

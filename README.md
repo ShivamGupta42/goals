@@ -32,6 +32,7 @@ uv run goals create "Add tags to tasks and update tests" \
   --adapter claude
 uv run goals status
 uv run goals issues
+uv run goals merge-check
 uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
@@ -94,11 +95,17 @@ user:
 
 ```bash
 uv run goals issues
+uv run goals merge-check
 ```
 
 The issue report checks missing proof, failed gates, unresolved source claims,
 important decisions, blockers, and state mismatches. By default it is a
 read-only report; use `--strict` when a script should fail on blocking issues.
+
+`merge-check` is the coordinator's pre-merge view. It looks for migration files
+without recorded ordering proof, parallel-worktree reconciliation gaps,
+base-branch or conflict risks, and high-risk merge choices that really need the
+user. Routine merge cleanup stays as an agent action.
 
 Agents can record source evidence for research, business, customer, market, or
 technical claims:

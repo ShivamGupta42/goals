@@ -121,6 +121,7 @@ Agents should run the issue report before escalating:
 
 ```bash
 uv run goals issues
+uv run goals merge-check
 ```
 
 The report separates important user questions from agent-side repair actions.
@@ -128,6 +129,11 @@ It is meant to help agents discover blockers, missing proof, failed reviews,
 unresolved source claims, and state mismatches before asking the user for help.
 The issue stress evaluator keeps this promise honest by testing both sides:
 what should be surfaced to the user and what the agent should repair itself.
+
+`merge-check` is the coordinator pass before merging. It is designed for
+technical users and non-technical project owners: it explains whether migration
+ordering, branch drift, parallel worktree reconciliation, or high-risk merge
+approval is still unresolved, and it keeps routine repair work with the agent.
 
 Decision experience means:
 

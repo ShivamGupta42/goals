@@ -133,7 +133,7 @@ def test_issue_stress_checks_repair_actions_and_user_decision_filter(tmp_path: P
     rendered = render_issue_stress_report(report)
 
     assert report.passed is True
-    assert len(report.cases) == 4
+    assert len(report.cases) == 5
     assert all(case.passed for case in report.cases)
     agent_repair = next(case for case in report.cases if case.stress_id == "agent-repair-no-user")
     assert agent_repair.user_questions == []
@@ -141,6 +141,9 @@ def test_issue_stress_checks_repair_actions_and_user_decision_filter(tmp_path: P
     decision_filter = next(case for case in report.cases if case.stress_id == "decision-filter")
     assert decision_filter.user_questions == ["Choose whether a data migration is allowed."]
     assert decision_filter.unexpected_user_questions == []
+    merge_readiness = next(case for case in report.cases if case.stress_id == "merge-readiness")
+    assert merge_readiness.user_questions == []
+    assert merge_readiness.agent_action_count >= 1
     assert "Goal Issue Stress Report" in rendered
     assert "unsafe-review-escalation: pass" in rendered
 

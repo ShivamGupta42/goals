@@ -58,6 +58,7 @@ CURRENT_CAPABILITIES = {
     "local_safety_check",
     "local_ecosystem_discovery",
     "mode_a_handoff",
+    "merge_readiness_check",
     "plugin_capability_discovery",
     "phase_plan",
     "project_history_decision_context",
@@ -141,6 +142,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "review_gate",
             "issue_discovery",
             "local_safety_check",
+            "merge_readiness_check",
             "important_decision_filter",
         ],
         future_capabilities=[],
@@ -309,6 +311,7 @@ DEFAULT_GOAL_USE_CASES = [
             "worktree_isolation",
             "architecture_map",
             "local_safety_check",
+            "merge_readiness_check",
         ],
         planned_capabilities=["parallel_worktree_merge_gates", "code_derived_architecture_checks"],
         important_user_decisions=["Data migration risk", "Breaking API behavior"],
@@ -562,6 +565,14 @@ def stress_goal_issue_discovery(
             expected_issue_areas=["architecture", "risk", "source"],
             expected_user_questions=[],
             minimum_agent_actions=3,
+        ),
+        _issue_stress_case(
+            stress_id="merge-readiness",
+            category="merge_coordination",
+            snapshot=_merge_readiness_snapshot(base),
+            expected_issue_areas=["merge"],
+            expected_user_questions=[],
+            minimum_agent_actions=1,
         ),
         _issue_stress_case(
             stress_id="unsafe-review-escalation",
@@ -1033,6 +1044,36 @@ def _unsafe_review_snapshot(base: Path) -> GoalSnapshot:
     )
 
 
+def _merge_readiness_snapshot(base: Path) -> GoalSnapshot:
+    return _stress_snapshot(
+        base,
+        "merge-readiness",
+        "Catch migration ordering risk before a coordinator merges parallel technical work.",
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Migration change",
+                goal="Record merge-sensitive proof for a migration change.",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["db/migrations/0108_add_tags.py"],
+                    checks_run=["pytest tests/test_tasks.py"],
+                    acceptance_met=["Tags work in tests."],
+                    confidence=0.9,
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.PASS,
+                        summary="Feature proof exists, but merge-readiness is intentionally incomplete.",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+    )
+
+
 def _stress_snapshot(
     base: Path,
     stress_id: str,
@@ -1333,6 +1374,10 @@ def _supported_capabilities(
         supported.add("registry_sync_workflow")
     if "goals issues" in prompt:
         supported.add("issue_discovery")
+    if "goals merge-check" in prompt or any(
+        "goals merge-check" in check for check in recommended_checks
+    ):
+        supported.add("merge_readiness_check")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
     if "Source evidence:" in prompt and "goals source add" in prompt:
