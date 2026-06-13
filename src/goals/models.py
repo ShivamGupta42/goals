@@ -685,6 +685,29 @@ class ArchitectureBrief(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
 
 
+class ArchitectureCheckFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    area: Literal["coverage", "evidence", "map"]
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class ArchitectureCheckReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    findings: list[ArchitectureCheckFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class ScenarioDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

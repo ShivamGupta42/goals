@@ -96,6 +96,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals issues" in run_prompt.stdout
     assert "goals brief" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
+    assert "goals architecture check" in run_prompt.stdout
     assert "goals boundary explain --domain auto" in run_prompt.stdout
     assert "goals source citations" in run_prompt.stdout
     assert "goals source freshness" in run_prompt.stdout
@@ -106,6 +107,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     architecture_path = Path(architecture.stdout.strip())
     assert architecture_path.exists()
     assert "```mermaid" in architecture_path.read_text()
+    architecture_check = run(["python", "-m", "goals.cli", "architecture", "check"], worktree)
+    assert "Code-Derived Architecture Check" in architecture_check.stdout
+    assert "Overall: pass" in architecture_check.stdout
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
     assert "registries=6" in validate.stdout

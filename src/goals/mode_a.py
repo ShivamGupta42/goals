@@ -78,6 +78,7 @@ def recommended_checks(worktree: Path) -> list[str]:
     checks.extend(
         [
             "uv run goals brief",
+            "uv run goals architecture check --strict",
             "uv run goals boundary explain --domain auto",
             "uv run goals asset provenance --strict",
             "uv run goals merge-check",
@@ -126,10 +127,11 @@ Required loop:
 5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
 6. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
 7. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
-8. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
-9. Run `goals phase review {plan.current_phase}`.
-10. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-11. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+8. Run `goals architecture check --strict` to catch changed code files missing from the architecture map or stale architecture evidence.
+9. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
+10. Run `goals phase review {plan.current_phase}`.
+11. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+12. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Parallel worktree merge gate:
 - `goals merge-check` scans sibling worktrees when Git exposes them, then reports dirty worktrees, branch drift, file overlap, and migration-ordering risk as agent repair actions unless an explicit high-risk user approval is missing.

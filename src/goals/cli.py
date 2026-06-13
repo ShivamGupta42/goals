@@ -8,8 +8,10 @@ import typer
 
 from goals.adapters import adapter_check
 from goals.architecture import (
+    analyze_code_architecture,
     architecture_for_snapshot,
     build_architecture_brief,
+    render_architecture_check_report,
     render_architecture_brief,
 )
 from goals.assets import (
@@ -371,6 +373,30 @@ def architecture_brief(
             typer.echo(brief.model_dump_json(indent=2))
         else:
             typer.echo(render_architecture_brief(brief))
+
+    _handle(run)
+
+
+@architecture_app.command("check")
+def architecture_check(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when architecture/code issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether architecture notes match changed files and code surfaces."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_code_architecture(snapshot, Path.cwd())
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_architecture_check_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
 
     _handle(run)
 
