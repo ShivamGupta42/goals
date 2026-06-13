@@ -41,6 +41,7 @@ from goals.memory import (
     memory_path,
     render_memory_suggestions,
 )
+from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     Decision,
@@ -152,6 +153,28 @@ def issues(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_issue_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command("merge-check")
+def merge_check(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+    strict: bool = typer.Option(
+        False, "--strict", help="Exit non-zero when blocking merge findings exist."
+    ),
+) -> None:
+    """Report migration, branch, and parallel-worktree risks before merge."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_merge_readiness(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_merge_readiness_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 

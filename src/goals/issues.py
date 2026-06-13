@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from goals.decisions import should_surface_decision
 from goals.gates import review_phase
+from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     GateVerdict,
     GoalIssue,
@@ -21,6 +22,7 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_source_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
     issues.extend(_architecture_issues(snapshot))
+    issues.extend(_merge_readiness_issues(snapshot))
     user_questions = [issue.summary for issue in issues if issue.needs_user]
     agent_actions = [
         issue.suggested_action
@@ -311,6 +313,22 @@ def _architecture_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             suggested_action="Answer or explicitly defer this architecture question.",
         )
         for question in snapshot.architecture.questions
+    ]
+
+
+def _merge_readiness_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    report = analyze_merge_readiness(snapshot)
+    return [
+        GoalIssue(
+            severity=finding.severity,
+            area="merge",
+            summary=finding.summary,
+            detail=finding.detail,
+            suggested_action=finding.suggested_action,
+            needs_user=finding.needs_user,
+            evidence_refs=finding.evidence_refs,
+        )
+        for finding in report.findings
     ]
 
 
