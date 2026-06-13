@@ -24,8 +24,11 @@ runtime interfaces but intentionally not complete in this version.
 
 ```bash
 uv sync
-uv run goals create "Add tags to tasks and update tests"
+uv run goals create "Add tags to tasks and update tests" \
+  --why "Make tasks easier to organize." \
+  --adapter claude
 uv run goals status
+uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals adapter check codex
 ```
@@ -34,15 +37,41 @@ Goals writes generated state under `.agent-workflow/goals/` in the goal worktree
 That directory is ignored by default because it can include local paths and
 private run history.
 
-## Public Safety
+## Mode A
 
-Before publishing a repository that has used Goals, run:
+Mode A is the native-agent path. Goals does not launch Claude or Codex for you;
+it generates a concrete `/goal` handoff for the adapter you choose.
 
 ```bash
-uv run goals safety-check
+uv run goals run --adapter claude
+uv run goals run --adapter codex
+```
+
+The generated handoff includes the active phase, the goal state file, the
+dashboard path, phase acceptance criteria, recommended checks, and an evidence
+JSON template. Agents can write that template to a file and record it without
+shell-escaping a large JSON string:
+
+```bash
+uv run goals phase evidence P1 --file .agent-workflow/goals/<goal-id>/evidence-p1.json
+uv run goals phase review P1
+uv run goals phase accept P1
+```
+
+## Public Safety
+
+During local work, generated goal state is expected:
+
+```bash
+uv run goals safety-check --mode local
+```
+
+Before publishing a repository that has used Goals, use publish mode:
+
+```bash
+uv run goals safety-check --mode publish
 ```
 
 The scanner checks for secrets, local paths, prompt-injection text, destructive
 operations, generated private state, license hygiene concerns, and external
 supply-chain references.
-

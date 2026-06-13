@@ -23,6 +23,12 @@ def git_root(cwd: Path) -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
+def git_path(repo: Path, path: str) -> Path:
+    result = run_git(["rev-parse", "--git-path", path], repo)
+    value = Path(result.stdout.strip())
+    return value if value.is_absolute() else (repo / value).resolve()
+
+
 def current_branch(repo: Path) -> str:
     result = run_git(["branch", "--show-current"], repo)
     branch = result.stdout.strip()

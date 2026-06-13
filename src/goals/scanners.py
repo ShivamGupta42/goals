@@ -25,14 +25,14 @@ DESTRUCTIVE = re.compile(
 # goals-safety: allow-end
 
 
-def run_safety_scanners(root: Path) -> list[ScanResult]:
+def run_safety_scanners(root: Path, mode: str = "publish") -> list[ScanResult]:
     files = list(iter_text_files(root))
     results = [
         _scan_regex("secrets", files, SECRET_PATTERNS),
         _scan_regex("local_paths", files, [LOCAL_PATH]),
         _scan_regex("prompt_injection", files, [PROMPT_INJECTION]),
         _scan_regex("destructive_ops", files, [DESTRUCTIVE]),
-        _scan_generated_state(root),
+        _scan_generated_state(root, mode),
         _scan_license(root),
         _scan_supply_chain(files),
     ]
@@ -77,7 +77,9 @@ def _is_allowed_line(lines: list[str], index: int) -> bool:
     return False
 
 
-def _scan_generated_state(root: Path) -> ScanResult:
+def _scan_generated_state(root: Path, mode: str) -> ScanResult:
+    if mode == "local":
+        return ScanResult(scanner="public_repo_hygiene", verdict=GateVerdict.PASS)
     generated = (
         [str(p) for p in (root / ".agent-workflow" / "goals").rglob("*") if p.is_file()]
         if (root / ".agent-workflow" / "goals").exists()

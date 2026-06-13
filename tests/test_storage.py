@@ -2,7 +2,7 @@ from pathlib import Path
 
 from goals.models import Event, EventType
 from goals.runtime import default_phases
-from goals.models import GoalSnapshot, WorktreeLease
+from goals.models import Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, WorktreeLease
 from goals.storage import EventStore
 
 
@@ -27,8 +27,43 @@ def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:
     store.append(
         Event(goal_id="demo", event_type=EventType.PHASE_STARTED, payload={"phase_id": "P1"})
     )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={
+                "phase_id": "P1",
+                "evidence": {
+                    "checks_run": ["pytest"],
+                    "acceptance_met": ["done"],
+                    "confidence": 0.9,
+                },
+            },
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_REVIEWED,
+            payload={
+                "phase_id": "P1",
+                "gate_result": {
+                    "gate_id": "phase-review",
+                    "verdict": "pass",
+                    "summary": "ok",
+                },
+            },
+        )
+    )
+    store.append(
+        Event(goal_id="demo", event_type=EventType.PHASE_ACCEPTED, payload={"phase_id": "P1"})
+    )
     derived = store.snapshot()
     assert derived.goal_id == "demo"
-    assert derived.current_phase == "P1"
-    assert derived.event_count == 2
+    assert derived.current_phase == "P2"
+    assert derived.event_count == 5
+    assert isinstance(derived.phases[0].evidence, Evidence)
+    assert isinstance(derived.phases[0].reviews[0], GateResult)
+    assert derived.phases[0].reviews[0].verdict == GateVerdict.PASS
+    assert derived.status == GoalStatus.ACTIVE
     assert (tmp_path / "goal" / "goal.json").exists()

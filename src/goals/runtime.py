@@ -7,6 +7,7 @@ from goals.dashboard import render_dashboard
 from goals.git_ops import (
     create_worktree,
     current_branch,
+    git_path,
     git_root,
     has_commits,
     require_clean_repo,
@@ -80,6 +81,7 @@ def create_goal(
     cwd: Path,
     *,
     autonomy: str = "standard",
+    why: str = "",
     new_project: Path | None = None,
 ) -> GoalSnapshot:
     repo = _ensure_repo(cwd, new_project)
@@ -100,7 +102,7 @@ def create_goal(
     snapshot = GoalSnapshot(
         goal_id=goal_id,
         objective=objective,
-        why="Keep a long-running agent task understandable, reviewable, and resumable.",
+        why=why or "Keep a long-running agent task understandable, reviewable, and resumable.",
         definition_of_done=[
             "All phases are accepted.",
             "The dashboard shows no blocking decisions.",
@@ -210,9 +212,13 @@ def emit_dashboard(cwd: Path) -> Path:
 
 
 def write_workflow_gitignore(repo: Path) -> None:
-    path = repo / ".agent-workflow" / ".gitignore"
-    if not path.exists():
-        atomic_write_text(path, "goals/\n")
+    path = git_path(repo, "info/exclude")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    rules = [".agent-workflow/goals/", ".goals-worktrees/"]
+    missing = [rule for rule in rules if rule not in existing.splitlines()]
+    if missing:
+        suffix = "\n".join(["", "# Goals local state", *missing, ""])
+        atomic_write_text(path, existing.rstrip() + suffix)
 
 
 def _ensure_repo(cwd: Path, new_project: Path | None) -> Path:

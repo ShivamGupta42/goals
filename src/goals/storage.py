@@ -7,7 +7,16 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterator
 
-from goals.models import Event, EventType, GoalSnapshot, PhaseStatus
+from goals.models import (
+    Decision,
+    Evidence,
+    Event,
+    EventType,
+    GateResult,
+    GoalSnapshot,
+    GoalStatus,
+    PhaseStatus,
+)
 
 
 class GoalsError(RuntimeError):
@@ -100,21 +109,22 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             snapshot.current_phase = phase.phase_id
         elif event.event_type == EventType.PHASE_EVIDENCE:
             phase = _phase(snapshot, payload["phase_id"])
-            phase.evidence = payload["evidence"]
+            phase.evidence = Evidence.model_validate(payload["evidence"])
             phase.status = PhaseStatus.NEEDS_REVIEW
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
-            phase.reviews.append(payload["gate_result"])
+            phase.reviews.append(GateResult.model_validate(payload["gate_result"]))
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
             phase.status = PhaseStatus.ACCEPTED
             snapshot.current_phase = _next_pending_phase_id(snapshot)
             if snapshot.current_phase is None:
-                snapshot.status = "complete"
+                snapshot.status = GoalStatus.COMPLETE
         elif event.event_type == EventType.DECISION_REQUESTED:
-            snapshot.decisions.append(payload["decision"])
+            decision = Decision.model_validate(payload["decision"])
+            snapshot.decisions.append(decision)
             if payload["decision"].get("priority") == "blocking":
-                snapshot.status = "blocked"
+                snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.LEARNING_CAPTURED:
             snapshot.learnings.append(payload["learning"])
     return GoalSnapshot.model_validate(snapshot.model_dump())

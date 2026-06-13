@@ -143,6 +143,24 @@ class ScanResult(BaseModel):
     findings: list[str] = Field(default_factory=list)
 
 
+class ModeAPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    adapter_ready: bool = False
+    adapter_detail: str = ""
+    goal_file: str
+    dashboard_file: str
+    current_phase: str
+    phase_title: str
+    phase_goal: str
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    recommended_checks: list[str] = Field(default_factory=list)
+    evidence_file: str
+    evidence_template: Evidence
+    prompt: str
+
+
 class GoalSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

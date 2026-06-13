@@ -6,7 +6,8 @@ from typing import Optional
 
 import typer
 
-from goals.adapters import adapter_check, native_goal_prompt
+from goals.adapters import adapter_check
+from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import Event, EventType, Evidence, GateVerdict
 from goals.registry import validate_registries
 from goals.runtime import (
@@ -40,16 +41,24 @@ def _handle(fn):
 def create(
     objective: str,
     autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
+    why: str = typer.Option("", help="Plain-language reason this goal matters."),
+    adapter: ModeAAdapter = typer.Option(
+        "auto", help="Native agent adapter to generate instructions for."
+    ),
     new: Optional[Path] = typer.Option(None, help="Create a new minimal project first."),
 ) -> None:
     """Create a goal worktree and initial file-backed state."""
 
     def run():
-        snapshot = create_goal(objective, Path.cwd(), autonomy=autonomy, new_project=new)
+        snapshot = create_goal(objective, Path.cwd(), autonomy=autonomy, why=why, new_project=new)
         emit_dashboard(Path(snapshot.topology.worktree_path))
+        plan = build_mode_a_plan(snapshot, adapter)
         typer.echo(f"Created goal: {snapshot.goal_id}")
         typer.echo(f"Worktree: {snapshot.topology.worktree_path}")
-        typer.echo(native_goal_prompt(snapshot, "claude-or-codex"))
+        typer.echo(
+            f"Adapter: {plan.adapter} ({'ready' if plan.adapter_ready else 'not confirmed'})"
+        )
+        typer.echo(plan.prompt)
 
     _handle(run)
 
@@ -79,12 +88,16 @@ def dashboard() -> None:
 
 
 @app.command()
-def run() -> None:
+def run(
+    adapter: ModeAAdapter = typer.Option(
+        "auto", help="Native agent adapter to generate instructions for."
+    ),
+) -> None:
     """Prepare the next native-agent instruction without controlling the agent process."""
 
     def inner():
         snapshot = load_active_snapshot(Path.cwd())
-        typer.echo(native_goal_prompt(snapshot, "claude-or-codex"))
+        typer.echo(build_mode_a_plan(snapshot, adapter).prompt)
 
     _handle(inner)
 
@@ -146,10 +159,18 @@ def cleanup() -> None:
 
 
 @app.command("safety-check")
-def safety_check(path: Path = typer.Argument(Path.cwd())) -> None:
+def safety_check(
+    path: Path = typer.Argument(Path.cwd()),
+    mode: str = typer.Option(
+        "publish", help="local allows generated goal state; publish blocks it."
+    ),
+) -> None:
     """Run public-safety scanners."""
 
-    results = run_safety_scanners(path.resolve())
+    if mode not in {"local", "publish"}:
+        typer.secho("Error: mode must be local or publish", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    results = run_safety_scanners(path.resolve(), mode=mode)
     failed = [result for result in results if result.verdict != GateVerdict.PASS]
     for result in results:
         typer.echo(f"{result.scanner}: {result.verdict}")
@@ -180,12 +201,23 @@ def phase_start(phase_id: str) -> None:
 
 
 @phase_app.command("evidence")
-def phase_evidence(phase_id: str, evidence_json: str) -> None:
+def phase_evidence(
+    phase_id: str,
+    evidence_json: Optional[str] = typer.Argument(None),
+    file: Optional[Path] = typer.Option(
+        None, "--file", "-f", help="Read evidence JSON from a file."
+    ),
+) -> None:
     """Record phase evidence from a JSON object."""
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        evidence = Evidence.model_validate(json.loads(evidence_json))
+        if file is not None and evidence_json is not None:
+            raise GoalsError("Provide evidence as inline JSON or --file, not both.")
+        if file is None and evidence_json is None:
+            raise GoalsError("Provide evidence as inline JSON or --file.")
+        raw = file.read_text(encoding="utf-8") if file is not None else evidence_json
+        evidence = Evidence.model_validate(json.loads(raw or "{}"))
         append_event(
             Path.cwd(),
             Event(
