@@ -386,6 +386,30 @@ class GoalArchitectureMap(BaseModel):
     updated_at: str = Field(default_factory=utc_now)
 
 
+class ArchitectureBriefItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: str
+    label: str
+    status: Literal["planned", "in_progress", "built", "blocked", "deferred", "removed"]
+    plain_summary: str
+    owner_phase: str | None = None
+    user_value: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    review_focus: str
+
+
+class ArchitectureBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    summary: str
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    review_focus: list[str] = Field(default_factory=list)
+    evidence_gaps: list[ArchitectureBriefItem] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+
+
 class ScenarioDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

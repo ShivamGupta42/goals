@@ -337,6 +337,10 @@ def test_architecture_update_records_project_specific_map(tmp_path: Path) -> Non
     assert "Updated architecture map" in update.stdout
     assert "Demo architecture" in text
     assert "State renders into the dashboard" in text
+    brief = run(["python", "-m", "goals.cli", "architecture", "brief"], worktree)
+    assert "Architecture Brief" in brief.stdout
+    assert "Review Focus" in brief.stdout
+    assert "Dashboard: In-progress node needs evidence before review or acceptance." in brief.stdout
 
 
 def test_create_refuses_dirty_repo(tmp_path: Path) -> None:

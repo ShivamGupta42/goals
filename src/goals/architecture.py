@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 
 from goals.models import (
+    ArchitectureBrief,
+    ArchitectureBriefItem,
     ArchitectureEdge,
     ArchitectureNode,
     GoalArchitectureMap,
@@ -46,11 +48,17 @@ def architecture_for_snapshot(snapshot: GoalSnapshot) -> GoalArchitectureMap:
 
 def render_architecture_markdown(architecture: GoalArchitectureMap, output_path: Path) -> None:
     diagram = render_mermaid(architecture)
+    brief = build_architecture_brief(architecture)
+    brief_markdown = render_architecture_brief(brief).replace(
+        "# Architecture Brief", "## Architecture Brief", 1
+    )
     nodes = "\n".join(_node_markdown(node) for node in architecture.nodes)
     questions = _bullets(architecture.questions or ["No open architecture questions recorded."])
     markdown = f"""# {architecture.title}
 
 {architecture.overview}
+
+{brief_markdown}
 
 ## Diagram
 
@@ -87,6 +95,64 @@ def render_mermaid(architecture: GoalArchitectureMap) -> str:
     return "\n".join(lines)
 
 
+def build_architecture_brief(architecture: GoalArchitectureMap) -> ArchitectureBrief:
+    counts = architecture_status_counts(architecture)
+    evidence_gaps = [
+        _brief_item(node) for node in architecture.nodes if _needs_architecture_evidence(node)
+    ]
+    review_focus = _review_focus(architecture, evidence_gaps)
+    total_nodes = len(architecture.nodes)
+    built = counts.get("built", 0)
+    blocked = counts.get("blocked", 0)
+    summary = (
+        f"{built}/{total_nodes} architecture node(s) are built"
+        if total_nodes
+        else "No architecture nodes are recorded yet"
+    )
+    if blocked:
+        summary += f"; {blocked} blocked."
+    elif evidence_gaps:
+        summary += f"; {len(evidence_gaps)} node(s) need evidence or review."
+    else:
+        summary += "; no evidence gaps detected."
+    return ArchitectureBrief(
+        title=architecture.title,
+        summary=summary,
+        status_counts=counts,
+        review_focus=review_focus,
+        evidence_gaps=evidence_gaps,
+        open_questions=list(architecture.questions),
+    )
+
+
+def render_architecture_brief(brief: ArchitectureBrief) -> str:
+    lines = [
+        "# Architecture Brief",
+        "",
+        brief.summary,
+        "",
+        "### Status Counts",
+        _bullets(_count_lines(brief.status_counts) or ["No nodes recorded."]),
+        "",
+        "### Review Focus",
+        _bullets(brief.review_focus or ["No architecture review focus recorded."]),
+        "",
+        "### Evidence Gaps",
+    ]
+    if not brief.evidence_gaps:
+        lines.append("  - No architecture evidence gaps detected.")
+    for item in brief.evidence_gaps:
+        lines.append(f"  - {item.label}: {item.review_focus}")
+    lines.extend(
+        [
+            "",
+            "### Open Questions",
+            _bullets(brief.open_questions or ["No open architecture questions recorded."]),
+        ]
+    )
+    return "\n".join(lines)
+
+
 def architecture_status_counts(architecture: GoalArchitectureMap) -> dict[str, int]:
     counts: dict[str, int] = {}
     for node in architecture.nodes:
@@ -112,6 +178,70 @@ def _node_for_phase(phase) -> ArchitectureNode:
         evidence_refs=evidence_refs,
         technical_notes=technical_notes,
     )
+
+
+def _brief_item(node: ArchitectureNode) -> ArchitectureBriefItem:
+    return ArchitectureBriefItem(
+        node_id=node.node_id,
+        label=node.label,
+        status=node.status,
+        plain_summary=node.plain_summary,
+        owner_phase=node.owner_phase,
+        user_value=node.user_value,
+        evidence_refs=list(node.evidence_refs),
+        review_focus=_node_review_focus(node),
+    )
+
+
+def _needs_architecture_evidence(node: ArchitectureNode) -> bool:
+    if node.status in {"built", "in_progress", "blocked"} and not node.evidence_refs:
+        return True
+    if node.status == "blocked":
+        return True
+    return False
+
+
+def _node_review_focus(node: ArchitectureNode) -> str:
+    if node.status == "blocked":
+        return "Resolve the blocker or decide whether this node should be deferred."
+    if node.status == "built" and not node.evidence_refs:
+        return "Built node has no evidence references; verify proof before trusting it."
+    if node.status == "in_progress" and not node.evidence_refs:
+        return "In-progress node needs evidence before review or acceptance."
+    return "Check whether this node still matches the goal and recorded evidence."
+
+
+def _review_focus(
+    architecture: GoalArchitectureMap,
+    evidence_gaps: list[ArchitectureBriefItem],
+) -> list[str]:
+    focus: list[str] = []
+    blocked = [node for node in architecture.nodes if node.status == "blocked"]
+    in_progress = [node for node in architecture.nodes if node.status == "in_progress"]
+    if blocked:
+        focus.append(
+            f"Resolve or explicitly defer blocked architecture node(s): "
+            f"{', '.join(node.label for node in blocked[:4])}."
+        )
+    if evidence_gaps:
+        focus.append(
+            f"Verify evidence for {len(evidence_gaps)} architecture node(s) before treating the map as trustworthy."
+        )
+    if in_progress:
+        focus.append(
+            f"Review in-progress node(s): {', '.join(node.label for node in in_progress[:4])}."
+        )
+    if architecture.questions:
+        focus.append("Answer or explicitly defer the open architecture questions.")
+    if not focus:
+        focus.append(
+            "Architecture map has no detected review gaps; compare it with changed files before closing."
+        )
+    return focus
+
+
+def _count_lines(counts: dict[str, int]) -> list[str]:
+    return [f"{status}: {count}" for status, count in sorted(counts.items())]
 
 
 def _status_for_phase(status: PhaseStatus) -> str:

@@ -41,8 +41,9 @@ may need to understand what has already happened in the project.
 
 **Status:** Partially implemented. Goals now renders a default phase-derived
 `architecture.md`, accepts a typed project-specific architecture map, includes it
-in Mode A handoffs, and shows an Architecture section in the dashboard. Deeper
-code-derived validation and parallel-worktree merge behavior are still planned.
+in Mode A handoffs, exposes a compact `goals architecture brief`, and shows an
+Architecture section in the dashboard. Deeper code-derived validation and
+parallel-worktree merge behavior are still planned.
 
 For larger goals, technical users need a way to inspect what is being built,
 what is not built yet, and how each phase changes the project. Goals should
@@ -60,6 +61,8 @@ state.
   planned, in progress, built, deferred, or removed.
 - Link each architecture node to phases, decisions, evidence, or changed files
   when possible.
+- Keep a compact architecture brief with status counts, evidence gaps, open
+  questions, and review focus.
 - Render this in the dashboard as an Architecture view beside Progress,
   Decisions, Evidence, and Technical Details.
 

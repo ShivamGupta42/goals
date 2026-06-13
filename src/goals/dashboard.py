@@ -3,7 +3,12 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
-from goals.architecture import architecture_for_snapshot, architecture_status_counts, render_mermaid
+from goals.architecture import (
+    architecture_for_snapshot,
+    architecture_status_counts,
+    build_architecture_brief,
+    render_mermaid,
+)
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -87,6 +92,8 @@ def render_dashboard(
     .decision-card p {{ margin-bottom: .35rem; }}
     .muted {{ color: var(--muted); }}
     .architecture-grid {{ display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 1rem; }}
+    .architecture-brief {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: 1rem; background: var(--soft); }}
+    .architecture-brief .review-focus {{ font-weight: 700; }}
     .node-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; list-style: none; padding: 0; }}
     .node-list li {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }}
     .diagram {{ overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: #fbfcfe; }}
@@ -413,6 +420,7 @@ def _sources_html(snapshot: GoalSnapshot) -> str:
 
 def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Path | None) -> str:
     counts = architecture_status_counts(architecture)
+    brief = build_architecture_brief(architecture)
     count_text = (
         ", ".join(f"{escape(status)}: {count}" for status, count in sorted(counts.items()))
         or "No nodes recorded"
@@ -430,8 +438,10 @@ def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Pat
         "</li>"
         for node in architecture.nodes
     )
+    brief_html = _architecture_brief_html(brief)
     return f"""
     <p class="plain">{escape(architecture.overview)}</p>
+    {brief_html}
     <p><strong>Status counts:</strong> {count_text}</p>
     {link}
     <div class="architecture-grid">
@@ -439,3 +449,28 @@ def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Pat
       <pre class="diagram">{escape(render_mermaid(architecture))}</pre>
     </div>
     """
+
+
+def _architecture_brief_html(brief) -> str:
+    focus_items = _bullets_html(brief.review_focus or ["No architecture review focus recorded."])
+    gap_items = _bullets_html(
+        [f"{item.label}: {item.review_focus}" for item in brief.evidence_gaps]
+        or ["No architecture evidence gaps detected."]
+    )
+    question_items = _bullets_html(
+        brief.open_questions or ["No open architecture questions recorded."]
+    )
+    return (
+        '<div class="architecture-brief">'
+        "<h3>Architecture Brief</h3>"
+        f"<p>{escape(brief.summary)}</p>"
+        '<p class="review-focus">Review focus</p>'
+        f"{focus_items}"
+        "<details><summary>Evidence gaps and open questions</summary>"
+        "<h4>Evidence Gaps</h4>"
+        f"{gap_items}"
+        "<h4>Open Questions</h4>"
+        f"{question_items}"
+        "</details>"
+        "</div>"
+    )

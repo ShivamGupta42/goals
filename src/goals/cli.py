@@ -7,6 +7,11 @@ from typing import Optional
 import typer
 
 from goals.adapters import adapter_check
+from goals.architecture import (
+    architecture_for_snapshot,
+    build_architecture_brief,
+    render_architecture_brief,
+)
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -271,6 +276,24 @@ def architecture_show() -> None:
 
     def run():
         typer.echo(str(emit_architecture(Path.cwd())))
+
+    _handle(run)
+
+
+@architecture_app.command("brief")
+def architecture_brief(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show a compact architecture review brief for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        architecture = architecture_for_snapshot(snapshot)
+        brief = build_architecture_brief(architecture)
+        if json_output:
+            typer.echo(brief.model_dump_json(indent=2))
+        else:
+            typer.echo(render_architecture_brief(brief))
 
     _handle(run)
 
