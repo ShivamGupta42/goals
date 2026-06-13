@@ -6,11 +6,12 @@ questions to resolve before implementation.
 
 ## Decision Explainer V2
 
-**Status:** Partially implemented. Basic/Detailed/Technical rendering and active
-goal history context exist; richer memory limits are still planned. The
-dashboard now filters routine decisions and shows important user-facing decision
-cards with recommendation, options, risk, reversibility, confidence, known
-context, uncertainty, and technical evidence.
+**Status:** Partially implemented. Basic/Detailed/Technical rendering, active
+goal history context, and a compact `goals decision brief` read model exist;
+richer memory limits are still planned. The dashboard now filters routine
+decisions, shows a non-technical decision brief, and shows important user-facing
+decision cards with recommendation, options, risk, reversibility, confidence,
+known context, uncertainty, and technical evidence.
 
 Goals should help agents explain technical decisions in a way non-technical users
 can understand, while still giving technical users enough detail to challenge the
@@ -22,6 +23,7 @@ may need to understand what has already happened in the project.
 - Use project history as context: prior goal events, accepted phases, evidence,
   decisions, blockers, learnings, changed files, and dashboard summaries.
 - Add a "what we know so far" section to each decision explanation.
+- Keep a compact decision brief for non-technical users before deeper detail.
 - Keep three levels: Basic, Detailed, and Technical.
 - Include recommendation, options, tradeoffs, risks, reversibility, confidence,
   and suggested replies or commands.

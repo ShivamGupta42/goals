@@ -5,6 +5,7 @@ from pathlib import Path
 
 from goals.architecture import architecture_for_snapshot, architecture_status_counts, render_mermaid
 from goals.decisions import (
+    build_decision_brief,
     build_decision_context,
     evidence_refs,
     render_decision_explanation,
@@ -35,6 +36,7 @@ def render_dashboard(
     accepted_count = len([p for p in snapshot.phases if p.status == "accepted"])
     total_count = len(snapshot.phases)
     proof_count = len([p for p in snapshot.phases if p.evidence is not None])
+    decision_brief = build_decision_brief(snapshot)
     phase_rows = "\n".join(
         f'<tr><td><span class="pill">{escape(p.phase_id)}</span></td>'
         f"<td><strong>{escape(p.title)}</strong><br><span>{escape(p.goal)}</span></td>"
@@ -42,7 +44,7 @@ def render_dashboard(
         f"<td>{_evidence_summary(p.evidence.notes if p.evidence else '')}</td></tr>"
         for p in snapshot.phases
     )
-    decisions = _decision_html(snapshot, surfaced_decisions)
+    decisions = _decision_html(snapshot, surfaced_decisions, decision_brief)
     issues = _issues_html(issue_report)
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
@@ -77,6 +79,8 @@ def render_dashboard(
     .plain {{ color: var(--muted); max-width: 760px; }}
     .panel {{ border-top: 1px solid var(--line); }}
     .decision {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; }}
+    .decision-brief {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: 1rem; background: var(--soft); }}
+    .decision-brief .next {{ font-weight: 700; }}
     .decision .ask {{ color: var(--red); font-weight: 700; }}
     .decision-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem; margin-top: .75rem; }}
     .decision-card {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: #fff; }}
@@ -208,14 +212,16 @@ def _evidence_summary(notes: str) -> str:
     return escape(notes or "No evidence yet")
 
 
-def _decision_html(snapshot: GoalSnapshot, surfaced_decisions: list) -> str:
+def _decision_html(snapshot: GoalSnapshot, surfaced_decisions: list, brief) -> str:
+    brief_html = _decision_brief_html(brief)
     if not surfaced_decisions:
         if snapshot.decisions:
             return (
+                f"{brief_html}"
                 "<p>No important decisions are waiting on you. "
                 "The agent can continue with recorded assumptions.</p>"
             )
-        return "<p>No decisions are waiting on you.</p>"
+        return f"{brief_html}<p>No decisions are waiting on you.</p>"
     context = build_decision_context(snapshot)
     items = []
     for decision in surfaced_decisions:
@@ -238,7 +244,33 @@ def _decision_html(snapshot: GoalSnapshot, surfaced_decisions: list) -> str:
             f"{_decision_technical_html(decision.technical_details, evidence_refs(context))}"
             "</article>"
         )
-    return "\n".join(items)
+    return brief_html + "\n".join(items)
+
+
+def _decision_brief_html(brief) -> str:
+    next_items = "".join(
+        "<li>"
+        f"<strong>{escape(item.title)}</strong>"
+        f"<p>{escape(item.plain_summary)}</p>"
+        f"<p><strong>Recommended:</strong> {escape(item.recommendation)}</p>"
+        f"<p><strong>Suggested reply:</strong> <code>{escape(item.suggested_reply)}</code></p>"
+        f'<p class="next">What happens next: {escape(item.what_happens_next)}</p>'
+        "</li>"
+        for item in brief.user_decisions
+    )
+    needs = (
+        f"<ul>{next_items}</ul>" if next_items else "<p>Nothing important is waiting on you.</p>"
+    )
+    return (
+        '<div class="decision-brief">'
+        "<h3>Decision Brief</h3>"
+        f"<p>{escape(brief.summary)}</p>"
+        "<h4>What Needs Your Answer</h4>"
+        f"{needs}"
+        "<h4>What the Agent Can Handle</h4>"
+        f"<p>{escape(brief.agent_handled_summary)}</p>"
+        "</div>"
+    )
 
 
 def _decision_options_html(options) -> str:

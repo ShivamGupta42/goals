@@ -168,6 +168,36 @@ class DecisionExplanation(BaseModel):
     context: DecisionContext
 
 
+class DecisionBriefItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision_id: str
+    title: str
+    plain_summary: str
+    why_user_needed: str
+    recommendation: str
+    suggested_reply: str
+    confidence: float = 0.0
+    highest_risk: Literal["low", "medium", "high"] = "medium"
+    all_options_reversible: bool = False
+    option_summaries: list[str] = Field(default_factory=list)
+    what_happens_next: str
+    known_context: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class DecisionBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    waiting_on_user: bool
+    summary: str
+    user_decisions: list[DecisionBriefItem] = Field(default_factory=list)
+    agent_handled_count: int = 0
+    agent_handled_summary: str = ""
+
+
 class EcosystemRecommendation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -7,7 +7,12 @@ from typing import Optional
 import typer
 
 from goals.adapters import adapter_check
-from goals.decisions import build_decision_context, render_decision_explanation
+from goals.decisions import (
+    build_decision_brief,
+    build_decision_context,
+    render_decision_brief,
+    render_decision_explanation,
+)
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
@@ -697,6 +702,23 @@ def decision_explain(
             typer.echo(explanation.markdown)
             if not explanation.surfaced_to_user:
                 typer.echo("\nAgent note: this does not need to interrupt the user.")
+
+    _handle(run)
+
+
+@decision_app.command("brief")
+def decision_brief(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show the important user decisions in a compact plain-language brief."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        brief = build_decision_brief(snapshot)
+        if json_output:
+            typer.echo(brief.model_dump_json(indent=2))
+        else:
+            typer.echo(render_decision_brief(brief))
 
     _handle(run)
 
