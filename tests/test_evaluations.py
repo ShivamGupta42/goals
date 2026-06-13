@@ -64,6 +64,7 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert all("automatic_skill_selection" not in result.planned_capabilities for result in results)
     assert any("local_ecosystem_discovery" in result.supported_capabilities for result in results)
     assert any("plugin_capability_discovery" in result.supported_capabilities for result in results)
+    assert any("permission_policy_registry" in result.supported_capabilities for result in results)
     assert any("registry_sync_workflow" in result.supported_capabilities for result in results)
     assert any("issue_discovery" in result.supported_capabilities for result in results)
     assert any("self_evolution_memory" in result.supported_capabilities for result in results)
@@ -72,6 +73,9 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert all("source_registry" not in result.planned_capabilities for result in results)
     assert all(
         "plugin_capability_discovery" not in result.planned_capabilities for result in results
+    )
+    assert all(
+        "permission_policy_registry" not in result.planned_capabilities for result in results
     )
     for result in results:
         assert "end_user_decision_experience" in result.supported_capabilities
@@ -180,7 +184,7 @@ def test_self_check_summarizes_all_evaluation_suites(monkeypatch, tmp_path: Path
     assert result.user_decision_count == 5
     assert result.agent_repair_action_count >= 1
     assert report.next_slices
-    assert report.next_slices[0] == "Explore planned capability: permission policy registry"
+    assert report.next_slices[0] == "Explore planned capability: source freshness gate"
     assert "Goals Self-Check Report" in rendered
     assert "Recommended Next Slices" in rendered
     assert "User Experience Findings" in rendered

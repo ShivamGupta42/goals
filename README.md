@@ -43,6 +43,7 @@ uv run goals ecosystem recommend
 uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
+uv run goals permission check github --kind plugin --action "inspect a remote issue"
 uv run goals source list
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
@@ -150,6 +151,19 @@ questions. Discovery inspects local skills/plugins/adapters and suggests portabl
 registry additions without printing local filesystem paths by default. Sync is a
 dry run unless `--apply` is passed. Audit checks whether registry entries are
 specific, safe, portable, and useful enough for automatic routing.
+
+Agents can check whether a tool or action should stay with the agent, ask the
+user, or stop as unsafe:
+
+```bash
+uv run goals permission check github --kind plugin --action "inspect a remote issue"
+uv run goals permission check cleanup-script --kind command --action "delete production data"
+```
+
+Permission policies live in `registries/permissions.yml`. If a project does not
+define one, Goals uses built-in conservative defaults. The report is written for
+agents and non-technical users: what needs the user, what the agent can do, and
+which policy made the call.
 
 Agents can record repeated friction so future goals improve:
 

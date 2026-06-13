@@ -110,6 +110,24 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     merged_ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "merge"], worktree)
     assert "Cross-Agent Ecosystem Recommendation Merge" in merged_ecosystem.stdout
     assert "supported by 2 agent(s)" in merged_ecosystem.stdout
+    permission = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "permission",
+            "check",
+            "github",
+            "--kind",
+            "plugin",
+            "--action",
+            "inspect a remote issue",
+        ],
+        worktree,
+    )
+    assert "Permission Policy Report" in permission.stdout
+    assert "Needs The User" in permission.stdout
+    assert "Approve use of this external service or connector?" in permission.stdout
     audit = run(["python", "-m", "goals.cli", "ecosystem", "audit"], worktree)
     assert "Ecosystem Quality Audit" in audit.stdout
     skill_root = tmp_path / "skills"

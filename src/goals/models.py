@@ -289,6 +289,44 @@ class EcosystemRecommendationMergeReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class PermissionPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str
+    label: str
+    description: str
+    match: list[str] = Field(default_factory=list)
+    decision: Literal["allow", "agent_decide", "ask_user", "deny"] = "agent_decide"
+    risk: Literal["low", "medium", "high"] = "low"
+    user_question: str = ""
+    agent_action: str = ""
+
+
+class PermissionDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject_kind: Literal["skill", "plugin", "adapter", "agent", "gate", "command", "other"]
+    subject_name: str
+    action: str = ""
+    decision: Literal["allow", "agent_decide", "ask_user", "deny"] = "agent_decide"
+    risk: Literal["low", "medium", "high"] = "low"
+    needs_user: bool = False
+    unsafe: bool = False
+    policy_id: str = ""
+    reason: str
+    user_question: str = ""
+    agent_action: str = ""
+
+
+class PermissionPolicyReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    decisions: list[PermissionDecision] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class DiscoveredTool(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

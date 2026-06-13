@@ -52,18 +52,20 @@ from goals.memory import (
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
-    Decision,
     AgentRecommendationSet,
+    Decision,
     EcosystemRecommendation,
     Event,
     EventType,
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    PermissionPolicyReport,
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
 )
+from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
 from goals.registry_sync import apply_registry_sync, plan_registry_sync, render_registry_sync_plan
 from goals.roadmap import apply_roadmap_update, plan_roadmap_update, render_roadmap_update_plan
@@ -88,6 +90,7 @@ decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
+permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
@@ -97,6 +100,7 @@ app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
 app.add_typer(memory_app, name="memory")
+app.add_typer(permission_app, name="permission")
 app.add_typer(phase_app, name="phase")
 app.add_typer(roadmap_app, name="roadmap")
 app.add_typer(source_app, name="source")
@@ -414,7 +418,11 @@ def ecosystem_merge(
         else:
             snapshot = load_active_snapshot(Path.cwd())
             recommendation_sets = _default_agent_recommendation_sets(Path.cwd(), snapshot, limit)
-        report = merge_agent_recommendations(recommendation_sets, limit=limit)
+        report = merge_agent_recommendations(
+            recommendation_sets,
+            limit=limit,
+            worktree=Path.cwd(),
+        )
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -593,6 +601,66 @@ def memory_absorb() -> None:
         visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
         if visible:
             typer.echo(render_memory_suggestions(visible[:5]))
+
+    _handle(run)
+
+
+@permission_app.command("check")
+def permission_check(
+    name: str = typer.Argument(..., help="Tool, command, or action being considered."),
+    kind: str = typer.Option(
+        "command",
+        help="skill, plugin, adapter, agent, gate, command, or other.",
+    ),
+    action: str = typer.Option("", help="Plain-language action being considered."),
+    label: str = typer.Option("", help="Optional display label."),
+    reason: str = typer.Option("", help="Why the agent wants to use it."),
+    command_hint: str = typer.Option("", help="Optional command or usage hint."),
+    requires_user_approval: bool = typer.Option(
+        False,
+        "--requires-user-approval",
+        help="Treat existing tool metadata as approval-required when no policy matches.",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when the policy says to ask the user or stop.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether a tool or action can stay with the agent."""
+
+    def run():
+        subject_kind = _validate_choice(
+            kind,
+            {"skill", "plugin", "adapter", "agent", "gate", "command", "other"},
+            "kind",
+        )
+        decision = decide_permission(
+            Path.cwd(),
+            subject_kind=subject_kind,
+            subject_name=name,
+            action=action,
+            label=label,
+            reason=reason,
+            command_hint=command_hint,
+            fallback_needs_user=requires_user_approval,
+        )
+        report = PermissionPolicyReport(
+            summary=(
+                f"Checked {decision.subject_kind} {decision.subject_name}: "
+                f"{decision.decision} ({decision.risk})."
+            ),
+            decisions=[decision],
+            user_questions=[decision.user_question] if decision.user_question else [],
+            agent_actions=[decision.agent_action] if decision.agent_action else [],
+        )
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_permission_report(report))
+        if strict and (decision.needs_user or decision.unsafe):
+            raise typer.Exit(1)
 
     _handle(run)
 

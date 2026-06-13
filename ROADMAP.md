@@ -110,11 +110,14 @@ Likely views:
 portable YAML registries, includes those recommendations in Mode A handoffs and
 the dashboard, can discover local skills/plugins/adapters with `goals ecosystem
 discover`, and can plan/apply reviewed registry additions with `goals ecosystem
-sync`. It can also audit registries with `goals ecosystem audit` to catch vague
+sync`. It can audit registries with `goals ecosystem audit` to catch vague
 routing, weak descriptions, unsafe approval policy, non-portable command hints,
-and missing validation hints. Plugin discovery reads common bundle metadata such as
-`.codex-plugin/plugin.json`, `manifest.json`, and `package.json`, then proposes
-conservative portable entries that require review.
+and missing validation hints. It now also has a permission policy registry and
+`goals permission check`, so agents can tell whether a tool or action stays with
+the agent, needs the user, or is unsafe without explicit approval. Plugin
+discovery reads common bundle metadata such as `.codex-plugin/plugin.json`,
+`manifest.json`, and `package.json`, then proposes conservative portable entries
+that require review.
 
 ### Direction
 
@@ -124,6 +127,8 @@ conservative portable entries that require review.
 - Clearly label recommendations as suggestions, not automatic external actions.
 - Mark tools that need user approval because they may change remote state, cost
   money, or touch private data.
+- Keep permission policies human-readable and project-overridable so
+  non-technical users can understand why an agent is asking.
 - Expand local discovery adapters as Claude/Codex and local AI toolchains add
   new plugin metadata formats.
 - Suggest portable registry additions for local tools that are missing from the
@@ -163,7 +168,9 @@ now includes a parallel worktree scan that reports dirty sibling worktrees,
 branch drift, overlapping files, and parallel migration-ordering risk. Ecosystem
 routing can now merge multiple agents' tool recommendations into one coordinator
 view with consensus ranking, conflict notes, and approval-required user
-questions.
+questions. Permission policy checks now give Mode A agents a simple
+registry-backed way to keep local/reversible choices moving while escalating
+external, costly, destructive, or production-affecting actions.
 
 ### Direction
 
@@ -183,6 +190,9 @@ questions.
 - Use `goals ecosystem merge` when Claude, Codex, workers, or specialist agents
   recommend different tools; keep routine routing with the coordinator and only
   ask the user about approval-required tools.
+- Use `goals permission check` before external connectors, destructive commands,
+  paid tools, or production-affecting actions; keep the report understandable to
+  non-technical users.
 - Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
   is tested, not only described.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can
@@ -227,34 +237,34 @@ now treats source evidence as a current capability.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Permission Policy Registry** (`p1`)
-  - Source: self-check
-  - Capability: `permission_policy_registry`
-  - Why: Self-check recommends permission policy registry as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible permission policy registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Source Freshness Gate** (`p2`)
+- **Source Freshness Gate** (`p1`)
   - Source: self-check
   - Capability: `source_freshness_gate`
   - Why: Self-check recommends source freshness gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible source freshness gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Cross Project Memory Sync** (`p2`)
   - Source: self-check
   - Capability: `cross_project_memory_sync`
   - Why: Self-check recommends cross-project memory sync as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible cross-project memory sync slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Professional Boundary Templates** (`p2`)
   - Source: self-check
   - Capability: `professional_boundary_templates`
   - Why: Self-check recommends professional boundary templates as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible professional boundary templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Asset Provenance Checks** (`p2`)
   - Source: self-check
   - Capability: `asset_provenance_checks`
   - Why: Self-check recommends asset provenance checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible asset provenance checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Citation Quality Review** (`p2`)
+  - Source: self-check
+  - Capability: `citation_quality_review`
+  - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->
