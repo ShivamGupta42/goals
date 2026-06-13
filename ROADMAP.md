@@ -147,3 +147,26 @@ handoffs, and shows visible suggestions in the dashboard.
 - How should parallel worktree memories be reconciled?
 - When should a memory suggestion become a blocking user decision instead of an
   agent-handled improvement?
+
+## Source Evidence
+
+**Status:** Partially implemented. Goals can record source evidence and
+source-backed claims as append-only goal events, includes source prompts in Mode
+A handoffs, and renders sources in the dashboard. Business scenario evaluation
+now treats source evidence as a current capability.
+
+### Direction
+
+- Record sources for research, business, customer, market, migration, safety, and
+  architecture claims.
+- Keep source evidence readable for non-technical users: title, locator, type,
+  summary, credibility, claim, and confidence.
+- Let phase evidence reference `source_ids` so proof and claims connect.
+- Later, add richer provenance, source freshness, and citation quality checks.
+
+### Open Questions
+
+- Should external URLs be fetched and archived, or kept as user-provided
+  locators only?
+- How should Goals warn about stale or low-credibility sources?
+- Should business/research goals have a stronger source gate than code goals?

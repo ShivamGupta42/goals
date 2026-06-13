@@ -28,6 +28,8 @@ from goals.models import (
     GateVerdict,
     GoalArchitectureMap,
     SelfEvolutionEntry,
+    SourceClaim,
+    SourceRecord,
 )
 from goals.registry import validate_registries
 from goals.registry_sync import apply_registry_sync, plan_registry_sync, render_registry_sync_plan
@@ -42,6 +44,7 @@ from goals.runtime import (
     transition_phase,
 )
 from goals.scanners import run_safety_scanners
+from goals.sources import render_claim_summary, render_source_summary
 from goals.storage import EventStore, GoalsError, atomic_write_text
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
@@ -52,6 +55,7 @@ ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 phase_app = typer.Typer(help="Agent phase protocol.")
+source_app = typer.Typer(help="Record and inspect source evidence.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
 app.add_typer(decision_app, name="decision")
@@ -59,6 +63,7 @@ app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
 app.add_typer(memory_app, name="memory")
 app.add_typer(phase_app, name="phase")
+app.add_typer(source_app, name="source")
 
 
 def _handle(fn):
@@ -403,6 +408,87 @@ def memory_absorb() -> None:
         visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
         if visible:
             typer.echo(render_memory_suggestions(visible[:5]))
+
+    _handle(run)
+
+
+@source_app.command("add")
+def source_add(
+    title: str,
+    locator: str = typer.Option("", help="URL, file name, interview id, or other locator."),
+    source_type: str = typer.Option(
+        "other", help="url, file, interview, dataset, document, observation, other."
+    ),
+    summary: str = typer.Option("", help="Short plain-language source summary."),
+    credibility: str = typer.Option("medium", help="low, medium, or high."),
+    claim: Optional[str] = typer.Option(None, help="Optional claim supported by this source."),
+    confidence: float = typer.Option(0.0, help="Confidence for the optional claim."),
+) -> None:
+    """Record source evidence for research, business, or technical claims."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        source = SourceRecord(
+            title=title,
+            locator=locator,
+            source_type=_validate_choice(
+                source_type,
+                {"url", "file", "interview", "dataset", "document", "observation", "other"},
+                "source_type",
+            ),  # type: ignore[arg-type]
+            summary=summary,
+            credibility=_validate_choice(credibility, {"low", "medium", "high"}, "credibility"),  # type: ignore[arg-type]
+        )
+        claims = []
+        if claim:
+            claims.append(
+                SourceClaim(
+                    claim=claim,
+                    source_ids=[source.source_id],
+                    confidence=confidence,
+                )
+            )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.SOURCE_RECORDED,
+                payload={
+                    "source": source.model_dump(),
+                    "claims": [item.model_dump() for item in claims],
+                },
+            ),
+        )
+        typer.echo(f"Recorded source: {source.source_id}")
+
+    _handle(run)
+
+
+@source_app.command("list")
+def source_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List source evidence and source-backed claims for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    {
+                        "sources": [source.model_dump(mode="json") for source in snapshot.sources],
+                        "claims": [
+                            claim.model_dump(mode="json") for claim in snapshot.source_claims
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo("Sources:")
+            typer.echo(render_source_summary(snapshot))
+            typer.echo("Claims:")
+            typer.echo(render_claim_summary(snapshot))
 
     _handle(run)
 

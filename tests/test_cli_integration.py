@@ -144,6 +144,33 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert "Applied" in sync_apply.stdout
     assert "migration-helper" in (worktree / "registries" / "skills.yml").read_text()
+    source = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "source",
+            "add",
+            "Customer interview",
+            "--locator",
+            "interview-001",
+            "--source-type",
+            "interview",
+            "--summary",
+            "Customer wants simple progress.",
+            "--credibility",
+            "high",
+            "--claim",
+            "Users need plain-language progress.",
+            "--confidence",
+            "0.8",
+        ],
+        worktree,
+    )
+    assert "Recorded source: SRC-" in source.stdout
+    source_list = run(["python", "-m", "goals.cli", "source", "list"], worktree)
+    assert "Customer interview" in source_list.stdout
+    assert "Users need plain-language progress." in source_list.stdout
     run(
         [
             "python",

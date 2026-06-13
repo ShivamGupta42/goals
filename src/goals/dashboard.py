@@ -13,6 +13,7 @@ from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
+from goals.sources import unresolved_claims
 from goals.storage import atomic_write_text
 
 
@@ -41,6 +42,7 @@ def render_dashboard(
     decisions = _decision_html(snapshot, surfaced_decisions)
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
+    sources = _sources_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
         for p in snapshot.phases
@@ -108,6 +110,7 @@ def render_dashboard(
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#evidence">Evidence</a>
+    <a href="#sources">Sources</a>
     <a href="#technical">Technical Details</a>
   </nav>
   <section id="progress" class="panel">
@@ -133,6 +136,10 @@ def render_dashboard(
   <section id="evidence" class="panel">
     <h2>Proof and Evidence</h2>
     <ul>{evidence}</ul>
+  </section>
+  <section id="sources" class="panel">
+    <h2>Sources</h2>
+    {sources}
   </section>
   <section id="technical" class="panel">
     <h2>Technical Details</h2>
@@ -234,6 +241,38 @@ def _memory_html(snapshot: GoalSnapshot) -> str:
         for suggestion in visible[:6]
     )
     return f'<ul class="node-list">{items}</ul>'
+
+
+def _sources_html(snapshot: GoalSnapshot) -> str:
+    if not snapshot.sources:
+        return "<p>No sources recorded yet.</p>"
+    source_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(source.title)}</strong>"
+        f"<p>{escape(source.summary or source.locator or 'No summary recorded.')}</p>"
+        f'<span class="pill">{escape(source.source_type)}</span> '
+        f'<span class="status-label {escape(source.credibility)}">{escape(source.credibility)}</span>'
+        "</li>"
+        for source in snapshot.sources
+    )
+    claim_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(claim.claim)}</strong>"
+        f"<p>Sources: {escape(', '.join(claim.source_ids) or 'none')}</p>"
+        f"<p>Confidence: {claim.confidence:.0%}</p>"
+        "</li>"
+        for claim in snapshot.source_claims
+    )
+    unresolved = unresolved_claims(snapshot)
+    warning = (
+        f"<p>{len(unresolved)} claim(s) need source cleanup.</p>"
+        if unresolved
+        else "<p>All recorded claims reference known sources.</p>"
+    )
+    return (
+        f'{warning}<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
+        f"<h3>Source-backed Claims</h3><ul>{claim_items or '<li>No claims recorded yet.</li>'}</ul>"
+    )
 
 
 def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Path | None) -> str:

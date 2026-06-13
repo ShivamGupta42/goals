@@ -46,6 +46,7 @@ class EventType(StrEnum):
     PHASE_ACCEPTED = "phase_accepted"
     DECISION_REQUESTED = "decision_requested"
     ARCHITECTURE_UPDATED = "architecture_updated"
+    SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     SCAN_COMPLETED = "scan_completed"
 
@@ -93,6 +94,7 @@ class Evidence(BaseModel):
     acceptance_not_met: list[str] = Field(default_factory=list)
     ambiguous: list[str] = Field(default_factory=list)
     known_gaps: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     notes: str = ""
 
@@ -150,6 +152,7 @@ class DecisionContext(BaseModel):
     changed_files: list[str] = Field(default_factory=list)
     known_gaps: list[str] = Field(default_factory=list)
     prior_decisions: list[str] = Field(default_factory=list)
+    source_claims: list[str] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     learnings: list[str] = Field(default_factory=list)
 
@@ -216,6 +219,34 @@ class RegistrySyncPlan(BaseModel):
     changes: list[RegistrySyncChange] = Field(default_factory=list)
     dry_run: bool = True
     summary: str
+
+
+class SourceRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(default_factory=lambda: f"SRC-{uuid4().hex[:8]}")
+    title: str
+    locator: str = ""
+    source_type: Literal[
+        "url",
+        "file",
+        "interview",
+        "dataset",
+        "document",
+        "observation",
+        "other",
+    ] = "other"
+    summary: str = ""
+    credibility: Literal["low", "medium", "high"] = "medium"
+    added_at: str = Field(default_factory=utc_now)
+
+
+class SourceClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim: str
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
 
 
 class SelfEvolutionEntry(BaseModel):
@@ -382,6 +413,8 @@ class GoalSnapshot(BaseModel):
     phases: list[Phase]
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
+    sources: list[SourceRecord] = Field(default_factory=list)
+    source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None
     blockers: list[str] = Field(default_factory=list)
     learnings: list[str] = Field(default_factory=list)

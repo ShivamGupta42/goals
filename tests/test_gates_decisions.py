@@ -8,6 +8,8 @@ from goals.models import (
     GoalSnapshot,
     Phase,
     PhaseStatus,
+    SourceClaim,
+    SourceRecord,
     WorktreeLease,
 )
 
@@ -88,6 +90,21 @@ def test_decision_explainer_uses_goal_history_context(tmp_path) -> None:
         phases=[phase],
         current_phase=None,
         learnings=["Use reversible storage changes first."],
+        sources=[
+            SourceRecord(
+                source_id="SRC-1",
+                title="Support ticket",
+                source_type="document",
+                summary="Users asked for tag filtering.",
+            )
+        ],
+        source_claims=[
+            SourceClaim(
+                claim="Users asked for tag filtering.",
+                source_ids=["SRC-1"],
+                confidence=0.8,
+            )
+        ],
     )
     context = build_decision_context(snapshot)
     decision = explain_decision(
@@ -122,6 +139,7 @@ def test_decision_explainer_uses_goal_history_context(tmp_path) -> None:
     assert "Checks run: pytest" in explanation.markdown
     assert "file:src/db.py" in explanation.markdown
     assert "Migration order is unclear." in explanation.markdown
+    assert "Users asked for tag filtering." in explanation.markdown
 
 
 def test_low_risk_reversible_decision_can_stay_with_agent(tmp_path) -> None:

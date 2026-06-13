@@ -64,6 +64,12 @@ def build_decision_context(snapshot: GoalSnapshot) -> DecisionContext:
         changed_files=_dedupe(changed_files),
         known_gaps=_dedupe(known_gaps + snapshot.risks),
         prior_decisions=_dedupe([decision.title for decision in snapshot.decisions]),
+        source_claims=_dedupe(
+            [
+                f"{claim.claim} ({', '.join(claim.source_ids) or 'no source'})"
+                for claim in snapshot.source_claims
+            ]
+        ),
         blockers=_dedupe(snapshot.blockers),
         learnings=_dedupe(snapshot.learnings),
     )
@@ -111,6 +117,8 @@ def context_summary(context: DecisionContext) -> list[str]:
         summary.append(f"Changed files: {', '.join(context.changed_files[:4])}")
     if context.known_gaps:
         summary.append(f"Known gaps: {', '.join(context.known_gaps[:4])}")
+    if context.source_claims:
+        summary.append(f"Source-backed claims: {', '.join(context.source_claims[:4])}")
     return summary
 
 
@@ -119,6 +127,7 @@ def evidence_refs(context: DecisionContext) -> list[str]:
     refs.extend([f"phase:{phase}" for phase in context.accepted_phases])
     refs.extend([f"check:{check}" for check in context.checks_run])
     refs.extend([f"file:{path}" for path in context.changed_files])
+    refs.extend([f"source:{claim}" for claim in context.source_claims])
     return refs
 
 

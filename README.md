@@ -37,6 +37,7 @@ uv run goals architecture show
 uv run goals ecosystem recommend
 uv run goals ecosystem discover
 uv run goals ecosystem sync
+uv run goals source list
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
@@ -71,6 +72,18 @@ Agents can explain only important decisions with active goal history:
 
 ```bash
 uv run goals decision explain --file decision.json --level basic
+```
+
+Agents can record source evidence for research, business, customer, market, or
+technical claims:
+
+```bash
+uv run goals source add "Customer interview" \
+  --locator "interview-001" \
+  --source-type interview \
+  --claim "Users need plain-language progress." \
+  --confidence 0.8
+uv run goals source list
 ```
 
 Agents can also ask Goals which skills or plugins fit the current phase:

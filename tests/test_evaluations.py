@@ -37,6 +37,8 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert any("registry_sync_workflow" in result.supported_capabilities for result in results)
     assert any("self_evolution_memory" in result.supported_capabilities for result in results)
     assert all("self_evolution_memory" not in result.planned_capabilities for result in results)
+    assert any("source_registry" in result.supported_capabilities for result in results)
+    assert all("source_registry" not in result.planned_capabilities for result in results)
     for result in results:
         assert "end_user_decision_experience" in result.supported_capabilities
         assert result.surfaced_decisions

@@ -31,6 +31,7 @@ CURRENT_CAPABILITIES = {
     "review_gate",
     "self_evolution_memory",
     "simple_decision_format",
+    "source_registry",
     "worktree_isolation",
 }
 
@@ -129,8 +130,9 @@ DEFAULT_GOAL_SCENARIOS = [
             "important_decision_filter",
             "simple_decision_format",
             "project_history_decision_context",
+            "source_registry",
         ],
-        future_capabilities=["source_registry"],
+        future_capabilities=[],
         decisions=[
             ScenarioDecision(
                 title="Audience focus",
@@ -304,6 +306,8 @@ def _supported_capabilities(
         supported.add("registry_sync_workflow")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
+    if "Source evidence:" in prompt and "goals source add" in prompt:
+        supported.add("source_registry")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:

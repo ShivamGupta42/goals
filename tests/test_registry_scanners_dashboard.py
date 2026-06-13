@@ -63,6 +63,7 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Suggested Skills and Plugins" in text
     assert "Self-Evolution Memory" in text
     assert "Architecture Map" in text
+    assert "Sources" in text
     assert "No decisions are waiting on you." in text
     assert "Goal ID:" in text
     assert "Event offset:" in text

@@ -17,6 +17,8 @@ from goals.models import (
     GoalSnapshot,
     GoalStatus,
     PhaseStatus,
+    SourceClaim,
+    SourceRecord,
 )
 
 
@@ -128,6 +130,14 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
+        elif event.event_type == EventType.SOURCE_RECORDED:
+            source = SourceRecord.model_validate(payload["source"])
+            if not any(existing.source_id == source.source_id for existing in snapshot.sources):
+                snapshot.sources.append(source)
+            for claim_payload in payload.get("claims", []):
+                claim = SourceClaim.model_validate(claim_payload)
+                if not any(existing.claim == claim.claim for existing in snapshot.source_claims):
+                    snapshot.source_claims.append(claim)
         elif event.event_type == EventType.LEARNING_CAPTURED:
             snapshot.learnings.append(payload["learning"])
     return GoalSnapshot.model_validate(snapshot.model_dump())

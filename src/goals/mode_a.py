@@ -8,6 +8,7 @@ from goals.adapters import adapter_check
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
+from goals.sources import render_claim_summary, render_source_summary
 from goals.storage import GoalsError
 
 ModeAAdapter = Literal["auto", "claude", "codex"]
@@ -27,6 +28,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         checks_run=checks,
         acceptance_met=[],
         known_gaps=[],
+        source_ids=[],
         confidence=0.0,
         notes=f"Evidence for {phase.phase_id}: {phase.title}",
     )
@@ -81,6 +83,8 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     checks = _bullets(plan.recommended_checks)
     tools = render_recommendations(plan.recommended_tools)
     memory = render_memory_suggestions(plan.memory_suggestions)
+    sources = render_source_summary(snapshot)
+    claims = render_claim_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -121,6 +125,14 @@ Local ecosystem discovery:
 
 Self-evolution memory:
 {memory}
+
+Source evidence:
+{sources}
+
+Source-backed claims:
+{claims}
+
+If this phase makes research, business, customer, market, architecture, migration, or safety claims, record sources with `goals source add "Source title" --locator "url-or-file" --claim "claim supported by this source" --confidence 0.8`.
 
 Evidence JSON shape:
 ```json

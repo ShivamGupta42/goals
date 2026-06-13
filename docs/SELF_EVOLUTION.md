@@ -64,6 +64,25 @@ is high severity.
 Memory is local generated state under `.agent-workflow/self-evolution/`. It is
 not meant for public commits.
 
+## Source Evidence
+
+Research and business goals need proof that is easy to inspect. Agents can
+record sources and source-backed claims:
+
+```bash
+uv run goals source add "Customer interview" \
+  --locator "interview-001" \
+  --source-type interview \
+  --claim "Users need plain-language progress." \
+  --confidence 0.8
+uv run goals source list
+```
+
+Mode A prompts include source summaries and ask agents to record sources when a
+phase makes customer, market, research, architecture, migration, or safety
+claims. The dashboard shows recorded sources and claims separately from code
+checks.
+
 ## End-User Experience
 
 The decision layer and visualization layer should be judged from the user's
@@ -134,7 +153,7 @@ Future work should connect scenario results to automatic skill/plugin selection,
 and the first registry-backed version now recommends skills/plugins in Mode A
 handoffs and the dashboard. Local discovery can compare installed skills and
 adapters with portable registries. Self-evolution memory records repeated
-friction and turns it into improvement suggestions. Goals must still always know
-what phase it is in, what evidence exists, what remains uncertain, whether a
-decision really needs the user, and whether an external tool needs approval
-before use.
+friction and turns it into improvement suggestions. Source evidence records what
+claims are backed by which sources. Goals must still always know what phase it
+is in, what evidence exists, what remains uncertain, whether a decision really
+needs the user, and whether an external tool needs approval before use.
