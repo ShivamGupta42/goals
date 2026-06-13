@@ -79,8 +79,12 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert ".agent-workflow/self-evolution/" in base_exclude_path.read_text()
     status = run(["python", "-m", "goals.cli", "status"], worktree)
     assert "Add tags" in status.stdout
+    issues = run(["python", "-m", "goals.cli", "issues"], worktree)
+    assert "Goal Issue Report" in issues.stdout
+    assert "P1 has no evidence yet." in issues.stdout
     run_prompt = run(["python", "-m", "goals.cli", "run", "--adapter", "codex"], worktree)
     assert "Codex Mode A notes" in run_prompt.stdout
+    assert "goals issues" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()

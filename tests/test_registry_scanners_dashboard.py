@@ -59,12 +59,14 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "<script>alert(1)</script>" not in text
     assert "&lt;script&gt;" in text
     assert "Progress" in text
+    assert "Issues" in text
     assert "Decisions Needed" in text
     assert "Suggested Skills and Plugins" in text
     assert "Self-Evolution Memory" in text
     assert "Architecture Map" in text
     assert "Sources" in text
     assert "No decisions are waiting on you." in text
+    assert "P1 has no evidence yet." in text
     assert "Goal ID:" in text
     assert "Event offset:" in text
     assert "Source commit:" in text

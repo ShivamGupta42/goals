@@ -77,16 +77,18 @@ state.
 
 ## Dashboard Views
 
-**Status:** Partially implemented.
+**Status:** Partially implemented. The dashboard now includes Progress, Issues,
+Decisions, Skills & Plugins, Memory, Architecture, Evidence, Sources, and
+Technical Details as read-only views.
 
-The dashboard is still a single read-only HTML file, but it now has clear view
-anchors for Progress, Decisions, Architecture, Evidence, and Technical Details.
-Future dashboard work should deepen those views without making it a control
-plane.
+The dashboard is still a single read-only HTML file. Future dashboard work
+should deepen those views without making it a control plane.
 
 Likely views:
 
 - Progress: phases, current step, waiting-on, blockers, and completion.
+- Issues: blockers, missing proof, unresolved claims, failed gates, and state
+  mismatches.
 - Decisions: explanations, recommended option, alternatives, risk, and suggested
   reply.
 - Architecture: optional goal architecture map and build status.

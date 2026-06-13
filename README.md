@@ -31,6 +31,7 @@ uv run goals create "Add tags to tasks and update tests" \
   --why "Make tasks easier to organize." \
   --adapter claude
 uv run goals status
+uv run goals issues
 uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
@@ -74,6 +75,17 @@ Agents can explain only important decisions with active goal history:
 ```bash
 uv run goals decision explain --file decision.json --level basic
 ```
+
+Agents can ask Goals what could block the current goal before interrupting the
+user:
+
+```bash
+uv run goals issues
+```
+
+The issue report checks missing proof, failed gates, unresolved source claims,
+important decisions, blockers, and state mismatches. By default it is a
+read-only report; use `--strict` when a script should fail on blocking issues.
 
 Agents can record source evidence for research, business, customer, market, or
 technical claims:
