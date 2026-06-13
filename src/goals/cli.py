@@ -12,6 +12,7 @@ from goals.architecture import (
     build_architecture_brief,
     render_architecture_brief,
 )
+from goals.brief import build_goal_brief, render_goal_brief
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -155,6 +156,23 @@ def issues(
             typer.echo(render_issue_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command()
+def brief(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show a plain-language brief for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        goal_brief = build_goal_brief(snapshot)
+        if json_output:
+            typer.echo(goal_brief.model_dump_json(indent=2))
+        else:
+            typer.echo(render_goal_brief(goal_brief))
 
     _handle(run)
 

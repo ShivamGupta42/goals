@@ -35,6 +35,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Claude Mode A notes" in plan.prompt
     assert "goals phase evidence P1 --file" in plan.prompt
     assert "goals issues" in plan.prompt
+    assert "goals brief" in plan.prompt
     assert plan.architecture_file.endswith("architecture.md")
     assert "Architecture map:" in plan.prompt
     assert plan.recommended_tools
@@ -47,6 +48,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Source evidence:" in plan.prompt
     assert "goals source add" in plan.prompt
     assert "uv run pytest -q" in plan.recommended_checks
+    assert "uv run goals brief" in plan.recommended_checks
     assert "source_ids" in plan.evidence_template.model_dump()
     assert "uv run goals safety-check --mode local ." in plan.recommended_checks
 

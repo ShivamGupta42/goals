@@ -75,6 +75,7 @@ def recommended_checks(worktree: Path) -> list[str]:
             checks.append("uv run ruff check .")
     checks.extend(
         [
+            "uv run goals brief",
             "uv run goals merge-check",
             "uv run goals validate",
             "uv run goals safety-check --mode local .",
@@ -116,10 +117,11 @@ Required loop:
 4. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
 5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
 6. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
-7. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
-8. Run `goals phase review {plan.current_phase}`.
-9. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-10. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+7. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
+8. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
+9. Run `goals phase review {plan.current_phase}`.
+10. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+11. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Recommended checks for this repo:
 {checks}

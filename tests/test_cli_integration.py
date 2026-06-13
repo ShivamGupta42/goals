@@ -84,12 +84,17 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     issues = run(["python", "-m", "goals.cli", "issues"], worktree)
     assert "Goal Issue Report" in issues.stdout
     assert "P1 has no evidence yet." in issues.stdout
+    brief = run(["python", "-m", "goals.cli", "brief"], worktree)
+    assert "Goal Brief" in brief.stdout
+    assert "Waiting on: agent" in brief.stdout
+    assert "What Needs Your Answer" in brief.stdout
     merge_check = run(["python", "-m", "goals.cli", "merge-check"], worktree)
     assert "Goal Merge Readiness Report" in merge_check.stdout
     assert "Overall: pass" in merge_check.stdout
     run_prompt = run(["python", "-m", "goals.cli", "run", "--adapter", "codex"], worktree)
     assert "Codex Mode A notes" in run_prompt.stdout
     assert "goals issues" in run_prompt.stdout
+    assert "goals brief" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()

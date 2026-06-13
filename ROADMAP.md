@@ -83,7 +83,7 @@ state.
 
 ## Dashboard Views
 
-**Status:** Partially implemented. The dashboard now includes Progress, Issues,
+**Status:** Partially implemented. The dashboard now includes Goal Brief, Progress, Issues,
 Decisions, Skills & Plugins, Memory, Architecture, Evidence, Sources, and
 Technical Details as read-only views.
 
@@ -93,6 +93,8 @@ should deepen those views without making it a control plane.
 Likely views:
 
 - Progress: phases, current step, waiting-on, blockers, and completion.
+- Goal Brief: plain-language summary of what needs the user, what the agent can
+  do next, and what proof exists.
 - Issues: blockers, missing proof, unresolved claims, failed gates, and state
   mismatches.
 - Decisions: explanations, recommended option, alternatives, risk, and suggested

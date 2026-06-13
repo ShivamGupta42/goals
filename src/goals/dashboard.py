@@ -9,6 +9,7 @@ from goals.architecture import (
     build_architecture_brief,
     render_mermaid,
 )
+from goals.brief import build_goal_brief
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -37,11 +38,13 @@ def render_dashboard(
     architecture = architecture or architecture_for_snapshot(snapshot)
     surfaced_decisions = [d for d in snapshot.decisions if should_surface_decision(d)[0]]
     issue_report = analyze_goal_issues(snapshot)
+    goal_brief = build_goal_brief(snapshot)
     waiting_on = _waiting_on(snapshot, surfaced_decisions, issue_report.user_questions)
     accepted_count = len([p for p in snapshot.phases if p.status == "accepted"])
     total_count = len(snapshot.phases)
     proof_count = len([p for p in snapshot.phases if p.evidence is not None])
     decision_brief = build_decision_brief(snapshot)
+    brief = _goal_brief_html(goal_brief)
     phase_rows = "\n".join(
         f'<tr><td><span class="pill">{escape(p.phase_id)}</span></td>'
         f"<td><strong>{escape(p.title)}</strong><br><span>{escape(p.goal)}</span></td>"
@@ -123,6 +126,7 @@ def render_dashboard(
     </div>
   </header>
   <nav aria-label="Dashboard views">
+    <a href="#brief">Brief</a>
     <a href="#progress">Progress</a>
     <a href="#issues">Issues</a>
     <a href="#decisions">Decisions</a>
@@ -133,6 +137,10 @@ def render_dashboard(
     <a href="#sources">Sources</a>
     <a href="#technical">Technical Details</a>
   </nav>
+  <section id="brief" class="panel">
+    <h2>Goal Brief</h2>
+    {brief}
+  </section>
   <section id="progress" class="panel">
     <h2>Progress</h2>
     <table><thead><tr><th>ID</th><th>Step</th><th>Status</th><th>Plain goal</th></tr></thead><tbody>{phase_rows}</tbody></table>
@@ -208,6 +216,57 @@ def _issues_html(report) -> str:
         for issue in report.issues[:8]
     )
     return f"<p>{escape(report.summary)}</p><ul>{items}</ul>"
+
+
+def _goal_brief_html(brief) -> str:
+    user_items = _brief_actions_html(
+        brief.user_actions,
+        empty="Nothing important is waiting on you.",
+    )
+    agent_items = _brief_actions_html(
+        brief.agent_actions,
+        empty="No agent-side repair action is currently suggested.",
+    )
+    technical = _bullets_html(brief.technical_details)
+    return (
+        '<div class="decision-brief">'
+        f"<p>{escape(brief.summary)}</p>"
+        f'<p><span class="pill">Waiting on: {escape(brief.waiting_on)}</span> '
+        f'<span class="pill">Progress: {escape(brief.progress)}</span></p>'
+        f"<p><strong>Proof:</strong> {escape(brief.proof)}</p>"
+        "<h3>What Needs Your Answer</h3>"
+        f"{user_items}"
+        "<h3>What the Agent Can Do Next</h3>"
+        f"{agent_items}"
+        "<details><summary>Technical details</summary>"
+        f"{technical}"
+        "</details>"
+        "</div>"
+    )
+
+
+def _brief_actions_html(actions, *, empty: str) -> str:
+    if not actions:
+        return f"<p>{escape(empty)}</p>"
+    items = "".join(
+        "<li>"
+        f"<strong>{escape(action.title)}</strong>"
+        f"<p>{escape(action.plain_summary)}</p>"
+        f"<p><strong>Why it matters:</strong> {escape(action.why_it_matters)}</p>"
+        + (
+            f"<p><strong>Suggested reply or command:</strong> <code>{escape(action.suggested_reply)}</code></p>"
+            if action.suggested_reply
+            else ""
+        )
+        + (
+            f"<p><strong>What happens next:</strong> {escape(action.what_happens_next)}</p>"
+            if action.what_happens_next
+            else ""
+        )
+        + "</li>"
+        for action in actions[:5]
+    )
+    return f"<ul>{items}</ul>"
 
 
 def _status_label(status: str) -> str:

@@ -53,6 +53,23 @@ def test_merge_readiness_accepts_recorded_migration_ordering_proof(tmp_path) -> 
     assert report.passed is True
 
 
+def test_merge_readiness_does_not_treat_known_gap_as_ordering_proof(tmp_path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        evidence=Evidence(
+            changed_files=["db/migrations/0102_add_tags.py"],
+            checks_run=["pytest"],
+            acceptance_met=["Feature works."],
+            known_gaps=["Migration ordering is unclear."],
+            confidence=0.9,
+        ),
+    )
+
+    report = analyze_merge_readiness(snapshot)
+
+    assert any(finding.area == "migration" for finding in report.findings)
+
+
 def test_merge_readiness_flags_parallel_worktree_without_reconciliation(tmp_path) -> None:
     snapshot = _snapshot(
         tmp_path,

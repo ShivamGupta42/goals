@@ -231,7 +231,7 @@ def _migration_changes(snapshot: GoalSnapshot) -> list[tuple[str, str]]:
 
 def _has_migration_order_proof(snapshot: GoalSnapshot) -> bool:
     return any(
-        _contains_any(_evidence_text(phase.evidence), MIGRATION_PROOF_PATTERNS)
+        _contains_any(_evidence_positive_text(phase.evidence), MIGRATION_PROOF_PATTERNS)
         for phase in snapshot.phases
         if phase.evidence is not None
     )
@@ -239,7 +239,7 @@ def _has_migration_order_proof(snapshot: GoalSnapshot) -> bool:
 
 def _has_merge_coordination_proof(snapshot: GoalSnapshot) -> bool:
     return any(
-        _contains_any(_evidence_text(phase.evidence), MERGE_COORDINATION_PATTERNS)
+        _contains_any(_evidence_positive_text(phase.evidence), MERGE_COORDINATION_PATTERNS)
         for phase in snapshot.phases
         if phase.evidence is not None
     )
@@ -309,6 +309,12 @@ def _evidence_text(evidence: Evidence | None) -> str:
             evidence.notes,
         ]
     ).lower()
+
+
+def _evidence_positive_text(evidence: Evidence | None) -> str:
+    if evidence is None:
+        return ""
+    return " ".join([*evidence.checks_run, *evidence.acceptance_met]).lower()
 
 
 def _contains_any(text: str, patterns: list[str]) -> bool:
