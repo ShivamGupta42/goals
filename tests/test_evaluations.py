@@ -15,7 +15,14 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     (tmp_path / "tests").mkdir()
     registry_root = tmp_path / "registries"
     registry_root.mkdir()
-    for name in ("adapters.yml", "agents.yml", "gates.yml", "profiles.yml", "skills.yml"):
+    for name in (
+        "adapters.yml",
+        "agents.yml",
+        "gates.yml",
+        "plugins.yml",
+        "profiles.yml",
+        "skills.yml",
+    ):
         (registry_root / name).write_text("version: 1\nkind: profiles\nprofiles: {}\n")
     monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (True, f"{name} ready"))
 
@@ -24,7 +31,8 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert all(result.current_supported for result in results)
     assert any("architecture_map" in result.supported_capabilities for result in results)
     assert all("architecture_map" not in result.planned_capabilities for result in results)
-    assert any("automatic_skill_selection" in result.planned_capabilities for result in results)
+    assert any("automatic_skill_selection" in result.supported_capabilities for result in results)
+    assert all("automatic_skill_selection" not in result.planned_capabilities for result in results)
     for result in results:
         assert "end_user_decision_experience" in result.supported_capabilities
         assert result.surfaced_decisions

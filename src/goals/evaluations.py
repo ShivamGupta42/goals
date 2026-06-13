@@ -15,6 +15,7 @@ from goals.runtime import default_phases
 CURRENT_CAPABILITIES = {
     "adapter_awareness",
     "architecture_map",
+    "automatic_skill_selection",
     "durable_state",
     "end_user_decision_experience",
     "end_user_visualization",
@@ -197,8 +198,9 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_visualization",
             "review_gate",
             "important_decision_filter",
+            "automatic_skill_selection",
         ],
-        future_capabilities=["automatic_skill_selection", "plugin_capability_discovery"],
+        future_capabilities=["plugin_capability_discovery"],
         decisions=[
             ScenarioDecision(
                 title="Tool permission",
@@ -288,6 +290,8 @@ def _supported_capabilities(
         supported.add("end_user_visualization")
     if "Architecture map:" in prompt and "architecture.md" in prompt:
         supported.add("architecture_map")
+    if "Recommended skills/plugins for this phase:" in prompt:
+        supported.add("automatic_skill_selection")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:
@@ -315,7 +319,14 @@ def _supported_capabilities(
 
 def _has_registries(worktree: Path) -> bool:
     registry_root = worktree / "registries"
-    required = {"adapters.yml", "agents.yml", "gates.yml", "profiles.yml", "skills.yml"}
+    required = {
+        "adapters.yml",
+        "agents.yml",
+        "gates.yml",
+        "plugins.yml",
+        "profiles.yml",
+        "skills.yml",
+    }
     return registry_root.exists() and required.issubset(
         {path.name for path in registry_root.glob("*.yml")}
     )

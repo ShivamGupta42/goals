@@ -36,6 +36,8 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals phase evidence P1 --file" in plan.prompt
     assert plan.architecture_file.endswith("architecture.md")
     assert "Architecture map:" in plan.prompt
+    assert plan.recommended_tools
+    assert "Recommended skills/plugins for this phase:" in plan.prompt
     assert "uv run pytest -q" in plan.recommended_checks
     assert "uv run goals safety-check --mode local ." in plan.recommended_checks
 

@@ -9,6 +9,7 @@ from goals.decisions import (
     render_decision_explanation,
     should_surface_decision,
 )
+from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
 from goals.models import GoalArchitectureMap, GoalSnapshot
 from goals.storage import atomic_write_text
@@ -37,6 +38,7 @@ def render_dashboard(
         for p in snapshot.phases
     )
     decisions = _decision_html(snapshot, surfaced_decisions)
+    recommendations = _recommendations_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
         for p in snapshot.phases
@@ -100,6 +102,7 @@ def render_dashboard(
   <nav aria-label="Dashboard views">
     <a href="#progress">Progress</a>
     <a href="#decisions">Decisions</a>
+    <a href="#ecosystem">Skills & Plugins</a>
     <a href="#architecture">Architecture</a>
     <a href="#evidence">Evidence</a>
     <a href="#technical">Technical Details</a>
@@ -111,6 +114,10 @@ def render_dashboard(
   <section id="decisions" class="panel">
     <h2>Decisions Needed</h2>
     {decisions}
+  </section>
+  <section id="ecosystem" class="panel">
+    <h2>Suggested Skills and Plugins</h2>
+    {recommendations}
   </section>
   <section id="architecture" class="panel">
     <h2>Architecture Map</h2>
@@ -179,6 +186,23 @@ def _decision_html(snapshot: GoalSnapshot, surfaced_decisions: list) -> str:
             "</article>"
         )
     return "\n".join(items)
+
+
+def _recommendations_html(snapshot: GoalSnapshot) -> str:
+    recommendations = recommend_ecosystem_tools(Path(snapshot.topology.worktree_path), snapshot)
+    if not recommendations:
+        return "<p>No skill or plugin recommendations matched this phase.</p>"
+    items = "\n".join(
+        "<li>"
+        f"<strong>{escape(rec.label)}</strong> "
+        f'<span class="pill">{escape(rec.kind)}</span>'
+        f"<p>{escape(rec.reason)}</p>"
+        + (f"<p><code>{escape(rec.command_hint)}</code></p>" if rec.command_hint else "")
+        + ("<p>User approval needed before using this.</p>" if rec.user_approval_required else "")
+        + "</li>"
+        for rec in recommendations
+    )
+    return f'<ul class="node-list">{items}</ul>'
 
 
 def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Path | None) -> str:

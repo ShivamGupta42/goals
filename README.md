@@ -34,6 +34,7 @@ uv run goals status
 uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
+uv run goals ecosystem recommend
 uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
 ```
@@ -68,6 +69,16 @@ Agents can explain only important decisions with active goal history:
 ```bash
 uv run goals decision explain --file decision.json --level basic
 ```
+
+Agents can also ask Goals which skills or plugins fit the current phase:
+
+```bash
+uv run goals ecosystem recommend
+```
+
+Mode A handoffs include these recommendations automatically. Goals does not run
+external tools for the agent; it explains what looks relevant and whether user
+approval is needed.
 
 Agents and technical reviewers can inspect a goal-level architecture map:
 

@@ -96,6 +96,7 @@ permissions. Goals should not replace them. Its unique value is to provide:
 - decision explanations that non-technical users can understand.
 
 Future work should connect scenario results to automatic skill/plugin selection,
-but the first invariant is simpler: Goals must always know what phase it is in,
-what evidence exists, what remains uncertain, and whether a decision really
-needs the user.
+and the first registry-backed version now recommends skills/plugins in Mode A
+handoffs and the dashboard. Goals must still always know what phase it is in,
+what evidence exists, what remains uncertain, whether a decision really needs
+the user, and whether an external tool needs approval before use.

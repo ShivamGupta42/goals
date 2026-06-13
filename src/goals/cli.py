@@ -8,6 +8,7 @@ import typer
 
 from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
+from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.evaluations import evaluate_goal_scenarios
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import Decision, Event, EventType, Evidence, GateVerdict, GoalArchitectureMap
@@ -29,11 +30,13 @@ app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
+ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
 app.add_typer(decision_app, name="decision")
+app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
 app.add_typer(phase_app, name="phase")
 
@@ -228,6 +231,26 @@ def architecture_update(
         architecture_path = emit_architecture(Path.cwd())
         emit_dashboard(Path.cwd())
         typer.echo(f"Updated architecture map: {architecture_path}")
+
+    _handle(run)
+
+
+@ecosystem_app.command("recommend")
+def ecosystem_recommend(
+    limit: int = typer.Option(6, help="Maximum number of recommendations."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Recommend skills/plugins for the active goal phase."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        recommendations = recommend_ecosystem_tools(Path.cwd(), snapshot, limit=limit)
+        if json_output:
+            typer.echo(
+                json.dumps([rec.model_dump(mode="json") for rec in recommendations], indent=2)
+            )
+        else:
+            typer.echo(render_recommendations(recommendations))
 
     _handle(run)
 

@@ -49,6 +49,7 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "&lt;script&gt;" in text
     assert "Progress" in text
     assert "Decisions Needed" in text
+    assert "Suggested Skills and Plugins" in text
     assert "Architecture Map" in text
     assert "No decisions are waiting on you." in text
     assert "Goal ID:" in text

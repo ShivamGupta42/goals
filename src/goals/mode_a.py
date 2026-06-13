@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from goals.adapters import adapter_check
+from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.storage import GoalsError
 
@@ -17,6 +18,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
     worktree = Path(snapshot.topology.worktree_path)
     goal_dir = worktree / ".agent-workflow" / "goals" / snapshot.goal_id
     checks = recommended_checks(worktree)
+    recommended_tools = recommend_ecosystem_tools(worktree, snapshot)
     evidence_file = goal_dir / f"evidence-{phase.phase_id.lower()}.json"
     evidence = Evidence(
         changed_files=[],
@@ -38,6 +40,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         phase_goal=phase.goal,
         acceptance_criteria=phase.acceptance_criteria,
         recommended_checks=checks,
+        recommended_tools=recommended_tools,
         evidence_file=str(evidence_file),
         evidence_template=evidence,
         prompt="",
@@ -73,6 +76,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     adapter_notes = _adapter_notes(plan.adapter, plan.adapter_ready, plan.adapter_detail)
     criteria = _bullets(plan.acceptance_criteria)
     checks = _bullets(plan.recommended_checks)
+    tools = render_recommendations(plan.recommended_tools)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -103,6 +107,9 @@ Required loop:
 
 Recommended checks for this repo:
 {checks}
+
+Recommended skills/plugins for this phase:
+{tools}
 
 Evidence JSON shape:
 ```json

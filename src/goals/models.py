@@ -165,6 +165,19 @@ class DecisionExplanation(BaseModel):
     context: DecisionContext
 
 
+class EcosystemRecommendation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["skill", "plugin", "adapter", "agent", "gate"]
+    name: str
+    label: str
+    reason: str
+    confidence: float = 0.0
+    command_hint: str = ""
+    source_registry: str
+    user_approval_required: bool = False
+
+
 class ArchitectureNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -258,6 +271,7 @@ class ModeAPlan(BaseModel):
     phase_goal: str
     acceptance_criteria: list[str] = Field(default_factory=list)
     recommended_checks: list[str] = Field(default_factory=list)
+    recommended_tools: list[EcosystemRecommendation] = Field(default_factory=list)
     evidence_file: str
     evidence_template: Evidence
     prompt: str

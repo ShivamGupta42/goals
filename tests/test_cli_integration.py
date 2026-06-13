@@ -23,7 +23,14 @@ def init_repo(path: Path) -> None:
     (path / "LICENSE").write_text("MIT\n")
     registry_root = path / "registries"
     registry_root.mkdir()
-    for name in ("adapters.yml", "agents.yml", "gates.yml", "profiles.yml", "skills.yml"):
+    for name in (
+        "adapters.yml",
+        "agents.yml",
+        "gates.yml",
+        "plugins.yml",
+        "profiles.yml",
+        "skills.yml",
+    ):
         (registry_root / name).write_text("version: 1\nkind: profiles\nprofiles: {}\n")
     run(["git", "add", "README.md", "LICENSE", "registries"], path)
     run(["git", "commit", "-m", "init"], path)
@@ -69,6 +76,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "```mermaid" in architecture_path.read_text()
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
+    assert "registries=6" in validate.stdout
+    ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
+    assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
     eval_result = run(
         ["python", "-m", "goals.cli", "eval", "scenarios", "--adapter", "claude"], worktree
     )
