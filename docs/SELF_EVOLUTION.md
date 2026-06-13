@@ -62,6 +62,7 @@ Goals can inspect local skill roots, plugin roots, and adapter executables:
 uv run goals ecosystem recommend
 uv run goals ecosystem discover
 uv run goals ecosystem sync
+uv run goals ecosystem audit
 ```
 
 `recommend` uses portable registries to route the current phase. `discover`
@@ -70,7 +71,9 @@ adapter availability, then suggests registry additions for tools that are
 present locally but missing from the repo. Discovery output is sanitized by
 default; it labels sources without printing local filesystem paths. `sync` turns
 those suggestions into a reviewed registry update plan; it is a dry run unless
-`--apply` is passed.
+`--apply` is passed. `audit` checks whether registry entries are specific enough
+to route, safe enough for handoff prompts, and ready for validation-gated
+self-evolution.
 
 ## Memory Loop
 

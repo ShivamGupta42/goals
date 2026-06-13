@@ -97,6 +97,8 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "registries=6" in validate.stdout
     ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
     assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
+    audit = run(["python", "-m", "goals.cli", "ecosystem", "audit"], worktree)
+    assert "Ecosystem Quality Audit" in audit.stdout
     skill_root = tmp_path / "skills"
     local_skill = skill_root / "migration-helper"
     local_skill.mkdir(parents=True)
