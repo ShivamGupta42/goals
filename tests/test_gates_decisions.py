@@ -91,6 +91,27 @@ def test_phase_review_allows_waived_checkpoint_with_strong_evidence() -> None:
     assert result.verdict == GateVerdict.PASS
 
 
+def test_phase_review_allows_passed_checkpoint_even_if_it_was_user_validated() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        checkpoints=[
+            PhaseCheckpoint(
+                checkpoint_id="CP-user-validated",
+                title="User validated",
+                status=CheckpointStatus.PASSED,
+                needs_user=True,
+            )
+        ],
+    )
+
+    result = review_phase(phase)
+
+    assert result.verdict == GateVerdict.PASS
+
+
 def test_decision_explainer_preserves_risk_and_reversibility() -> None:
     decision = explain_decision(
         title="Choose database",

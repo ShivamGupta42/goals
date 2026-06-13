@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from goals.checkpoints import phase_checkpoint_blockers
+from goals.checkpoints import checkpoint_waits_on_user, phase_checkpoint_blockers
 from goals.models import Evidence, GateResult, GateVerdict, Phase
 
 
@@ -8,7 +8,7 @@ def review_phase(phase: Phase, *, attempt: int = 1, max_attempts: int = 3) -> Ga
     capped_attempt = max(1, min(attempt, max_attempts))
     checkpoint_issues = phase_checkpoint_blockers(phase)
     if checkpoint_issues:
-        needs_user = any("needs the user" in issue for issue in checkpoint_issues)
+        needs_user = any(checkpoint_waits_on_user(checkpoint) for checkpoint in phase.checkpoints)
         return GateResult(
             gate_id="phase-review",
             verdict=GateVerdict.NEEDS_HUMAN

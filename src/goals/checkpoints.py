@@ -15,7 +15,15 @@ COMPLETE_CHECKPOINT_STATUSES = {CheckpointStatus.PASSED, CheckpointStatus.WAIVED
 def checkpoint_blocks_phase(checkpoint: PhaseCheckpoint) -> bool:
     if not checkpoint.required:
         return False
-    return checkpoint.needs_user or checkpoint.status not in COMPLETE_CHECKPOINT_STATUSES
+    if checkpoint.status in COMPLETE_CHECKPOINT_STATUSES:
+        return False
+    return True
+
+
+def checkpoint_waits_on_user(checkpoint: PhaseCheckpoint) -> bool:
+    if not checkpoint_blocks_phase(checkpoint):
+        return False
+    return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
 
 
 def phase_checkpoint_blockers(phase: Phase) -> list[str]:
@@ -24,7 +32,7 @@ def phase_checkpoint_blockers(phase: Phase) -> list[str]:
         if not checkpoint_blocks_phase(checkpoint):
             continue
         label = checkpoint.title or checkpoint.checkpoint_id
-        if checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER:
+        if checkpoint_waits_on_user(checkpoint):
             blockers.append(f"Required checkpoint needs the user: {label}.")
         elif checkpoint.status == CheckpointStatus.BLOCKED:
             blockers.append(f"Required checkpoint is blocked: {label}.")
@@ -118,8 +126,7 @@ def _active_checkpoint(phase: Phase) -> PhaseCheckpoint | None:
 
 def _waiting_on(phase: Phase, blockers: list[str]) -> str:
     if any(
-        checkpoint.required
-        and (checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER)
+        checkpoint_waits_on_user(checkpoint)
         for checkpoint in phase.checkpoints
     ):
         return "you"
