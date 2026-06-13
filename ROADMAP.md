@@ -98,10 +98,11 @@ Likely views:
 
 **Status:** Partially implemented. Goals can recommend skills and plugins from
 portable YAML registries, includes those recommendations in Mode A handoffs and
-the dashboard, can discover local skills/adapters with `goals ecosystem
+the dashboard, can discover local skills/plugins/adapters with `goals ecosystem
 discover`, and can plan/apply reviewed registry additions with `goals ecosystem
-sync`. It does not yet inspect every plugin bundle's native metadata
-automatically.
+sync`. Plugin discovery reads common bundle metadata such as
+`.codex-plugin/plugin.json`, `manifest.json`, and `package.json`, then proposes
+conservative portable entries that require review.
 
 ### Direction
 
@@ -111,7 +112,8 @@ automatically.
 - Clearly label recommendations as suggestions, not automatic external actions.
 - Mark tools that need user approval because they may change remote state, cost
   money, or touch private data.
-- Later, add local discovery adapters for Claude/Codex skills and plugins.
+- Expand local discovery adapters as Claude/Codex and local AI toolchains add
+  new plugin metadata formats.
 - Suggest portable registry additions for local tools that are missing from the
   repo registries.
 - Keep registry sync as a dry run by default, with explicit `--apply` after

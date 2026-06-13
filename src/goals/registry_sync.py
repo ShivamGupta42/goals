@@ -17,11 +17,20 @@ def plan_registry_sync(
     worktree: Path,
     *,
     skill_roots: list[Path] | None = None,
+    plugin_roots: list[Path] | None = None,
     include_adapters: bool = True,
     include_skills: bool = True,
+    include_plugins: bool = True,
     max_skills: int = 200,
+    max_plugins: int = 100,
 ) -> RegistrySyncPlan:
-    report = discover_local_ecosystem(worktree, skill_roots=skill_roots, max_skills=max_skills)
+    report = discover_local_ecosystem(
+        worktree,
+        skill_roots=skill_roots,
+        plugin_roots=plugin_roots,
+        max_skills=max_skills,
+        max_plugins=max_plugins,
+    )
     changes = []
     for tool in report.missing_from_registry:
         if tool.kind == "adapter" and not tool.available:
@@ -29,6 +38,8 @@ def plan_registry_sync(
         if tool.kind == "adapter" and not include_adapters:
             continue
         if tool.kind == "skill" and not include_skills:
+            continue
+        if tool.kind == "plugin" and not include_plugins:
             continue
         if tool.kind not in REGISTRY_KIND:
             continue

@@ -100,6 +100,19 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
         "---\nname: Migration Helper\n"
         "description: Helps coordinate database migrations safely.\n---\n"
     )
+    plugin_root = tmp_path / "plugins"
+    local_plugin = plugin_root / "customer-research" / ".codex-plugin"
+    local_plugin.mkdir(parents=True)
+    (local_plugin / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "@acme/customer-research",
+                "displayName": "Customer Research",
+                "description": "Finds and summarizes customer research sources.",
+                "keywords": ["research", "sources"],
+            }
+        )
+    )
     discovered = run(
         [
             "python",
@@ -109,10 +122,13 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
             "discover",
             "--skill-root",
             str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
         ],
         worktree,
     )
     assert "migration-helper" in discovered.stdout
+    assert "customer-research" in discovered.stdout
     assert str(tmp_path) not in discovered.stdout
     sync = run(
         [
@@ -123,12 +139,16 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
             "sync",
             "--skill-root",
             str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
         ],
         worktree,
     )
     assert "dry run" in sync.stdout
     assert "migration-helper" in sync.stdout
+    assert "customer-research" in sync.stdout
     assert "migration-helper" not in (worktree / "registries" / "skills.yml").read_text()
+    assert "customer-research" not in (worktree / "registries" / "plugins.yml").read_text()
     sync_apply = run(
         [
             "python",
@@ -138,12 +158,15 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
             "sync",
             "--skill-root",
             str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
             "--apply",
         ],
         worktree,
     )
     assert "Applied" in sync_apply.stdout
     assert "migration-helper" in (worktree / "registries" / "skills.yml").read_text()
+    assert "customer-research" in (worktree / "registries" / "plugins.yml").read_text()
     source = run(
         [
             "python",

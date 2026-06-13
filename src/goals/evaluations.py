@@ -24,6 +24,7 @@ CURRENT_CAPABILITIES = {
     "local_safety_check",
     "local_ecosystem_discovery",
     "mode_a_handoff",
+    "plugin_capability_discovery",
     "phase_plan",
     "project_history_decision_context",
     "registry_awareness",
@@ -206,9 +207,10 @@ DEFAULT_GOAL_SCENARIOS = [
             "important_decision_filter",
             "automatic_skill_selection",
             "local_ecosystem_discovery",
+            "plugin_capability_discovery",
             "registry_sync_workflow",
         ],
-        future_capabilities=["plugin_capability_discovery"],
+        future_capabilities=[],
         decisions=[
             ScenarioDecision(
                 title="Tool permission",
@@ -302,6 +304,8 @@ def _supported_capabilities(
         supported.add("automatic_skill_selection")
     if "goals ecosystem discover" in prompt:
         supported.add("local_ecosystem_discovery")
+    if "skills/plugins/adapters" in prompt and "goals ecosystem discover" in prompt:
+        supported.add("plugin_capability_discovery")
     if "goals ecosystem sync" in prompt:
         supported.add("registry_sync_workflow")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:

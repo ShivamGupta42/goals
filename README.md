@@ -96,7 +96,7 @@ uv run goals ecosystem sync
 
 Mode A handoffs include these recommendations automatically. Goals does not run
 external tools for the agent; it explains what looks relevant and whether user
-approval is needed. Discovery inspects local skills/adapters and suggests
+approval is needed. Discovery inspects local skills/plugins/adapters and suggests
 portable registry additions without printing local filesystem paths by default.
 Sync is a dry run unless `--apply` is passed.
 

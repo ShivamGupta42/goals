@@ -288,12 +288,24 @@ def ecosystem_discover(
         "--skill-root",
         help="Skill root to inspect. Repeat for multiple roots.",
     ),
+    plugin_root: Optional[list[Path]] = typer.Option(
+        None,
+        "--plugin-root",
+        help="Plugin root to inspect. Repeat for multiple roots.",
+    ),
     max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
+    max_plugins: int = typer.Option(100, help="Maximum number of plugins to inspect."),
 ) -> None:
-    """Discover local skills/adapters and suggest portable registry additions."""
+    """Discover local skills/plugins/adapters and suggest portable registry additions."""
 
     def run():
-        report = discover_local_ecosystem(Path.cwd(), skill_roots=skill_root, max_skills=max_skills)
+        report = discover_local_ecosystem(
+            Path.cwd(),
+            skill_roots=skill_root,
+            plugin_roots=plugin_root,
+            max_skills=max_skills,
+            max_plugins=max_plugins,
+        )
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -311,12 +323,24 @@ def ecosystem_sync(
         "--skill-root",
         help="Skill root to inspect. Repeat for multiple roots.",
     ),
+    plugin_root: Optional[list[Path]] = typer.Option(
+        None,
+        "--plugin-root",
+        help="Plugin root to inspect. Repeat for multiple roots.",
+    ),
     max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
+    max_plugins: int = typer.Option(100, help="Maximum number of plugins to inspect."),
 ) -> None:
     """Plan or apply portable registry additions from local discovery."""
 
     def run():
-        plan = plan_registry_sync(Path.cwd(), skill_roots=skill_root, max_skills=max_skills)
+        plan = plan_registry_sync(
+            Path.cwd(),
+            skill_roots=skill_root,
+            plugin_roots=plugin_root,
+            max_skills=max_skills,
+            max_plugins=max_plugins,
+        )
         result = apply_registry_sync(Path.cwd(), plan) if apply else plan
         if json_output:
             typer.echo(result.model_dump_json(indent=2))

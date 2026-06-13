@@ -125,6 +125,42 @@ description: Helps coordinate database migrations safely.
     assert str(tmp_path) not in rendered
 
 
+def test_discovery_finds_local_plugins_without_leaking_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    (registry_root / "plugins.yml").write_text("version: 1\nkind: plugins\nplugins: {}\n")
+    plugin_root = tmp_path / "local-plugins"
+    plugin = plugin_root / "customer-research" / ".codex-plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.json").write_text(
+        """
+{
+  "name": "@acme/customer-research",
+  "displayName": "Customer Research",
+  "description": "Finds and summarizes customer research sources.",
+  "keywords": ["research", "sources"]
+}
+"""
+    )
+    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
+
+    report = discover_local_ecosystem(tmp_path, plugin_roots=[plugin_root])
+    rendered = render_discovery_report(report)
+
+    discovered = {tool.name: tool for tool in report.tools}
+    assert discovered["customer-research"].kind == "plugin"
+    assert discovered["customer-research"].registered is False
+    entry = discovered["customer-research"].suggested_registry_entry["customer-research"]
+    assert entry["label"] == "Customer Research"
+    assert entry["requires_user_approval"] is True
+    assert "research" in entry["use_when"]
+    assert "customer-research" in rendered
+    assert str(tmp_path) not in rendered
+    assert str(tmp_path) not in report.model_dump_json()
+
+
 def test_discovery_json_is_sanitized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     skill_root = tmp_path / "skills"
     skill = skill_root / "review"
@@ -144,6 +180,7 @@ def test_registry_sync_dry_run_and_apply(monkeypatch: pytest.MonkeyPatch, tmp_pa
     registry_root = tmp_path / "registries"
     registry_root.mkdir()
     (registry_root / "skills.yml").write_text("version: 1\nkind: skills\nskills: {}\n")
+    (registry_root / "plugins.yml").write_text("version: 1\nkind: plugins\nplugins: {}\n")
     (registry_root / "adapters.yml").write_text("version: 1\nkind: adapters\nadapters: {}\n")
     skill_root = tmp_path / "skills"
     skill = skill_root / "migration-helper"
@@ -152,18 +189,36 @@ def test_registry_sync_dry_run_and_apply(monkeypatch: pytest.MonkeyPatch, tmp_pa
         "---\nname: Migration Helper\n"
         "description: Helps coordinate database migrations safely.\n---\n"
     )
+    plugin_root = tmp_path / "plugins"
+    plugin = plugin_root / "customer-research"
+    plugin.mkdir(parents=True)
+    (plugin / "package.json").write_text(
+        """
+{
+  "name": "@acme/customer-research",
+  "description": "Finds customer research sources."
+}
+"""
+    )
     monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
 
-    plan = plan_registry_sync(tmp_path, skill_roots=[skill_root])
+    plan = plan_registry_sync(tmp_path, skill_roots=[skill_root], plugin_roots=[plugin_root])
 
     assert plan.dry_run is True
     assert any(change.name == "migration-helper" for change in plan.changes)
+    assert any(change.name == "customer-research" for change in plan.changes)
     assert "migration-helper" not in (registry_root / "skills.yml").read_text()
+    assert "customer-research" not in (registry_root / "plugins.yml").read_text()
 
     applied = apply_registry_sync(tmp_path, plan)
 
     assert applied.dry_run is False
-    text = (registry_root / "skills.yml").read_text()
-    assert "migration-helper" in text
-    assert str(tmp_path) not in text
+    skills_text = (registry_root / "skills.yml").read_text()
+    plugins_text = (registry_root / "plugins.yml").read_text()
+    assert "migration-helper" in skills_text
+    assert "customer-research" in plugins_text
+    assert "requires_user_approval: true" in plugins_text
+    assert str(tmp_path) not in skills_text
+    assert str(tmp_path) not in plugins_text
     validate_registry_file(registry_root / "skills.yml")
+    validate_registry_file(registry_root / "plugins.yml")
