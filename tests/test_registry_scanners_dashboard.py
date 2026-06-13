@@ -81,6 +81,8 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Code-Derived Check" in text
     assert "Review focus" in text
     assert "Evidence gaps and open questions" in text
+    assert "Creative Variants" in text
+    assert "No creative variants recorded yet." in text
     assert "Sources" in text
     assert "Citation Quality" in text
     assert "Freshness" in text

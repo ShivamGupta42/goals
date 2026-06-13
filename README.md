@@ -51,6 +51,12 @@ uv run goals source freshness
 uv run goals source list
 uv run goals asset provenance
 uv run goals asset list
+uv run goals creative variant add "Calm launch" \
+  --summary "Plain, trust-building direction." \
+  --best-for "non-technical buyers" \
+  --score "brand_fit=5:Matches the product tone"
+uv run goals creative compare
+uv run goals creative variants
 uv run goals memory suggest
 uv run goals memory sync ../similar-goals-project
 uv run goals eval scenarios --adapter claude
@@ -180,6 +186,26 @@ used safely: a stable locator, rights or license details when needed, source
 links for derived assets, generated-asset prompts, and no local machine paths.
 Most gaps stay as agent repair work. Restricted or blocked rights become simple
 user-facing questions because they can change whether the asset may be used.
+
+Agents can compare creative directions without turning every taste choice into
+a blocker:
+
+```bash
+uv run goals creative variant add "Calm launch" \
+  --summary "Plain, trust-building direction." \
+  --best-for "non-technical buyers" \
+  --asset-id AST-example \
+  --score "brand_fit=5:Matches the product tone" \
+  --score "clarity=5:Easy to understand" \
+  --status selected
+uv run goals creative compare
+uv run goals creative variants
+```
+
+`creative compare` ranks recorded directions, catches missing comparison proof,
+checks linked asset rights, and recommends the best current direction. Routine
+variant cleanup stays with the agent. Brand direction, publishing approval, and
+restricted or blocked asset rights stay as simple user-facing decisions.
 
 Agents can also ask Goals which skills or plugins fit the current phase:
 

@@ -47,6 +47,7 @@ class EventType(StrEnum):
     DECISION_REQUESTED = "decision_requested"
     ARCHITECTURE_UPDATED = "architecture_updated"
     ASSET_RECORDED = "asset_recorded"
+    CREATIVE_VARIANT_RECORDED = "creative_variant_recorded"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     SCAN_COMPLETED = "scan_completed"
@@ -546,6 +547,57 @@ class AssetProvenanceReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class CreativeVariantScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    criterion: str
+    score: int = Field(ge=1, le=5)
+    rationale: str = ""
+
+
+class CreativeVariant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    variant_id: str = Field(default_factory=lambda: f"VAR-{uuid4().hex[:8]}")
+    title: str
+    summary: str = ""
+    best_for: str = ""
+    asset_ids: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+    scores: list[CreativeVariantScore] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    tradeoffs: list[str] = Field(default_factory=list)
+    status: Literal["candidate", "shortlisted", "selected", "rejected"] = "candidate"
+    created_at: str = Field(default_factory=utc_now)
+
+
+class CreativeVariantFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    variant_id: str
+    title: str
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CreativeVariantComparisonReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    variants_compared: int = 0
+    recommended_variant_id: str | None = None
+    findings: list[CreativeVariantFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -982,6 +1034,7 @@ class GoalIssue(BaseModel):
         "asset",
         "boundary",
         "citation",
+        "creative",
         "decision",
         "evidence",
         "gate",
@@ -1053,6 +1106,7 @@ class GoalSnapshot(BaseModel):
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
     assets: list[AssetRecord] = Field(default_factory=list)
+    creative_variants: list[CreativeVariant] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

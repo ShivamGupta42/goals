@@ -22,6 +22,11 @@ from goals.assets import (
 from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.citations import analyze_citation_quality, render_citation_quality_report
+from goals.creative import (
+    analyze_creative_variants,
+    render_creative_comparison_report,
+    render_creative_summary,
+)
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -66,6 +71,8 @@ from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     AgentRecommendationSet,
     AssetRecord,
+    CreativeVariant,
+    CreativeVariantScore,
     Decision,
     EcosystemRecommendation,
     Event,
@@ -106,6 +113,8 @@ adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 asset_app = typer.Typer(help="Record and inspect asset provenance.")
 boundary_app = typer.Typer(help="Explain professional boundaries for high-stakes goals.")
+creative_app = typer.Typer(help="Record and compare creative variants.")
+creative_variant_app = typer.Typer(help="Record and inspect creative directions.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
@@ -118,6 +127,7 @@ app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
 app.add_typer(asset_app, name="asset")
 app.add_typer(boundary_app, name="boundary")
+app.add_typer(creative_app, name="creative")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
@@ -126,6 +136,7 @@ app.add_typer(permission_app, name="permission")
 app.add_typer(phase_app, name="phase")
 app.add_typer(roadmap_app, name="roadmap")
 app.add_typer(source_app, name="source")
+creative_app.add_typer(creative_variant_app, name="variant")
 
 
 def _handle(fn):
@@ -936,6 +947,133 @@ def asset_provenance(
     _handle(run)
 
 
+@creative_variant_app.command("add")
+def creative_variant_add(
+    title: str,
+    summary: str = typer.Option("", help="Plain-language variant summary."),
+    best_for: str = typer.Option("", help="When this variant is the right choice."),
+    asset_id: Optional[list[str]] = typer.Option(
+        None,
+        "--asset-id",
+        help="Recorded asset id used by this variant. Repeat for multiple assets.",
+    ),
+    source_id: Optional[list[str]] = typer.Option(
+        None,
+        "--source-id",
+        help="Source id supporting this variant. Repeat for multiple sources.",
+    ),
+    score: Optional[list[str]] = typer.Option(
+        None,
+        "--score",
+        help='Comparison score as "criterion=1-5:optional rationale". Repeat as needed.',
+    ),
+    strength: Optional[list[str]] = typer.Option(
+        None,
+        "--strength",
+        help="Variant strength. Repeat for multiple strengths.",
+    ),
+    risk: Optional[list[str]] = typer.Option(
+        None,
+        "--risk",
+        help="Variant risk or concern. Repeat for multiple risks.",
+    ),
+    tradeoff: Optional[list[str]] = typer.Option(
+        None,
+        "--tradeoff",
+        help="Variant tradeoff. Repeat for multiple tradeoffs.",
+    ),
+    status: str = typer.Option(
+        "candidate",
+        help="candidate, shortlisted, selected, or rejected.",
+    ),
+) -> None:
+    """Record a creative direction, draft, concept, or variant."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        variant = CreativeVariant(
+            title=title,
+            summary=summary,
+            best_for=best_for,
+            asset_ids=asset_id or [],
+            source_ids=source_id or [],
+            scores=[_parse_creative_score(item) for item in score or []],
+            strengths=strength or [],
+            risks=risk or [],
+            tradeoffs=tradeoff or [],
+            status=_validate_choice(
+                status,
+                {"candidate", "shortlisted", "selected", "rejected"},
+                "status",
+            ),  # type: ignore[arg-type]
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.CREATIVE_VARIANT_RECORDED,
+                payload={"variant": variant.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded creative variant: {variant.variant_id}")
+
+    _handle(run)
+
+
+@creative_variant_app.command("list")
+def creative_variant_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded creative variants for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    [variant.model_dump(mode="json") for variant in snapshot.creative_variants],
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo("Creative variants:")
+            typer.echo(render_creative_summary(snapshot))
+
+    _handle(run)
+
+
+@creative_app.command("variants")
+def creative_variants(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded creative variants for the active goal."""
+    creative_variant_list(json_output=json_output)
+
+
+@creative_app.command("compare")
+def creative_compare(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when creative comparison issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Compare creative variants and recommend the best current direction."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_creative_variants(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_creative_comparison_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
 @source_app.command("add")
 def source_add(
     title: str,
@@ -1326,6 +1464,27 @@ def _validate_choice(value: str, choices: set[str], label: str) -> str:
     if value not in choices:
         raise GoalsError(f"{label} must be one of: {', '.join(sorted(choices))}")
     return value
+
+
+def _parse_creative_score(raw: str) -> CreativeVariantScore:
+    if "=" not in raw:
+        raise GoalsError('score must use "criterion=1-5:optional rationale" format.')
+    criterion, rest = raw.split("=", 1)
+    criterion = criterion.strip()
+    if not criterion:
+        raise GoalsError("score criterion cannot be empty.")
+    score_text, _, rationale = rest.partition(":")
+    try:
+        score = int(score_text.strip())
+    except ValueError as exc:
+        raise GoalsError("score value must be an integer from 1 to 5.") from exc
+    if score < 1 or score > 5:
+        raise GoalsError("score value must be an integer from 1 to 5.")
+    return CreativeVariantScore(
+        criterion=criterion,
+        score=score,
+        rationale=rationale.strip(),
+    )
 
 
 @phase_app.command("start")

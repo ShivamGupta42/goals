@@ -191,6 +191,30 @@ architecture. Non-technical users see whether an asset is safe to rely on;
 technical users can still inspect the event log and source ids when they need
 the deeper trail.
 
+## Creative Variant Comparison
+
+Creative work should allow exploration without making every preference a user
+interruption. Goals now lets agents record creative directions, score them
+against simple criteria, and compare them before asking the user:
+
+```bash
+uv run goals creative variant add "Calm launch" \
+  --summary "Plain, trust-building direction." \
+  --best-for "non-technical buyers" \
+  --asset-id AST-example \
+  --score "brand_fit=5:Matches the product tone" \
+  --score "clarity=5:Easy to understand"
+uv run goals creative compare
+uv run goals creative variants
+```
+
+Mode A prompts include a creative variant block. The check keeps missing
+summaries, missing comparison scores, stale asset ids, and ordinary shortlist
+work with the agent. It surfaces only decisions that materially change the
+outcome: brand direction, publishing approval, or restricted/blocked asset
+rights. The dashboard shows a Creative Variants view so non-technical users can
+see the recommended direction and why it is safe enough to continue.
+
 ## End-User Experience
 
 The decision layer and visualization layer should be judged from the user's

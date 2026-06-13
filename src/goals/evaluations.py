@@ -56,6 +56,7 @@ CURRENT_CAPABILITIES = {
     "automatic_skill_selection",
     "citation_quality_review",
     "code_derived_architecture_checks",
+    "creative_variant_comparison",
     "durable_state",
     "end_user_decision_experience",
     "end_user_visualization",
@@ -383,11 +384,12 @@ DEFAULT_GOAL_USE_CASES = [
             *CORE_GOAL_CAPABILITIES,
             "automatic_skill_selection",
             "asset_provenance_checks",
+            "creative_variant_comparison",
             "plugin_capability_discovery",
             "permission_policy_registry",
             "registry_awareness",
         ],
-        planned_capabilities=["creative_variant_comparison"],
+        planned_capabilities=[],
         important_user_decisions=[
             "Brand direction",
             "External generation or publishing permission",
@@ -933,6 +935,7 @@ def _human_capability(capability: str) -> str:
         "automatic_gap_to_roadmap_patch": "automatic gap-to-roadmap patches",
         "citation_quality_review": "citation quality review",
         "code_derived_architecture_checks": "code-derived architecture checks",
+        "creative_variant_comparison": "creative variant comparison",
         "cross_agent_recommendation_merge": "cross-agent recommendation merge",
         "cross_project_memory_sync": "cross-project memory sync",
         "handoff_owner_registry": "handoff owner registry",
@@ -1677,6 +1680,10 @@ def _supported_capabilities(
         supported.add("professional_boundary_templates")
     if "goals asset provenance" in prompt:
         supported.add("asset_provenance_checks")
+    if "goals creative compare" in prompt or any(
+        "goals creative compare" in check for check in recommended_checks
+    ):
+        supported.add("creative_variant_comparison")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:

@@ -7,6 +7,7 @@ from typing import Literal
 from goals.adapters import adapter_check
 from goals.assets import render_asset_summary
 from goals.citations import render_citation_quality_summary
+from goals.creative import render_creative_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
@@ -81,6 +82,7 @@ def recommended_checks(worktree: Path) -> list[str]:
             "uv run goals architecture check --strict",
             "uv run goals boundary explain --domain auto",
             "uv run goals asset provenance --strict",
+            "uv run goals creative compare --strict",
             "uv run goals merge-check",
             "uv run goals source citations --strict",
             "uv run goals source freshness --strict",
@@ -101,6 +103,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     claims = render_claim_summary(snapshot)
     citations = render_citation_quality_summary(snapshot)
     assets = render_asset_summary(snapshot)
+    creative = render_creative_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -159,6 +162,11 @@ Asset provenance:
 {assets}
 - If this phase creates, imports, selects, edits, or publishes images, videos, audio, documents, designs, datasets, or other assets, record them with `goals asset add "Asset title" --locator "path-or-url" --asset-type image --origin generated --usage-rights allowed`.
 - Run `goals asset provenance --strict` before review; fix missing locators, licenses, source references, generation prompts, local paths, or unclear rights before asking the user unless rights are blocked or restricted.
+
+Creative variants:
+{creative}
+- If this phase explores creative directions, drafts, concepts, campaign options, or design alternatives, record each meaningful option with `goals creative variant add "Variant title" --summary "plain description" --best-for "when to use it" --score "brand_fit=4:why"`.
+- Run `goals creative compare --strict` before asking the user. The agent should shortlist, reject, or recommend variants itself when the choice is reversible; ask the user only for brand direction, publishing approval, or blocked/restricted asset rights.
 
 Self-evolution memory:
 {memory}

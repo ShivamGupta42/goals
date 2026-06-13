@@ -15,6 +15,7 @@ _KNOWN_CAPABILITIES = {
     "asset provenance checks": "asset_provenance_checks",
     "citation quality review": "citation_quality_review",
     "code-derived architecture checks": "code_derived_architecture_checks",
+    "creative variant comparison": "creative_variant_comparison",
     "cross-agent recommendation merge": "cross_agent_recommendation_merge",
     "cross-project memory sync": "cross_project_memory_sync",
     "handoff owner registry": "handoff_owner_registry",
