@@ -10,6 +10,7 @@ from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
 from goals.evaluations import (
     dogfood_goal_scenarios,
     evaluate_goal_scenarios,
@@ -381,6 +382,24 @@ def ecosystem_sync(
             typer.echo(render_registry_sync_plan(result))
             if not apply and result.changes:
                 typer.echo("Run again with --apply to update registries after review.")
+
+    _handle(run)
+
+
+@ecosystem_app.command("audit")
+def ecosystem_audit(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Audit skill/plugin registries for routing quality, safety, and validation readiness."""
+
+    def run():
+        report = audit_ecosystem_quality(Path.cwd())
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_ecosystem_quality_report(report))
+        if not report.passed:
+            raise typer.Exit(1)
 
     _handle(run)
 

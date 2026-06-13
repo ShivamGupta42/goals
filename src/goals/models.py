@@ -203,6 +203,30 @@ class EcosystemDiscoveryReport(BaseModel):
     summary: str
 
 
+class EcosystemQualityFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    kind: Literal["skill", "plugin", "registry"]
+    name: str
+    area: Literal["schema", "routing", "safety", "validation", "optimization"]
+    summary: str
+    recommendation: str
+    evidence: list[str] = Field(default_factory=list)
+
+
+class EcosystemQualityReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    passed: bool
+    summary: str
+    registry_root: str
+    registry_count: int = 0
+    entry_count: int = 0
+    findings: list[EcosystemQualityFinding] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class RegistrySyncChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

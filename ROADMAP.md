@@ -103,7 +103,9 @@ Likely views:
 portable YAML registries, includes those recommendations in Mode A handoffs and
 the dashboard, can discover local skills/plugins/adapters with `goals ecosystem
 discover`, and can plan/apply reviewed registry additions with `goals ecosystem
-sync`. Plugin discovery reads common bundle metadata such as
+sync`. It can also audit registries with `goals ecosystem audit` to catch vague
+routing, weak descriptions, unsafe approval policy, non-portable command hints,
+and missing validation hints. Plugin discovery reads common bundle metadata such as
 `.codex-plugin/plugin.json`, `manifest.json`, and `package.json`, then proposes
 conservative portable entries that require review.
 
@@ -121,6 +123,9 @@ conservative portable entries that require review.
   repo registries.
 - Keep registry sync as a dry run by default, with explicit `--apply` after
   review.
+- Use SkillOpt-style validation gates for deeper future skill improvement:
+  collect scored rollouts, propose bounded edits, and accept only improvements
+  that pass held-out validation.
 
 ### Open Questions
 

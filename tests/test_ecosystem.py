@@ -4,9 +4,10 @@ import pytest
 
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
-from goals.registry_sync import apply_registry_sync, plan_registry_sync
+from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
 from goals.models import GoalSnapshot, WorktreeLease
 from goals.registry import validate_registry_file
+from goals.registry_sync import apply_registry_sync, plan_registry_sync
 from goals.runtime import default_phases
 from goals.storage import GoalsError
 
@@ -84,6 +85,61 @@ skills:
 
     with pytest.raises(GoalsError):
         validate_registry_file(path)
+
+
+def test_ecosystem_quality_audit_passes_builtin_registries(tmp_path: Path) -> None:
+    report = audit_ecosystem_quality(tmp_path)
+    rendered = render_ecosystem_quality_report(report)
+
+    assert report.passed is True
+    assert report.entry_count > 0
+    assert not [finding for finding in report.findings if finding.severity in {"p0", "p1"}]
+    assert "Ecosystem Quality Audit" in rendered
+    assert "SkillOpt-style loop" in rendered
+
+
+def test_ecosystem_quality_audit_flags_unsafe_and_vague_entries(tmp_path: Path) -> None:
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    local_path_hint = "/" + "Users" + "/example/private/run-cleanup"
+    (registry_root / "skills.yml").write_text(
+        """
+version: 1
+kind: skills
+skills:
+  vague-helper:
+    label: Helper
+    description: Helps.
+    use_when: [anything, everything]
+    risk: low
+    requires_user_approval: false
+"""
+    )
+    (registry_root / "plugins.yml").write_text(
+        f"""
+version: 1
+kind: plugins
+plugins:
+  dangerous-plugin:
+    label: Dangerous Plugin
+    description: Deletes remote resources for cleanup goals.
+    use_when: [cleanup, deletion, remote resources]
+    phases: [P3]
+    command_hint: {local_path_hint}
+    risk: high
+    requires_user_approval: false
+"""
+    )
+
+    report = audit_ecosystem_quality(tmp_path)
+    rendered = render_ecosystem_quality_report(report)
+
+    assert report.passed is False
+    assert any(finding.area == "routing" for finding in report.findings)
+    assert any(finding.area == "safety" and finding.severity == "p0" for finding in report.findings)
+    assert "High-risk plugins must require user approval" in rendered
+    assert "/" + "Users" + "/example" not in rendered
+    assert "command_hint contains local path" in rendered
 
 
 def test_discovery_finds_local_skills_without_leaking_paths(
