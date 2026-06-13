@@ -6,6 +6,8 @@ from pathlib import Path
 from goals.models import (
     ArchitectureBrief,
     ArchitectureBriefItem,
+    ArchitectureCheckFinding,
+    ArchitectureCheckReport,
     ArchitectureEdge,
     ArchitectureNode,
     GoalArchitectureMap,
@@ -14,6 +16,44 @@ from goals.models import (
     utc_now,
 )
 from goals.storage import atomic_write_text
+
+CODE_EXTENSIONS = {
+    ".go",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".mjs",
+    ".py",
+    ".rb",
+    ".rs",
+    ".swift",
+    ".ts",
+    ".tsx",
+}
+PATH_EVIDENCE_EXTENSIONS = CODE_EXTENSIONS | {
+    ".cfg",
+    ".css",
+    ".html",
+    ".json",
+    ".md",
+    ".toml",
+    ".yaml",
+    ".yml",
+}
+SKIP_DIRS = {
+    ".agent-workflow",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "htmlcov",
+    "node_modules",
+}
 
 
 def architecture_for_snapshot(snapshot: GoalSnapshot) -> GoalArchitectureMap:
@@ -123,6 +163,123 @@ def build_architecture_brief(architecture: GoalArchitectureMap) -> ArchitectureB
         evidence_gaps=evidence_gaps,
         open_questions=list(architecture.questions),
     )
+
+
+def analyze_code_architecture(
+    snapshot: GoalSnapshot,
+    worktree: Path | None = None,
+) -> ArchitectureCheckReport:
+    """Compare architecture map claims with code files and recorded file evidence."""
+
+    worktree = worktree or Path(snapshot.topology.worktree_path)
+    architecture = architecture_for_snapshot(snapshot)
+    explicit_map = snapshot.architecture is not None
+    architecture_text = _architecture_search_text(architecture)
+    changed_files = _changed_files(snapshot)
+    source_paths = _source_code_paths(worktree) if explicit_map else []
+    findings: list[ArchitectureCheckFinding] = []
+
+    for path_text in changed_files:
+        path = worktree / path_text
+        if (
+            _is_code_path(path_text)
+            and path.exists()
+            and path_text.lower() not in architecture_text
+        ):
+            findings.append(
+                ArchitectureCheckFinding(
+                    severity="p1",
+                    area="coverage",
+                    summary=f"Changed code file is missing from the architecture map: {path_text}",
+                    detail="The goal recorded this changed file as evidence, but no architecture node references it.",
+                    suggested_action="Update the architecture map or node evidence before accepting the phase.",
+                    evidence_refs=[path_text],
+                )
+            )
+
+    for ref in _architecture_evidence_refs(architecture):
+        if not _looks_like_path_ref(ref):
+            continue
+        path = worktree / ref
+        if not path.exists():
+            findings.append(
+                ArchitectureCheckFinding(
+                    severity="p1",
+                    area="evidence",
+                    summary=f"Architecture evidence path does not exist: {ref}",
+                    detail="A map node points at a file path that is not present in the worktree.",
+                    suggested_action="Fix the evidence reference, add the missing file, or replace it with a check/source reference.",
+                    evidence_refs=[ref],
+                )
+            )
+
+    for code_path in source_paths:
+        if _is_represented(code_path, architecture_text):
+            continue
+        findings.append(
+            ArchitectureCheckFinding(
+                severity="p2",
+                area="coverage",
+                summary=f"Code surface is not represented in the architecture map: {code_path}",
+                detail="The map may still be correct, but this source file is not named by any node summary, note, or evidence reference.",
+                suggested_action="Decide whether this code belongs in an existing architecture node or should be intentionally ignored.",
+                evidence_refs=[code_path],
+            )
+        )
+
+    blocking = [finding for finding in findings if finding.severity in {"p0", "p1"}]
+    return ArchitectureCheckReport(
+        goal_id=snapshot.goal_id,
+        passed=not blocking,
+        summary=(
+            f"Checked {len(changed_files)} recorded changed file(s)"
+            + (f" and {len(source_paths)} source code surface(s)" if explicit_map else "")
+            + f": {len([finding for finding in findings if finding.severity == 'p1'])} important, "
+            f"{len([finding for finding in findings if finding.severity == 'p2'])} advisory."
+        ),
+        findings=findings,
+        user_questions=[finding.summary for finding in findings if finding.needs_user],
+        agent_actions=_unique(
+            [
+                finding.suggested_action
+                for finding in findings
+                if finding.suggested_action and not finding.needs_user
+            ]
+        ),
+    )
+
+
+def render_architecture_check_report(report: ArchitectureCheckReport) -> str:
+    lines = [
+        "# Code-Derived Architecture Check",
+        "",
+        f"Goal: {report.goal_id}",
+        f"Overall: {'pass' if report.passed else 'needs attention'}",
+        "",
+        report.summary,
+        "",
+        "## Needs The User",
+        _bullets(
+            report.user_questions or ["No architecture/code decision is waiting on the user."]
+        ),
+        "",
+        "## Agent Can Work On",
+        _bullets(report.agent_actions or ["No architecture/code cleanup is currently suggested."]),
+        "",
+        "## Findings",
+    ]
+    if not report.findings:
+        lines.append("- No code-derived architecture issues found.")
+    for finding in report.findings:
+        marker = " user" if finding.needs_user else ""
+        lines.append(f"- [{finding.severity.upper()}][{finding.area}{marker}] {finding.summary}")
+        if finding.detail:
+            lines.append(f"  Detail: {finding.detail}")
+        if finding.evidence_refs:
+            lines.append(f"  Evidence: {', '.join(finding.evidence_refs)}")
+        if finding.suggested_action:
+            lines.append(f"  Next: {finding.suggested_action}")
+    return "\n".join(lines) + "\n"
 
 
 def render_architecture_brief(brief: ArchitectureBrief) -> str:
@@ -244,6 +401,82 @@ def _count_lines(counts: dict[str, int]) -> list[str]:
     return [f"{status}: {count}" for status, count in sorted(counts.items())]
 
 
+def _changed_files(snapshot: GoalSnapshot) -> list[str]:
+    paths: list[str] = []
+    for phase in snapshot.phases:
+        if phase.evidence is None:
+            continue
+        paths.extend(phase.evidence.changed_files)
+    return _unique(paths)
+
+
+def _architecture_evidence_refs(architecture: GoalArchitectureMap) -> list[str]:
+    refs: list[str] = []
+    for node in architecture.nodes:
+        refs.extend(node.evidence_refs)
+    return _unique(refs)
+
+
+def _architecture_search_text(architecture: GoalArchitectureMap) -> str:
+    parts = [architecture.title, architecture.overview]
+    for node in architecture.nodes:
+        parts.extend(
+            [
+                node.node_id,
+                node.label,
+                node.plain_summary,
+                node.owner_phase or "",
+                node.user_value,
+                *node.evidence_refs,
+                *node.technical_notes,
+            ]
+        )
+    return "\n".join(parts).lower()
+
+
+def _source_code_paths(worktree: Path) -> list[str]:
+    if not worktree.exists():
+        return []
+    roots = [
+        path for path in [worktree / "src", worktree / "app", worktree / "apps"] if path.exists()
+    ]
+    if not roots:
+        roots = [worktree]
+    paths: list[str] = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or _is_skipped(path, worktree):
+                continue
+            if path.suffix.lower() in CODE_EXTENSIONS:
+                paths.append(path.relative_to(worktree).as_posix())
+    return sorted(_unique(paths))
+
+
+def _is_skipped(path: Path, worktree: Path) -> bool:
+    try:
+        relative = path.relative_to(worktree)
+    except ValueError:
+        return True
+    return any(part in SKIP_DIRS for part in relative.parts)
+
+
+def _looks_like_path_ref(value: str) -> bool:
+    if " " in value or value.startswith(("http://", "https://")):
+        return False
+    path = Path(value)
+    return "/" in value or value.startswith(".") or path.suffix.lower() in PATH_EVIDENCE_EXTENSIONS
+
+
+def _is_code_path(value: str) -> bool:
+    return Path(value).suffix.lower() in CODE_EXTENSIONS
+
+
+def _is_represented(path: str, architecture_text: str) -> bool:
+    lower = path.lower()
+    stem = Path(path).stem.lower()
+    return lower in architecture_text or stem in architecture_text
+
+
 def _status_for_phase(status: PhaseStatus) -> str:
     return {
         PhaseStatus.PENDING: "planned",
@@ -272,6 +505,17 @@ def _node_markdown(node: ArchitectureNode) -> str:
 
 def _bullets(items: list[str]) -> str:
     return "\n".join(f"  - {item}" for item in items)
+
+
+def _unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
 
 
 def _mermaid_id(value: str) -> str:

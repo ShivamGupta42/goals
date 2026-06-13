@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from goals.architecture import analyze_code_architecture
 from goals.assets import analyze_asset_provenance
 from goals.boundaries import detect_professional_domains
 from goals.citations import analyze_citation_quality
@@ -30,11 +33,13 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_architecture_issues(snapshot))
     issues.extend(_merge_readiness_issues(snapshot))
     user_questions = [issue.summary for issue in issues if issue.needs_user]
-    agent_actions = [
-        issue.suggested_action
-        for issue in issues
-        if issue.suggested_action and not issue.needs_user
-    ]
+    agent_actions = _unique(
+        [
+            issue.suggested_action
+            for issue in issues
+            if issue.suggested_action and not issue.needs_user
+        ]
+    )
     blocking = [issue for issue in issues if issue.severity == "p0"]
     return GoalIssueReport(
         goal_id=snapshot.goal_id,
@@ -379,17 +384,29 @@ def _asset_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
 
 
 def _architecture_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    if snapshot.architecture is None:
-        return []
-    return [
+    issues = [
         GoalIssue(
             severity="p2",
             area="architecture",
             summary=f"Architecture question remains: {question}",
             suggested_action="Answer or explicitly defer this architecture question.",
         )
-        for question in snapshot.architecture.questions
+        for question in (snapshot.architecture.questions if snapshot.architecture else [])
     ]
+    report = analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
+    issues.extend(
+        GoalIssue(
+            severity=finding.severity,
+            area="architecture",
+            summary=finding.summary,
+            detail=finding.detail,
+            suggested_action=finding.suggested_action,
+            needs_user=finding.needs_user,
+            evidence_refs=finding.evidence_refs,
+        )
+        for finding in report.findings
+    )
+    return issues
 
 
 def _merge_readiness_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
@@ -410,3 +427,14 @@ def _merge_readiness_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
 
 def _bullets(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
+
+
+def _unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique

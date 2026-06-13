@@ -55,6 +55,7 @@ CURRENT_CAPABILITIES = {
     "architecture_map",
     "automatic_skill_selection",
     "citation_quality_review",
+    "code_derived_architecture_checks",
     "durable_state",
     "end_user_decision_experience",
     "end_user_visualization",
@@ -154,6 +155,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_decision_experience",
             "end_user_visualization",
             "architecture_map",
+            "code_derived_architecture_checks",
             "review_gate",
             "issue_discovery",
             "local_safety_check",
@@ -329,10 +331,11 @@ DEFAULT_GOAL_USE_CASES = [
             *CORE_GOAL_CAPABILITIES,
             "worktree_isolation",
             "architecture_map",
+            "code_derived_architecture_checks",
             "local_safety_check",
             "merge_readiness_check",
         ],
-        planned_capabilities=["parallel_worktree_merge_gates", "code_derived_architecture_checks"],
+        planned_capabilities=["parallel_worktree_merge_gates"],
         important_user_decisions=["Data migration risk", "Breaking API behavior"],
         agent_can_decide=["Implementation route", "Test commands", "Reversible refactors"],
         proof_required=["Changed files", "Passing checks", "Accepted review gate"],
@@ -953,9 +956,10 @@ def _rank_capabilities(counter: Counter[str]) -> list[tuple[str, int]]:
         "cross_agent_recommendation_merge": 2,
         "permission_policy_registry": 3,
         "citation_quality_review": 4,
-        "source_freshness_gate": 5,
-        "cross_project_memory_sync": 6,
-        "professional_boundary_templates": 7,
+        "code_derived_architecture_checks": 5,
+        "source_freshness_gate": 6,
+        "cross_project_memory_sync": 7,
+        "professional_boundary_templates": 8,
     }
     return sorted(
         counter.items(),
@@ -1653,6 +1657,10 @@ def _supported_capabilities(
         supported.add("end_user_visualization")
     if "Architecture map:" in prompt and "architecture.md" in prompt:
         supported.add("architecture_map")
+    if "goals architecture check" in prompt or any(
+        "goals architecture check" in check for check in recommended_checks
+    ):
+        supported.add("code_derived_architecture_checks")
     if "Recommended skills/plugins for this phase:" in prompt:
         supported.add("automatic_skill_selection")
     if "goals ecosystem discover" in prompt:

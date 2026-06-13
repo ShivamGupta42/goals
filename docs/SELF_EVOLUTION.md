@@ -261,7 +261,10 @@ The architecture view extends this principle: the dashboard gives a simple map
 and a compact architecture brief, while `architecture.md` gives technical users
 a Markdown/Mermaid diagram they can question. It should show what is built,
 planned, blocked, deferred, missing, and not yet backed by evidence while
-keeping the default view simple.
+keeping the default view simple. `goals architecture check` adds a code-derived
+review pass: changed code files should be represented in the map, and
+architecture evidence paths should still exist in the worktree. The check keeps
+ordinary map cleanup with the agent.
 
 ## Decision Rule
 
@@ -296,6 +299,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
   while surfacing weak high-stakes evidence,
 - asset provenance checks that keep missing metadata with the agent while
   surfacing blocked or restricted usage rights,
+- code-derived architecture checks that compare changed files and evidence refs
+  with the goal architecture map,
 - a dashboard that makes progress and blockers visible,
 - decision explanations that non-technical users can understand.
 

@@ -39,11 +39,14 @@ may need to understand what has already happened in the project.
 
 ## Goal Architecture Map
 
-**Status:** Partially implemented. Goals now renders a default phase-derived
+**Status:** Implemented as a first vertical slice. Goals now renders a default phase-derived
 `architecture.md`, accepts a typed project-specific architecture map, includes it
 in Mode A handoffs, exposes a compact `goals architecture brief`, and shows an
-Architecture section in the dashboard. Deeper code-derived validation and
-parallel-worktree merge behavior are still planned.
+Architecture section in the dashboard. `goals architecture check` compares
+recorded changed code files and architecture evidence refs with the worktree so
+agents can catch stale map evidence and code changes that are not represented in
+the map. Parallel-worktree merge behavior is handled separately by
+`goals merge-check`.
 
 For larger goals, technical users need a way to inspect what is being built,
 what is not built yet, and how each phase changes the project. Goals should
@@ -63,6 +66,8 @@ state.
   when possible.
 - Keep a compact architecture brief with status counts, evidence gaps, open
   questions, and review focus.
+- Run code-derived checks before phase acceptance so changed files and
+  architecture evidence stay aligned.
 - Render this in the dashboard as an Architecture view beside Progress,
   Decisions, Evidence, and Technical Details.
 
@@ -76,9 +81,10 @@ state.
 
 ### Open Questions
 
-- Should the architecture map be hand-authored by the agent, derived from code
-  scans, or both?
-- Should Goals validate the diagram against changed files or keep it advisory?
+- Should deeper architecture extraction infer relationships between modules, or
+  only verify that recorded maps mention changed code?
+- Should code-derived architecture checks become blocking for technical goals by
+  default, or stay as a strict-mode gate chosen by the agent?
 - How should conflicting diagrams from parallel worktrees be merged?
 
 ## Dashboard Views
@@ -285,34 +291,34 @@ recorded assets in the dashboard.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Code Derived Architecture Checks** (`p1`)
-  - Source: self-check
-  - Capability: `code_derived_architecture_checks`
-  - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Creative Variant Comparison** (`p2`)
+- **Creative Variant Comparison** (`p1`)
   - Source: self-check
   - Capability: `creative_variant_comparison`
   - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Handoff Owner Registry** (`p2`)
   - Source: self-check
   - Capability: `handoff_owner_registry`
   - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Mandatory External Review Gate** (`p2`)
   - Source: self-check
   - Capability: `mandatory_external_review_gate`
   - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Optional Calendar Context** (`p2`)
   - Source: self-check
   - Capability: `optional_calendar_context`
   - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Private Memory Boundary** (`p2`)
+  - Source: self-check
+  - Capability: `private_memory_boundary`
+  - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

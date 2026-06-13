@@ -38,6 +38,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals brief" in plan.prompt
     assert plan.architecture_file.endswith("architecture.md")
     assert "Architecture map:" in plan.prompt
+    assert "goals architecture check" in plan.prompt
     assert "Parallel worktree merge gate:" in plan.prompt
     assert plan.recommended_tools
     assert "Recommended skills/plugins for this phase:" in plan.prompt
@@ -62,6 +63,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals asset add" in plan.prompt
     assert "goals asset provenance" in plan.prompt
     assert "uv run goals asset provenance --strict" in plan.recommended_checks
+    assert "uv run goals architecture check --strict" in plan.recommended_checks
     assert "uv run goals source citations --strict" in plan.recommended_checks
     assert "uv run goals source freshness --strict" in plan.recommended_checks
     assert "uv run goals boundary explain --domain auto" in plan.recommended_checks

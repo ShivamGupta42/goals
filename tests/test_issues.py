@@ -1,11 +1,13 @@
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.models import (
+    ArchitectureNode,
     AssetRecord,
     Decision,
     DecisionOption,
     Evidence,
     GateResult,
     GateVerdict,
+    GoalArchitectureMap,
     GoalSnapshot,
     Phase,
     PhaseStatus,
@@ -237,6 +239,63 @@ def test_issue_report_surfaces_high_stakes_weak_citation(tmp_path) -> None:
         in report.user_questions
     )
     assert any(issue.area == "citation" and issue.needs_user for issue in report.issues)
+
+
+def test_issue_report_includes_code_architecture_mismatch(tmp_path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "storage.py").write_text("def save(): pass\n")
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship storage",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Update storage",
+                goal="Change storage.",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["src/storage.py"],
+                    checks_run=["pytest"],
+                    acceptance_met=["Storage changed."],
+                    confidence=0.9,
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.PASS,
+                        summary="ok",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+        definition_of_done=["Done"],
+        architecture=GoalArchitectureMap(
+            title="Demo map",
+            overview="Does not mention storage.",
+            nodes=[
+                ArchitectureNode(
+                    node_id="dashboard",
+                    label="Dashboard",
+                    plain_summary="Shows status.",
+                    status="built",
+                    evidence_refs=["src/missing.py"],
+                )
+            ],
+        ),
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert any(issue.area == "architecture" for issue in report.issues)
+    assert any("src/storage.py" in issue.summary for issue in report.issues)
+    assert any("src/missing.py" in issue.summary for issue in report.issues)
 
 
 def test_issue_report_suggests_professional_boundary_template(tmp_path) -> None:

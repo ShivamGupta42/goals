@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from goals.architecture import (
+    analyze_code_architecture,
     architecture_for_snapshot,
     build_architecture_brief,
+    render_architecture_check_report,
     render_architecture_markdown,
     render_architecture_brief,
     render_mermaid,
@@ -92,6 +94,96 @@ def test_architecture_brief_surfaces_review_focus_and_evidence_gaps() -> None:
     assert "Resolve or explicitly defer blocked architecture node(s): Merge gate." in rendered
     assert "Dashboard: Built node has no evidence references" in rendered
     assert "Does the merge gate cover migrations?" in rendered
+
+
+def test_code_architecture_check_flags_changed_code_missing_from_map(tmp_path: Path) -> None:
+    (tmp_path / "src" / "demo").mkdir(parents=True)
+    (tmp_path / "src" / "demo" / "storage.py").write_text("def save(): pass\n")
+    phases = default_phases("Ship storage")
+    phases[0].status = PhaseStatus.ACCEPTED
+    phases[0].evidence = Evidence(
+        changed_files=["src/demo/storage.py"],
+        checks_run=["pytest"],
+        acceptance_met=["Storage changed."],
+        confidence=0.9,
+    )
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship storage",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=phases,
+        current_phase="P2",
+        architecture=GoalArchitectureMap(
+            title="Demo architecture",
+            overview="Only describes dashboard work.",
+            nodes=[
+                ArchitectureNode(
+                    node_id="dashboard",
+                    label="Dashboard",
+                    plain_summary="Shows progress.",
+                    status="built",
+                    evidence_refs=["src/demo/missing.py"],
+                )
+            ],
+        ),
+    )
+
+    report = analyze_code_architecture(snapshot, tmp_path)
+    rendered = render_architecture_check_report(report)
+
+    assert report.passed is False
+    assert any("src/demo/storage.py" in finding.summary for finding in report.findings)
+    assert any("src/demo/missing.py" in finding.summary for finding in report.findings)
+    assert "Code-Derived Architecture Check" in rendered
+    assert "Overall: needs attention" in rendered
+
+
+def test_code_architecture_check_passes_when_changed_code_is_represented(tmp_path: Path) -> None:
+    (tmp_path / "src" / "demo").mkdir(parents=True)
+    (tmp_path / "src" / "demo" / "storage.py").write_text("def save(): pass\n")
+    phases = default_phases("Ship storage")
+    phases[0].status = PhaseStatus.ACCEPTED
+    phases[0].evidence = Evidence(
+        changed_files=["src/demo/storage.py"],
+        checks_run=["pytest"],
+        acceptance_met=["Storage changed."],
+        confidence=0.9,
+    )
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship storage",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=phases,
+        current_phase="P2",
+        architecture=GoalArchitectureMap(
+            title="Demo architecture",
+            overview="Storage work.",
+            nodes=[
+                ArchitectureNode(
+                    node_id="storage",
+                    label="Storage",
+                    plain_summary="Persists data.",
+                    status="built",
+                    evidence_refs=["src/demo/storage.py"],
+                )
+            ],
+        ),
+    )
+
+    report = analyze_code_architecture(snapshot, tmp_path)
+
+    assert report.passed is True
+    assert report.findings == []
 
 
 def test_mermaid_sanitizes_node_ids_and_labels() -> None:

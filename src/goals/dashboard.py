@@ -4,6 +4,7 @@ from html import escape
 from pathlib import Path
 
 from goals.architecture import (
+    analyze_code_architecture,
     architecture_for_snapshot,
     architecture_status_counts,
     build_architecture_brief,
@@ -64,7 +65,7 @@ def render_dashboard(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
         for p in snapshot.phases
     )
-    architecture_html = _architecture_html(architecture, architecture_path)
+    architecture_html = _architecture_html(snapshot, architecture, architecture_path)
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -560,9 +561,14 @@ def _assets_html(snapshot: GoalSnapshot) -> str:
     )
 
 
-def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Path | None) -> str:
+def _architecture_html(
+    snapshot: GoalSnapshot,
+    architecture: GoalArchitectureMap,
+    architecture_path: Path | None,
+) -> str:
     counts = architecture_status_counts(architecture)
     brief = build_architecture_brief(architecture)
+    check = analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
     count_text = (
         ", ".join(f"{escape(status)}: {count}" for status, count in sorted(counts.items()))
         or "No nodes recorded"
@@ -581,9 +587,28 @@ def _architecture_html(architecture: GoalArchitectureMap, architecture_path: Pat
         for node in architecture.nodes
     )
     brief_html = _architecture_brief_html(brief)
+    check_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in check.findings[:5]
+    )
+    check_html = (
+        f"<p>{escape(check.summary)}</p><ul>{check_items}</ul>"
+        if check.findings
+        else f"<p>{escape(check.summary)}</p>"
+    )
     return f"""
     <p class="plain">{escape(architecture.overview)}</p>
     {brief_html}
+    <h3>Code-Derived Check</h3>
+    {check_html}
     <p><strong>Status counts:</strong> {count_text}</p>
     {link}
     <div class="architecture-grid">
