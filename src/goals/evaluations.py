@@ -75,6 +75,7 @@ CURRENT_CAPABILITIES = {
     "review_gate",
     "self_evolution_memory",
     "simple_decision_format",
+    "source_freshness_gate",
     "source_registry",
     "worktree_isolation",
 }
@@ -192,6 +193,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "simple_decision_format",
             "project_history_decision_context",
             "source_registry",
+            "source_freshness_gate",
         ],
         future_capabilities=[],
         decisions=[
@@ -336,10 +338,11 @@ DEFAULT_GOAL_USE_CASES = [
         required_capabilities=[
             *CORE_GOAL_CAPABILITIES,
             "source_registry",
+            "source_freshness_gate",
             "simple_decision_format",
             "project_history_decision_context",
         ],
-        planned_capabilities=["source_freshness_gate", "citation_quality_review"],
+        planned_capabilities=["citation_quality_review"],
         important_user_decisions=["Audience focus", "External source permission"],
         agent_can_decide=["Brief outline", "Follow-up task list", "Reversible formatting choice"],
         proof_required=["Recorded sources", "Source-backed claims", "Decision summary"],
@@ -352,9 +355,10 @@ DEFAULT_GOAL_USE_CASES = [
         required_capabilities=[
             *CORE_GOAL_CAPABILITIES,
             "source_registry",
+            "source_freshness_gate",
             "simple_decision_format",
         ],
-        planned_capabilities=["source_freshness_gate", "spaced_recall_outputs"],
+        planned_capabilities=["spaced_recall_outputs"],
         important_user_decisions=["Research depth", "Trusted source boundaries"],
         agent_can_decide=["Reading order", "Summary structure", "Open question list"],
         proof_required=["Sources", "Uncertainty list", "Synthesis or learning artifact"],
@@ -1664,6 +1668,10 @@ def _supported_capabilities(
         supported.add("self_evolution_memory")
     if "Source evidence:" in prompt and "goals source add" in prompt:
         supported.add("source_registry")
+    if "goals source freshness" in prompt or any(
+        "goals source freshness" in check for check in recommended_checks
+    ):
+        supported.add("source_freshness_gate")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:

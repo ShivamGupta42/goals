@@ -80,7 +80,12 @@ from goals.runtime import (
     transition_phase,
 )
 from goals.scanners import run_safety_scanners
-from goals.sources import render_claim_summary, render_source_summary
+from goals.sources import (
+    analyze_source_freshness,
+    render_claim_summary,
+    render_source_freshness_report,
+    render_source_summary,
+)
 from goals.storage import EventStore, GoalsError, atomic_write_text
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
@@ -714,6 +719,11 @@ def source_add(
     credibility: str = typer.Option("medium", help="low, medium, or high."),
     claim: Optional[str] = typer.Option(None, help="Optional claim supported by this source."),
     confidence: float = typer.Option(0.0, help="Confidence for the optional claim."),
+    added_at: Optional[str] = typer.Option(
+        None,
+        "--added-at",
+        help="Optional ISO-8601 timestamp for when the source was collected.",
+    ),
 ) -> None:
     """Record source evidence for research, business, or technical claims."""
 
@@ -729,6 +739,7 @@ def source_add(
             ),  # type: ignore[arg-type]
             summary=summary,
             credibility=_validate_choice(credibility, {"low", "medium", "high"}, "credibility"),  # type: ignore[arg-type]
+            **({"added_at": added_at} if added_at else {}),
         )
         claims = []
         if claim:
@@ -751,6 +762,37 @@ def source_add(
             ),
         )
         typer.echo(f"Recorded source: {source.source_id}")
+
+    _handle(run)
+
+
+@source_app.command("freshness")
+def source_freshness(
+    max_age_days: Optional[int] = typer.Option(
+        None,
+        "--max-age-days",
+        help="Override the default freshness window for every source.",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when stale or unverifiable sources are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether recorded sources are fresh enough to rely on."""
+
+    def run():
+        if max_age_days is not None and max_age_days < 1:
+            raise GoalsError("max-age-days must be greater than 0.")
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_source_freshness(snapshot, max_age_days=max_age_days)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_source_freshness_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
 
     _handle(run)
 

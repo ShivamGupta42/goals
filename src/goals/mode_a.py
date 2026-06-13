@@ -77,6 +77,7 @@ def recommended_checks(worktree: Path) -> list[str]:
         [
             "uv run goals brief",
             "uv run goals merge-check",
+            "uv run goals source freshness --strict",
             "uv run goals validate",
             "uv run goals safety-check --mode local .",
         ]
@@ -155,6 +156,7 @@ Source-backed claims:
 {claims}
 
 If this phase makes research, business, customer, market, architecture, migration, or safety claims, record sources with `goals source add "Source title" --locator "url-or-file" --claim "claim supported by this source" --confidence 0.8`.
+Before relying on source-backed claims, run `goals source freshness --strict`; refresh, replace, or mark stale sources before asking the user unless the report says the user must decide.
 
 Evidence JSON shape:
 ```json

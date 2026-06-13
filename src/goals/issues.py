@@ -11,7 +11,7 @@ from goals.models import (
     GoalStatus,
     PhaseStatus,
 )
-from goals.sources import unresolved_claims
+from goals.sources import analyze_source_freshness, unresolved_claims
 
 
 def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
@@ -287,6 +287,19 @@ def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                     evidence_refs=[f"source:{source_id}" for source_id in claim.source_ids],
                 )
             )
+    freshness = analyze_source_freshness(snapshot)
+    for finding in freshness.findings:
+        issues.append(
+            GoalIssue(
+                severity=finding.severity,
+                area="source",
+                summary=finding.summary,
+                detail=finding.detail,
+                suggested_action=finding.suggested_action,
+                needs_user=finding.needs_user,
+                evidence_refs=finding.evidence_refs,
+            )
+        )
     return issues
 
 
