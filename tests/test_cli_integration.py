@@ -247,6 +247,12 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Goal Use-Case Coverage Report" in coverage.stdout
     assert "technical-repo-change: covered" in coverage.stdout
     assert "high-stakes-boundary: covered" in coverage.stdout
+    rehearsal = run(
+        ["python", "-m", "goals.cli", "eval", "rehearsal", "--adapter", "claude"], worktree
+    )
+    assert "Goal Lifecycle Rehearsal Report" in rehearsal.stdout
+    assert "personal-fitness-reset: pass" in rehearsal.stdout
+    assert "business-research-brief: pass" in rehearsal.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )

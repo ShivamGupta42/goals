@@ -1,21 +1,41 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+from tempfile import TemporaryDirectory
 
+from goals.issues import analyze_goal_issues
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
+    Event,
+    EventType,
+    Evidence,
+    GateVerdict,
+    GoalRehearsalCase,
+    GoalRehearsalReport,
     GoalScenario,
     GoalSnapshot,
     GoalUseCase,
     GoalUseCaseCoverage,
     GoalUseCaseCoverageReport,
+    PhaseStatus,
     ScenarioDecision,
     ScenarioDogfoodCase,
     ScenarioDogfoodReport,
     ScenarioEvaluation,
+    SourceClaim,
+    SourceRecord,
     WorktreeLease,
 )
-from goals.runtime import default_phases
+from goals.runtime import (
+    append_event,
+    create_goal,
+    default_phases,
+    emit_dashboard,
+    load_active_snapshot,
+    run_gate,
+    transition_phase,
+)
 
 CURRENT_CAPABILITIES = {
     "adapter_awareness",
@@ -450,6 +470,59 @@ def evaluate_use_case_coverage(
     )
 
 
+def rehearse_goal_lifecycles(
+    adapter: ModeAAdapter = "claude",
+    scenarios: list[GoalScenario] | None = None,
+) -> GoalRehearsalReport:
+    selected = scenarios or DEFAULT_GOAL_SCENARIOS
+    cases = [_rehearse_one(scenario) for scenario in selected]
+    failed = [case for case in cases if case.status == "fail"]
+    total_phases = sum(case.phases_accepted for case in cases)
+    total_questions = sum(case.user_question_count for case in cases)
+    return GoalRehearsalReport(
+        adapter=adapter,
+        passed=not failed,
+        summary=(
+            f"Rehearsed {len(cases)} temporary goal lifecycle(s): "
+            f"{len(cases) - len(failed)} pass, {len(failed)} fail, "
+            f"{total_phases} accepted phase(s), {total_questions} user question(s) waiting."
+        ),
+        cases=cases,
+        recommendations=_rehearsal_recommendations(cases),
+    )
+
+
+def render_rehearsal_report(report: GoalRehearsalReport) -> str:
+    lines = [
+        "# Goal Lifecycle Rehearsal Report",
+        "",
+        f"Adapter shape: {report.adapter}",
+        f"Overall: {'pass' if report.passed else 'fail'}",
+        "",
+        report.summary,
+        "",
+        "This report creates temporary Git repositories and drives real Goals state through phase evidence, review, acceptance, issue discovery, and dashboard rendering.",
+    ]
+    for case in report.cases:
+        lines.extend(
+            [
+                "",
+                f"## {case.scenario_id}: {case.status}",
+                "",
+                f"Category: {case.category}",
+                f"Goal id: {case.goal_id or 'not created'}",
+                case.summary,
+                "",
+                "### Proof Recorded",
+                _bullets(case.proof_recorded or ["No proof recorded."]),
+            ]
+        )
+        if case.error:
+            lines.extend(["", f"Error: {case.error}"])
+    lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
+    return "\n".join(lines) + "\n"
+
+
 def render_coverage_report(report: GoalUseCaseCoverageReport) -> str:
     lines = [
         "# Goal Use-Case Coverage Report",
@@ -491,6 +564,138 @@ def render_coverage_report(report: GoalUseCaseCoverageReport) -> str:
         )
     lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
     return "\n".join(lines) + "\n"
+
+
+def _rehearse_one(scenario: GoalScenario) -> GoalRehearsalCase:
+    try:
+        with TemporaryDirectory(prefix="goals-rehearsal-") as tmp:
+            repo = _init_rehearsal_repo(Path(tmp) / "repo")
+            snapshot = create_goal(scenario.objective, repo, why=scenario.why)
+            worktree = Path(snapshot.topology.worktree_path)
+            if scenario.category == "business":
+                _record_rehearsal_source(worktree, snapshot.goal_id)
+            proof: list[str] = []
+            for phase in snapshot.phases:
+                transition_phase(worktree, phase.phase_id, "start")
+                evidence = Evidence(
+                    changed_files=["README.md"],
+                    checks_run=["synthetic rehearsal check"],
+                    acceptance_met=phase.acceptance_criteria or ["Phase acceptance satisfied."],
+                    source_ids=["SRC-rehearsal"] if scenario.category == "business" else [],
+                    confidence=0.9,
+                    notes=f"Rehearsal evidence for {phase.phase_id}: {phase.title}.",
+                )
+                append_event(
+                    worktree,
+                    Event(
+                        goal_id=snapshot.goal_id,
+                        event_type=EventType.PHASE_EVIDENCE,
+                        payload={
+                            "phase_id": phase.phase_id,
+                            "evidence": evidence.model_dump(),
+                        },
+                    ),
+                )
+                review = run_gate(worktree, phase.phase_id)
+                if review.verdict != GateVerdict.PASS:
+                    raise RuntimeError(f"{phase.phase_id} review did not pass: {review.summary}")
+                transition_phase(worktree, phase.phase_id, "accept")
+                proof.append(f"{phase.phase_id}: evidence, passing review, accepted")
+            dashboard = emit_dashboard(worktree)
+            final_snapshot = load_active_snapshot(worktree)
+            issues = analyze_goal_issues(final_snapshot)
+            if not issues.passed:
+                raise RuntimeError(issues.summary)
+            return GoalRehearsalCase(
+                scenario_id=scenario.scenario_id,
+                category=scenario.category,
+                status="pass",
+                goal_id=final_snapshot.goal_id,
+                phases_accepted=len(
+                    [
+                        phase
+                        for phase in final_snapshot.phases
+                        if phase.status == PhaseStatus.ACCEPTED
+                    ]
+                ),
+                dashboard_rendered=dashboard.exists(),
+                issue_count=len(issues.issues),
+                user_question_count=len(issues.user_questions),
+                proof_recorded=proof,
+                summary=(
+                    f"Accepted {len(proof)} phase(s), rendered dashboard, and finished with "
+                    f"{len(issues.issues)} issue(s)."
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001
+        return GoalRehearsalCase(
+            scenario_id=scenario.scenario_id,
+            category=scenario.category,
+            status="fail",
+            summary="Lifecycle rehearsal failed.",
+            error=str(exc),
+        )
+
+
+def _init_rehearsal_repo(path: Path) -> Path:
+    path.mkdir(parents=True)
+    _run(["git", "init"], path)
+    _run(["git", "config", "user.email", "rehearsal@example.com"], path)
+    _run(["git", "config", "user.name", "Goals Rehearsal"], path)
+    (path / "README.md").write_text("# Rehearsal\n")
+    (path / "LICENSE").write_text("MIT\n")
+    _run(["git", "add", "README.md", "LICENSE"], path)
+    _run(["git", "commit", "-m", "init rehearsal"], path)
+    return path
+
+
+def _record_rehearsal_source(worktree: Path, goal_id: str) -> None:
+    source = SourceRecord(
+        source_id="SRC-rehearsal",
+        title="Synthetic customer source",
+        source_type="interview",
+        summary="Synthetic source used to rehearse source-backed business goals.",
+        credibility="medium",
+    )
+    claim = SourceClaim(
+        claim="Synthetic customers need simple progress.",
+        source_ids=["SRC-rehearsal"],
+        confidence=0.8,
+    )
+    append_event(
+        worktree,
+        Event(
+            goal_id=goal_id,
+            event_type=EventType.SOURCE_RECORDED,
+            payload={"source": source.model_dump(), "claims": [claim.model_dump()]},
+        ),
+    )
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    try:
+        subprocess.run(
+            args,
+            cwd=cwd,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else "no stderr"
+        raise RuntimeError(f"{' '.join(args)} failed in {cwd}: {stderr}") from exc
+
+
+def _rehearsal_recommendations(cases: list[GoalRehearsalCase]) -> list[str]:
+    failed = [case for case in cases if case.status == "fail"]
+    if failed:
+        return [f"Fix rehearsal for {case.scenario_id}: {case.error}" for case in failed]
+    return [
+        "Keep lifecycle rehearsal in the merge checklist for self-evolution phases.",
+        "Add new rehearsal scenarios when a new goal family needs real runtime proof.",
+        "Use failures here to improve phases, gates, issue discovery, or public docs.",
+    ]
 
 
 def dogfood_goal_scenarios(

@@ -14,8 +14,10 @@ from goals.evaluations import (
     dogfood_goal_scenarios,
     evaluate_goal_scenarios,
     evaluate_use_case_coverage,
+    rehearse_goal_lifecycles,
     render_coverage_report,
     render_dogfood_report,
+    render_rehearsal_report,
 )
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
@@ -608,6 +610,24 @@ def eval_coverage(
         typer.echo(report.model_dump_json(indent=2))
     else:
         typer.echo(render_coverage_report(report))
+    if not report.passed:
+        raise typer.Exit(1)
+
+
+@eval_app.command("rehearsal")
+def eval_rehearsal(
+    adapter: ModeAAdapter = typer.Option(
+        "claude", help="Native adapter shape to label the rehearsal."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Run temporary end-to-end goal lifecycle rehearsals."""
+
+    report = rehearse_goal_lifecycles(adapter=adapter)
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_rehearsal_report(report))
     if not report.passed:
         raise typer.Exit(1)
 

@@ -13,6 +13,7 @@ uv run goals eval scenarios --adapter claude
 uv run goals eval scenarios --adapter codex
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
+uv run goals eval rehearsal --adapter claude
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -41,6 +42,11 @@ larger product changes.
 personal, technical, business, research, creative, operations, high-stakes,
 ecosystem, and self-evolution. It shows which current capabilities cover each
 family and which planned capabilities should become future product work.
+
+`eval rehearsal` creates temporary Git repositories and actually runs
+representative Goals lifecycles. It records evidence, checks issues, reviews and
+accepts phases, and renders dashboards so self-evolution work is tested against
+runtime behavior, not only static scenario descriptions.
 
 ## Ecosystem Discovery
 

@@ -436,6 +436,32 @@ class GoalUseCaseCoverageReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class GoalRehearsalCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    category: str
+    status: Literal["pass", "fail"]
+    goal_id: str = ""
+    phases_accepted: int = 0
+    dashboard_rendered: bool = False
+    issue_count: int = 0
+    user_question_count: int = 0
+    proof_recorded: list[str] = Field(default_factory=list)
+    summary: str
+    error: str = ""
+
+
+class GoalRehearsalReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    passed: bool
+    summary: str
+    cases: list[GoalRehearsalCase] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class GoalIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
