@@ -9,6 +9,7 @@ from goals.assets import render_asset_summary
 from goals.citations import render_citation_quality_summary
 from goals.creative import render_creative_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.handoffs import render_handoff_summary
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.sources import render_claim_summary, render_source_summary
@@ -83,6 +84,7 @@ def recommended_checks(worktree: Path) -> list[str]:
             "uv run goals boundary explain --domain auto",
             "uv run goals asset provenance --strict",
             "uv run goals creative compare --strict",
+            "uv run goals handoff check --strict",
             "uv run goals merge-check",
             "uv run goals source citations --strict",
             "uv run goals source freshness --strict",
@@ -104,6 +106,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     citations = render_citation_quality_summary(snapshot)
     assets = render_asset_summary(snapshot)
     creative = render_creative_summary(snapshot)
+    handoffs = render_handoff_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -167,6 +170,11 @@ Creative variants:
 {creative}
 - If this phase explores creative directions, drafts, concepts, campaign options, or design alternatives, record each meaningful option with `goals creative variant add "Variant title" --summary "plain description" --best-for "when to use it" --score "brand_fit=4:why"`.
 - Run `goals creative compare --strict` before asking the user. The agent should shortlist, reject, or recommend variants itself when the choice is reversible; ask the user only for brand direction, publishing approval, or blocked/restricted asset rights.
+
+Handoff owners:
+{handoffs}
+- If this phase changes who owns a follow-up, review, process step, approval, rollout, or recurring task, record the owner with `goals handoff owner add "Owner label" --role reviewer --responsibility "what they own" --phase-id {plan.current_phase}`.
+- Run `goals handoff check --strict` before review. Fill missing roles, responsibilities, phase ids, or escalation paths yourself. Ask the user only when an owner is blocked or `--confirmation needs_user` is required for an accountability change.
 
 Self-evolution memory:
 {memory}

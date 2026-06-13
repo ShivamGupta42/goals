@@ -61,6 +61,7 @@ CURRENT_CAPABILITIES = {
     "end_user_decision_experience",
     "end_user_visualization",
     "evidence_contract",
+    "handoff_owner_registry",
     "important_decision_filter",
     "issue_discovery",
     "local_safety_check",
@@ -406,8 +407,9 @@ DEFAULT_GOAL_USE_CASES = [
             *CORE_GOAL_CAPABILITIES,
             "self_evolution_memory",
             "project_history_decision_context",
+            "handoff_owner_registry",
         ],
-        planned_capabilities=["recurring_goal_templates", "handoff_owner_registry"],
+        planned_capabilities=["recurring_goal_templates"],
         important_user_decisions=["Owner or accountability change", "Process policy change"],
         agent_can_decide=["Checklist wording", "Documentation placement", "Trial run plan"],
         proof_required=["Updated process", "Trial evidence", "Known gaps"],
@@ -1684,6 +1686,10 @@ def _supported_capabilities(
         "goals creative compare" in check for check in recommended_checks
     ):
         supported.add("creative_variant_comparison")
+    if "goals handoff check" in prompt or any(
+        "goals handoff check" in check for check in recommended_checks
+    ):
+        supported.add("handoff_owner_registry")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:

@@ -57,6 +57,13 @@ uv run goals creative variant add "Calm launch" \
   --score "brand_fit=5:Matches the product tone"
 uv run goals creative compare
 uv run goals creative variants
+uv run goals handoff owner add "Support lead" \
+  --role reviewer \
+  --responsibility "Review the rollout checklist." \
+  --phase-id P2 \
+  --confirmation agent_confirmed
+uv run goals handoff check
+uv run goals handoff owners
 uv run goals memory suggest
 uv run goals memory sync ../similar-goals-project
 uv run goals eval scenarios --adapter claude
@@ -206,6 +213,28 @@ uv run goals creative variants
 checks linked asset rights, and recommends the best current direction. Routine
 variant cleanup stays with the agent. Brand direction, publishing approval, and
 restricted or blocked asset rights stay as simple user-facing decisions.
+
+Agents can record handoff owners when work changes hands:
+
+```bash
+uv run goals handoff owner add "Support lead" \
+  --role reviewer \
+  --responsibility "Review the rollout checklist." \
+  --owner-type team \
+  --phase-id P2 \
+  --decision-scope "checklist rollout" \
+  --escalation-path "Create a follow-up task for the coordinator." \
+  --confirmation agent_confirmed \
+  --status active
+uv run goals handoff check
+uv run goals handoff owners
+```
+
+`handoff check` verifies that owners have clear roles, responsibilities, phase
+links, and escalation paths. Routine cleanup stays with the agent. A handoff
+becomes user-facing only when it is blocked or marked `--confirmation
+needs_user`, which keeps accountability changes visible without asking the user
+to route every routine follow-up.
 
 Agents can also ask Goals which skills or plugins fit the current phase:
 

@@ -65,8 +65,12 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Creative variants:" in plan.prompt
     assert "goals creative variant add" in plan.prompt
     assert "goals creative compare" in plan.prompt
+    assert "Handoff owners:" in plan.prompt
+    assert "goals handoff owner add" in plan.prompt
+    assert "goals handoff check" in plan.prompt
     assert "uv run goals asset provenance --strict" in plan.recommended_checks
     assert "uv run goals creative compare --strict" in plan.recommended_checks
+    assert "uv run goals handoff check --strict" in plan.recommended_checks
     assert "uv run goals architecture check --strict" in plan.recommended_checks
     assert "uv run goals source citations --strict" in plan.recommended_checks
     assert "uv run goals source freshness --strict" in plan.recommended_checks

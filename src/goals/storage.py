@@ -18,6 +18,7 @@ from goals.models import (
     GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
+    HandoffOwner,
     PhaseStatus,
     SourceClaim,
     SourceRecord,
@@ -142,6 +143,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 existing.variant_id == variant.variant_id for existing in snapshot.creative_variants
             ):
                 snapshot.creative_variants.append(variant)
+        elif event.event_type == EventType.HANDOFF_OWNER_RECORDED:
+            owner = HandoffOwner.model_validate(payload["owner"])
+            if not any(existing.owner_id == owner.owner_id for existing in snapshot.handoff_owners):
+                snapshot.handoff_owners.append(owner)
         elif event.event_type == EventType.SOURCE_RECORDED:
             source = SourceRecord.model_validate(payload["source"])
             if not any(existing.source_id == source.source_id for existing in snapshot.sources):

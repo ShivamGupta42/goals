@@ -215,6 +215,32 @@ outcome: brand direction, publishing approval, or restricted/blocked asset
 rights. The dashboard shows a Creative Variants view so non-technical users can
 see the recommended direction and why it is safe enough to continue.
 
+## Handoff Owners
+
+Operations and cross-agent goals often fail because nobody knows who owns the
+next review, follow-up, rollout, or recurring process step. Goals now lets
+agents record that ownership in the goal state:
+
+```bash
+uv run goals handoff owner add "Support lead" \
+  --role reviewer \
+  --responsibility "Review the rollout checklist." \
+  --owner-type team \
+  --phase-id P2 \
+  --decision-scope "checklist rollout" \
+  --escalation-path "Create a follow-up task for the coordinator." \
+  --confirmation agent_confirmed
+uv run goals handoff check
+uv run goals handoff owners
+```
+
+Mode A prompts include a handoff owner block. The check keeps missing roles,
+responsibilities, stale phase ids, duplicate labels, and missing escalation
+paths as agent-side repair work. It surfaces only material accountability
+questions: a blocked owner or an owner explicitly marked `confirmation:
+needs_user`. The dashboard shows a Handoff Owners view so non-technical users
+can see who owns what without reading the event log.
+
 ## End-User Experience
 
 The decision layer and visualization layer should be judged from the user's
