@@ -226,10 +226,11 @@ qualified professional, expected evidence, and safe next steps.
 source-backed claims as append-only goal events, includes source prompts in Mode
 A handoffs, and renders sources in the dashboard. Business scenario evaluation
 now treats source evidence as a current capability. Goals can also run
+`goals source citations` to check claim traceability and qualification, and
 `goals source freshness` to check recorded source age against simple
-type-specific freshness windows; routine stale evidence stays with the agent as
-refresh work, while high-stakes stale evidence can become a user-facing
-decision.
+type-specific freshness windows. Routine citation and freshness cleanup stays
+with the agent as repair work, while weak or stale high-stakes evidence can
+become a user-facing decision.
 
 ### Direction
 
@@ -237,9 +238,11 @@ decision.
   architecture claims.
 - Keep source evidence readable for non-technical users: title, locator, type,
   summary, credibility, claim, and confidence.
+- Check citation quality before relying on claims: missing source ids, missing
+  locators or summaries, low-confidence claims, absolute wording, and
+  high-confidence claims backed only by low-credibility sources.
 - Let phase evidence reference `source_ids` so proof and claims connect.
-- Later, add richer provenance, citation quality checks, and optional external
-  source refresh adapters.
+- Later, add richer provenance and optional external source refresh adapters.
 
 ### Open Questions
 
@@ -248,6 +251,7 @@ decision.
 - Which projects need stricter source freshness windows than the built-in
   defaults?
 - Should business/research goals have a stronger source gate than code goals?
+- Should citation quality thresholds be configurable by project or goal domain?
 
 ## Asset Provenance
 
@@ -281,34 +285,34 @@ recorded assets in the dashboard.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Citation Quality Review** (`p1`)
-  - Source: self-check
-  - Capability: `citation_quality_review`
-  - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Code Derived Architecture Checks** (`p2`)
+- **Code Derived Architecture Checks** (`p1`)
   - Source: self-check
   - Capability: `code_derived_architecture_checks`
   - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Creative Variant Comparison** (`p2`)
   - Source: self-check
   - Capability: `creative_variant_comparison`
   - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Handoff Owner Registry** (`p2`)
   - Source: self-check
   - Capability: `handoff_owner_registry`
   - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Mandatory External Review Gate** (`p2`)
   - Source: self-check
   - Capability: `mandatory_external_review_gate`
   - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Optional Calendar Context** (`p2`)
+  - Source: self-check
+  - Capability: `optional_calendar_context`
+  - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

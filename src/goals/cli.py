@@ -19,6 +19,7 @@ from goals.assets import (
 )
 from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
+from goals.citations import analyze_citation_quality, render_citation_quality_report
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -992,6 +993,30 @@ def source_freshness(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_source_freshness_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@source_app.command("citations")
+def source_citations(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when citation quality issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether source-backed claims have good enough citations."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_citation_quality(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_citation_quality_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 

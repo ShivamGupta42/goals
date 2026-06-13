@@ -11,6 +11,7 @@ from goals.architecture import (
 )
 from goals.assets import analyze_asset_provenance
 from goals.brief import build_goal_brief
+from goals.citations import analyze_citation_quality
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -453,9 +454,10 @@ def _memory_html(snapshot: GoalSnapshot) -> str:
 
 
 def _sources_html(snapshot: GoalSnapshot) -> str:
-    if not snapshot.sources:
-        return "<h3>Freshness</h3><p>No sources recorded yet.</p>"
+    if not snapshot.sources and not snapshot.source_claims:
+        return "<h3>Citation Quality</h3><p>No sources recorded yet.</p><h3>Freshness</h3><p>No sources recorded yet.</p>"
     freshness = analyze_source_freshness(snapshot)
+    citations = analyze_citation_quality(snapshot)
     source_items = "\n".join(
         "<li>"
         f"<strong>{escape(source.title)}</strong>"
@@ -496,8 +498,25 @@ def _sources_html(snapshot: GoalSnapshot) -> str:
         if freshness.findings
         else f"<p>{escape(freshness.summary)}</p>"
     )
+    citation_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in citations.findings[:5]
+    )
+    citation_html = (
+        f"<p>{escape(citations.summary)}</p><ul>{citation_items}</ul>"
+        if citations.findings
+        else f"<p>{escape(citations.summary)}</p>"
+    )
     return (
-        f"{warning}<h3>Freshness</h3>{freshness_html}"
+        f"{warning}<h3>Citation Quality</h3>{citation_html}<h3>Freshness</h3>{freshness_html}"
         f'<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
         f"<h3>Source-backed Claims</h3><ul>{claim_items or '<li>No claims recorded yet.</li>'}</ul>"
     )
