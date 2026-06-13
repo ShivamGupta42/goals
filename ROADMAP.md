@@ -214,7 +214,11 @@ external, costly, destructive, or production-affecting actions.
 **Status:** Partially implemented. Goals can record source evidence and
 source-backed claims as append-only goal events, includes source prompts in Mode
 A handoffs, and renders sources in the dashboard. Business scenario evaluation
-now treats source evidence as a current capability.
+now treats source evidence as a current capability. Goals can also run
+`goals source freshness` to check recorded source age against simple
+type-specific freshness windows; routine stale evidence stays with the agent as
+refresh work, while high-stakes stale evidence can become a user-facing
+decision.
 
 ### Direction
 
@@ -223,13 +227,15 @@ now treats source evidence as a current capability.
 - Keep source evidence readable for non-technical users: title, locator, type,
   summary, credibility, claim, and confidence.
 - Let phase evidence reference `source_ids` so proof and claims connect.
-- Later, add richer provenance, source freshness, and citation quality checks.
+- Later, add richer provenance, citation quality checks, and optional external
+  source refresh adapters.
 
 ### Open Questions
 
 - Should external URLs be fetched and archived, or kept as user-provided
   locators only?
-- How should Goals warn about stale or low-credibility sources?
+- Which projects need stricter source freshness windows than the built-in
+  defaults?
 - Should business/research goals have a stronger source gate than code goals?
 
 <!-- goals:self-check-roadmap:start -->
@@ -237,34 +243,34 @@ now treats source evidence as a current capability.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Source Freshness Gate** (`p1`)
-  - Source: self-check
-  - Capability: `source_freshness_gate`
-  - Why: Self-check recommends source freshness gate as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible source freshness gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Cross Project Memory Sync** (`p2`)
+- **Cross Project Memory Sync** (`p1`)
   - Source: self-check
   - Capability: `cross_project_memory_sync`
   - Why: Self-check recommends cross-project memory sync as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible cross-project memory sync slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Professional Boundary Templates** (`p2`)
   - Source: self-check
   - Capability: `professional_boundary_templates`
   - Why: Self-check recommends professional boundary templates as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible professional boundary templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Asset Provenance Checks** (`p2`)
   - Source: self-check
   - Capability: `asset_provenance_checks`
   - Why: Self-check recommends asset provenance checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible asset provenance checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Citation Quality Review** (`p2`)
   - Source: self-check
   - Capability: `citation_quality_review`
   - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Code Derived Architecture Checks** (`p2`)
+  - Source: self-check
+  - Capability: `code_derived_architecture_checks`
+  - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

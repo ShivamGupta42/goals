@@ -9,6 +9,7 @@ from goals.models import (
     Phase,
     PhaseStatus,
     SourceClaim,
+    SourceRecord,
     WorktreeLease,
 )
 
@@ -121,3 +122,75 @@ def test_clean_goal_has_no_issue_findings(tmp_path) -> None:
 
     assert report.passed is True
     assert report.issues == []
+
+
+def test_issue_report_includes_stale_source_as_agent_repair(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Prepare customer research brief",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[],
+        current_phase=None,
+        definition_of_done=["Done"],
+        sources=[
+            SourceRecord(
+                source_id="SRC-old",
+                title="Old research note",
+                source_type="url",
+                added_at="2000-01-01T00:00:00+00:00",
+            )
+        ],
+        source_claims=[
+            SourceClaim(
+                claim="Customers want simpler status.",
+                source_ids=["SRC-old"],
+                confidence=0.8,
+            )
+        ],
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert any(issue.summary == "Source may be stale: Old research note" for issue in report.issues)
+    assert "Source may be stale: Old research note" not in report.user_questions
+    assert any("Refresh, replace, or mark this source" in action for action in report.agent_actions)
+
+
+def test_issue_report_surfaces_high_stakes_stale_source(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Prepare legal safety brief",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[],
+        current_phase=None,
+        definition_of_done=["Done"],
+        sources=[
+            SourceRecord(
+                source_id="SRC-old",
+                title="Old legal memo",
+                source_type="document",
+                added_at="2000-01-01T00:00:00+00:00",
+            )
+        ],
+        source_claims=[
+            SourceClaim(
+                claim="A legal conclusion is safe.",
+                source_ids=["SRC-old"],
+                confidence=0.9,
+            )
+        ],
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert "Source may be stale: Old legal memo" in report.user_questions

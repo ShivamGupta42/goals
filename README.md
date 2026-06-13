@@ -44,6 +44,7 @@ uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals permission check github --kind plugin --action "inspect a remote issue"
+uv run goals source freshness
 uv run goals source list
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
@@ -129,8 +130,15 @@ uv run goals source add "Customer interview" \
   --source-type interview \
   --claim "Users need plain-language progress." \
   --confidence 0.8
+uv run goals source freshness
 uv run goals source list
 ```
+
+`source freshness` checks whether recorded sources are recent enough for the
+claims that rely on them. Stale sources are normally agent repair work: refresh,
+replace, or mark them stale. For high-stakes goals such as medical, legal,
+financial, production, privacy, or safety work, stale high-confidence evidence
+can become a simple user-facing decision before the agent relies on it.
 
 Agents can also ask Goals which skills or plugins fit the current phase:
 

@@ -127,13 +127,15 @@ uv run goals source add "Customer interview" \
   --source-type interview \
   --claim "Users need plain-language progress." \
   --confidence 0.8
+uv run goals source freshness
 uv run goals source list
 ```
 
 Mode A prompts include source summaries and ask agents to record sources when a
 phase makes customer, market, research, architecture, migration, or safety
-claims. The dashboard shows recorded sources and claims separately from code
-checks.
+claims. `source freshness` checks source age against simple, type-specific
+freshness windows before an agent relies on claims. The dashboard shows recorded
+sources, claims, and freshness status separately from code checks.
 
 ## End-User Experience
 
@@ -234,6 +236,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
 - registries for skills, gates, agents, profiles, and adapters,
 - permission policies that keep routine tool choices with agents while surfacing
   external, costly, or destructive actions,
+- source freshness checks that keep stale evidence as agent repair work unless
+  a high-stakes claim really needs the user,
 - a dashboard that makes progress and blockers visible,
 - decision explanations that non-technical users can understand.
 

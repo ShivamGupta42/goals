@@ -419,6 +419,34 @@ class SourceClaim(BaseModel):
     confidence: float = 0.0
 
 
+class SourceFreshnessFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    source_id: str
+    title: str
+    source_type: str = "other"
+    summary: str
+    detail: str = ""
+    age_days: int | None = None
+    max_age_days: int | None = None
+    claim_refs: list[str] = Field(default_factory=list)
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class SourceFreshnessReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    findings: list[SourceFreshnessFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

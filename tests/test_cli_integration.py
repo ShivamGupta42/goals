@@ -96,6 +96,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals issues" in run_prompt.stdout
     assert "goals brief" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
+    assert "goals source freshness" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
     architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
@@ -231,6 +232,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     source_list = run(["python", "-m", "goals.cli", "source", "list"], worktree)
     assert "Customer interview" in source_list.stdout
     assert "Users need plain-language progress." in source_list.stdout
+    source_freshness = run(["python", "-m", "goals.cli", "source", "freshness"], worktree)
+    assert "Source Freshness Report" in source_freshness.stdout
+    assert "Overall: pass" in source_freshness.stdout
     run(
         [
             "python",

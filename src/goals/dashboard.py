@@ -22,7 +22,7 @@ from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
-from goals.sources import unresolved_claims
+from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
 
 
@@ -447,7 +447,8 @@ def _memory_html(snapshot: GoalSnapshot) -> str:
 
 def _sources_html(snapshot: GoalSnapshot) -> str:
     if not snapshot.sources:
-        return "<p>No sources recorded yet.</p>"
+        return "<h3>Freshness</h3><p>No sources recorded yet.</p>"
+    freshness = analyze_source_freshness(snapshot)
     source_items = "\n".join(
         "<li>"
         f"<strong>{escape(source.title)}</strong>"
@@ -471,8 +472,26 @@ def _sources_html(snapshot: GoalSnapshot) -> str:
         if unresolved
         else "<p>All recorded claims reference known sources.</p>"
     )
+    freshness_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in freshness.findings[:5]
+    )
+    freshness_html = (
+        f"<p>{escape(freshness.summary)}</p><ul>{freshness_items}</ul>"
+        if freshness.findings
+        else f"<p>{escape(freshness.summary)}</p>"
+    )
     return (
-        f'{warning}<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
+        f"{warning}<h3>Freshness</h3>{freshness_html}"
+        f'<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
         f"<h3>Source-backed Claims</h3><ul>{claim_items or '<li>No claims recorded yet.</li>'}</ul>"
     )
 
