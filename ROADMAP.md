@@ -310,8 +310,8 @@ the dashboard.
 - Surface only material accountability questions: blocked owners or owners
   explicitly marked `confirmation: needs_user`.
 - Keep owner labels portable and non-sensitive by default.
-- Next, connect recurring goal templates and optional calendar context to
-  handoff owners without storing private schedules by default.
+- Next, connect recurring goal templates to handoff owners without storing
+  private routines by default.
 
 ### Open Questions
 
@@ -326,18 +326,12 @@ the dashboard.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Optional Calendar Context** (`p1`)
-  - Source: self-check
-  - Capability: `optional_calendar_context`
-  - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Private Memory Boundary** (`p2`)
+- **Private Memory Boundary** (`p1`)
   - Source: self-check
   - Capability: `private_memory_boundary`
   - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Recurring Goal Templates** (`p2`)
   - Source: self-check
   - Capability: `recurring_goal_templates`

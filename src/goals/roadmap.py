@@ -20,7 +20,6 @@ _KNOWN_CAPABILITIES = {
     "cross-project memory sync": "cross_project_memory_sync",
     "handoff owner registry": "handoff_owner_registry",
     "mandatory external review gate": "mandatory_external_review_gate",
-    "optional calendar context": "optional_calendar_context",
     "parallel worktree merge gates": "parallel_worktree_merge_gates",
     "permission policy registry": "permission_policy_registry",
     "private memory boundary": "private_memory_boundary",
