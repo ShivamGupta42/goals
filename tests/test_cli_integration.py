@@ -620,9 +620,7 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
     assert "Current Checkpoint" in brief.stdout
     assert "Waiting on: you" in brief.stdout
 
-    blocked_review = run_unchecked(
-        ["python", "-m", "goals.cli", "phase", "review", "P1"], worktree
-    )
+    blocked_review = run_unchecked(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
     assert blocked_review.returncode == 1
     assert "needs_human" in blocked_review.stdout
 
@@ -682,9 +680,7 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
         ],
         worktree,
     )
-    blocked_accept = run_unchecked(
-        ["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree
-    )
+    blocked_accept = run_unchecked(["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree)
     assert blocked_accept.returncode == 1
     assert "Required checkpoint must pass or be waived" in blocked_accept.stdout
     run(

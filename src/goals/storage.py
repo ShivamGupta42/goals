@@ -179,9 +179,7 @@ def _phase(snapshot: GoalSnapshot, phase_id: str):
     raise GoalsError(f"Unknown phase id: {phase_id}")
 
 
-def _upsert_checkpoint(
-    checkpoints: list[PhaseCheckpoint], checkpoint: PhaseCheckpoint
-) -> None:
+def _upsert_checkpoint(checkpoints: list[PhaseCheckpoint], checkpoint: PhaseCheckpoint) -> None:
     for index, existing in enumerate(checkpoints):
         if existing.checkpoint_id == checkpoint.checkpoint_id:
             checkpoints[index] = checkpoint

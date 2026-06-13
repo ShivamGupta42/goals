@@ -54,7 +54,9 @@ def build_current_checkpoint_brief(snapshot: GoalSnapshot) -> CurrentCheckpointB
             what_changed="No current phase is selected.",
             proof=["All phases are accepted."] if str(snapshot.status) == "complete" else [],
             unresolved=[],
-            next_safe_step="No action is needed." if str(snapshot.status) == "complete" else "Select or repair the current phase.",
+            next_safe_step="No action is needed."
+            if str(snapshot.status) == "complete"
+            else "Select or repair the current phase.",
         )
 
     checkpoint = _active_checkpoint(phase)
@@ -125,10 +127,7 @@ def _active_checkpoint(phase: Phase) -> PhaseCheckpoint | None:
 
 
 def _waiting_on(phase: Phase, blockers: list[str]) -> str:
-    if any(
-        checkpoint_waits_on_user(checkpoint)
-        for checkpoint in phase.checkpoints
-    ):
+    if any(checkpoint_waits_on_user(checkpoint) for checkpoint in phase.checkpoints):
         return "you"
     if blockers or phase.status != PhaseStatus.ACCEPTED:
         return "agent"

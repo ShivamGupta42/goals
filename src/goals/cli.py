@@ -372,12 +372,12 @@ def checkpoint_record(
             required=required,
             needs_user=needs_user or status == CheckpointStatus.NEEDS_USER,
             summary=summary or (existing.summary if existing else ""),
-            evidence_refs=evidence_refs if evidence_refs is not None else (
-                existing.evidence_refs if existing else []
-            ),
-            decision_refs=decision_refs if decision_refs is not None else (
-                existing.decision_refs if existing else []
-            ),
+            evidence_refs=evidence_refs
+            if evidence_refs is not None
+            else (existing.evidence_refs if existing else []),
+            decision_refs=decision_refs
+            if decision_refs is not None
+            else (existing.decision_refs if existing else []),
             created_at=existing.created_at if existing else utc_now(),
             updated_at=utc_now(),
             notes=notes or (existing.notes if existing else ""),
