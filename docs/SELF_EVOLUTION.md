@@ -120,15 +120,19 @@ point of view, not from the storage model.
 Agents should run the issue report before escalating:
 
 ```bash
+uv run goals brief
 uv run goals issues
 uv run goals merge-check
 ```
 
-The report separates important user questions from agent-side repair actions.
-It is meant to help agents discover blockers, missing proof, failed reviews,
-unresolved source claims, and state mismatches before asking the user for help.
-The issue stress evaluator keeps this promise honest by testing both sides:
-what should be surfaced to the user and what the agent should repair itself.
+The brief is the non-technical first pass: what is happening, what needs the
+user, what the agent can do next, and what proof exists. Agents should use this
+wording when they interrupt the user. The issue report separates important user
+questions from agent-side repair actions. It is meant to help agents discover
+blockers, missing proof, failed reviews, unresolved source claims, and state
+mismatches before asking the user for help. The issue stress evaluator keeps
+this promise honest by testing both sides: what should be surfaced to the user
+and what the agent should repair itself.
 
 `merge-check` is the coordinator pass before merging. It is designed for
 technical users and non-technical project owners: it explains whether migration

@@ -31,6 +31,7 @@ uv run goals create "Add tags to tasks and update tests" \
   --why "Make tasks easier to organize." \
   --adapter claude
 uv run goals status
+uv run goals brief
 uv run goals issues
 uv run goals merge-check
 uv run goals run --adapter codex
@@ -79,9 +80,14 @@ uv run goals phase accept P1
 Agents can explain only important decisions with active goal history:
 
 ```bash
+uv run goals brief
 uv run goals decision brief
 uv run goals decision explain --file decision.json --level basic
 ```
+
+`brief` is the first non-technical view. It answers: what is happening, what
+needs your answer, what the agent can do next, what proof exists, and what
+technical details are available if someone wants to inspect them.
 
 `decision brief` answers the simple end-user question: what needs my answer,
 what does Goals recommend, what should I reply, what happens next, and how many
@@ -94,13 +100,15 @@ Agents can ask Goals what could block the current goal before interrupting the
 user:
 
 ```bash
+uv run goals brief
 uv run goals issues
 uv run goals merge-check
 ```
 
-The issue report checks missing proof, failed gates, unresolved source claims,
-important decisions, blockers, and state mismatches. By default it is a
-read-only report; use `--strict` when a script should fail on blocking issues.
+The goal brief gives the user-safe summary. The issue report checks missing
+proof, failed gates, unresolved source claims, important decisions, blockers,
+and state mismatches. By default it is a read-only report; use `--strict` when a
+script should fail on blocking issues.
 
 `merge-check` is the coordinator's pre-merge view. It looks for migration files
 without recorded ordering proof, parallel-worktree reconciliation gaps,

@@ -59,6 +59,7 @@ CURRENT_CAPABILITIES = {
     "local_ecosystem_discovery",
     "mode_a_handoff",
     "merge_readiness_check",
+    "non_technical_goal_brief",
     "plugin_capability_discovery",
     "phase_plan",
     "project_history_decision_context",
@@ -79,6 +80,7 @@ CORE_GOAL_CAPABILITIES = [
     "review_gate",
     "issue_discovery",
     "important_decision_filter",
+    "non_technical_goal_brief",
     "end_user_decision_experience",
     "end_user_visualization",
 ]
@@ -1378,6 +1380,8 @@ def _supported_capabilities(
         "goals merge-check" in check for check in recommended_checks
     ):
         supported.add("merge_readiness_check")
+    if "goals brief" in prompt or any("goals brief" in check for check in recommended_checks):
+        supported.add("non_technical_goal_brief")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
     if "Source evidence:" in prompt and "goals source add" in prompt:

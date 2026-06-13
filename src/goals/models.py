@@ -198,6 +198,35 @@ class DecisionBrief(BaseModel):
     agent_handled_summary: str = ""
 
 
+class GoalBriefAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    plain_summary: str
+    why_it_matters: str = ""
+    suggested_reply: str = ""
+    what_happens_next: str = ""
+    priority: Literal["blocking", "important", "later"] = "important"
+    source: Literal["decision", "issue", "merge", "proof", "state"] = "issue"
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class GoalBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    objective: str
+    status: str
+    current_step: str
+    waiting_on: Literal["you", "agent", "no one"]
+    summary: str
+    progress: str
+    proof: str
+    user_actions: list[GoalBriefAction] = Field(default_factory=list)
+    agent_actions: list[GoalBriefAction] = Field(default_factory=list)
+    technical_details: list[str] = Field(default_factory=list)
+
+
 class EcosystemRecommendation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

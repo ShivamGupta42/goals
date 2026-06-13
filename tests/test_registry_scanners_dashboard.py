@@ -68,6 +68,9 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     text = output.read_text()
     assert "<script>alert(1)</script>" not in text
     assert "&lt;script&gt;" in text
+    assert "Goal Brief" in text
+    assert "What Needs Your Answer" in text
+    assert "What the Agent Can Do Next" in text
     assert "Progress" in text
     assert "Issues" in text
     assert "Decisions Needed" in text
