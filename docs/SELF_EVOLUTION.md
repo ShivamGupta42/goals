@@ -72,19 +72,23 @@ Goals can inspect local skill roots, plugin roots, and adapter executables:
 
 ```bash
 uv run goals ecosystem recommend
+uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals ecosystem audit
 ```
 
-`recommend` uses portable registries to route the current phase. `discover`
-looks at local `SKILL.md` files, common plugin metadata files, and Claude/Codex
-adapter availability, then suggests registry additions for tools that are
-present locally but missing from the repo. Discovery output is sanitized by
-default; it labels sources without printing local filesystem paths. `sync` turns
-those suggestions into a reviewed registry update plan; it is a dry run unless
-`--apply` is passed. `audit` checks whether registry entries are specific enough
-to route, safe enough for handoff prompts, and ready for validation-gated
+`recommend` uses portable registries to route the current phase. `merge`
+combines recommendations from multiple agents or adapter shapes into one
+coordinator view. It ranks consensus, records command-hint disagreements as
+agent-side routing work, and only asks the user about approval-required tools.
+`discover` looks at local `SKILL.md` files, common plugin metadata files, and
+Claude/Codex adapter availability, then suggests registry additions for tools
+that are present locally but missing from the repo. Discovery output is sanitized
+by default; it labels sources without printing local filesystem paths. `sync`
+turns those suggestions into a reviewed registry update plan; it is a dry run
+unless `--apply` is passed. `audit` checks whether registry entries are specific
+enough to route, safe enough for handoff prompts, and ready for validation-gated
 self-evolution.
 
 ## Memory Loop

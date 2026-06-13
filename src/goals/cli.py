@@ -20,7 +20,12 @@ from goals.decisions import (
     render_decision_explanation,
 )
 from goals.discovery import discover_local_ecosystem, render_discovery_report
-from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.ecosystem import (
+    merge_agent_recommendations,
+    recommend_ecosystem_tools,
+    render_recommendation_merge_report,
+    render_recommendations,
+)
 from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
 from goals.evaluations import (
     dogfood_goal_scenarios,
@@ -48,6 +53,8 @@ from goals.merge_readiness import analyze_merge_readiness, render_merge_readines
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     Decision,
+    AgentRecommendationSet,
+    EcosystemRecommendation,
     Event,
     EventType,
     Evidence,
@@ -384,6 +391,34 @@ def ecosystem_recommend(
             )
         else:
             typer.echo(render_recommendations(recommendations))
+
+    _handle(run)
+
+
+@ecosystem_app.command("merge")
+def ecosystem_merge(
+    file: Optional[list[Path]] = typer.Option(
+        None,
+        "--file",
+        "-f",
+        help="Agent recommendation JSON file. Repeat for multiple agents.",
+    ),
+    limit: int = typer.Option(8, help="Maximum merged recommendations."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Merge recommendations from multiple agents into one coordinator view."""
+
+    def run():
+        if file:
+            recommendation_sets = _load_agent_recommendation_sets(file)
+        else:
+            snapshot = load_active_snapshot(Path.cwd())
+            recommendation_sets = _default_agent_recommendation_sets(Path.cwd(), snapshot, limit)
+        report = merge_agent_recommendations(recommendation_sets, limit=limit)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_recommendation_merge_report(report))
 
     _handle(run)
 
@@ -866,6 +901,63 @@ def _optional_snapshot(cwd: Path):
         return load_active_snapshot(cwd)
     except GoalsError:
         return None
+
+
+def _default_agent_recommendation_sets(
+    cwd: Path, snapshot, limit: int
+) -> list[AgentRecommendationSet]:
+    recommendations = recommend_ecosystem_tools(cwd, snapshot, limit=limit)
+    phase_id = snapshot.current_phase or ""
+    return [
+        AgentRecommendationSet(
+            agent_id="claude",
+            adapter="claude",
+            phase_id=phase_id,
+            recommendations=recommendations,
+            notes="Default Claude-shaped Mode A recommendations.",
+        ),
+        AgentRecommendationSet(
+            agent_id="codex",
+            adapter="codex",
+            phase_id=phase_id,
+            recommendations=recommendations,
+            notes="Default Codex-shaped Mode A recommendations.",
+        ),
+    ]
+
+
+def _load_agent_recommendation_sets(files: list[Path]) -> list[AgentRecommendationSet]:
+    loaded: list[AgentRecommendationSet] = []
+    for path in files:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        loaded.extend(_agent_recommendation_sets_from_data(data, path.stem))
+    if not loaded:
+        raise GoalsError("No agent recommendations found.")
+    return loaded
+
+
+def _agent_recommendation_sets_from_data(
+    data, default_agent_id: str
+) -> list[AgentRecommendationSet]:
+    if isinstance(data, dict) and "recommendations" in data:
+        return [AgentRecommendationSet.model_validate(data)]
+    if isinstance(data, dict) and {"kind", "name"}.issubset(data):
+        return [
+            AgentRecommendationSet(
+                agent_id=default_agent_id,
+                recommendations=[EcosystemRecommendation.model_validate(data)],
+            )
+        ]
+    if isinstance(data, list):
+        if all(isinstance(item, dict) and "recommendations" in item for item in data):
+            return [AgentRecommendationSet.model_validate(item) for item in data]
+        return [
+            AgentRecommendationSet(
+                agent_id=default_agent_id,
+                recommendations=[EcosystemRecommendation.model_validate(item) for item in data],
+            )
+        ]
+    raise GoalsError("Recommendation file must contain an agent set or recommendation list.")
 
 
 def _validate_choice(value: str, choices: set[str], label: str) -> str:

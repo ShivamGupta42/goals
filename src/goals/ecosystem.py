@@ -6,7 +6,15 @@ from typing import Any
 
 import yaml
 
-from goals.models import EcosystemRecommendation, GoalSnapshot, Phase
+from goals.models import (
+    AgentRecommendationSet,
+    EcosystemRecommendation,
+    EcosystemRecommendationConflict,
+    EcosystemRecommendationMergeReport,
+    GoalSnapshot,
+    MergedEcosystemRecommendation,
+    Phase,
+)
 
 STOPWORDS = {
     "acceptance",
@@ -78,6 +86,192 @@ def render_recommendations(recommendations: list[EcosystemRecommendation]) -> st
         )
         for rec in recommendations
     )
+
+
+def merge_agent_recommendations(
+    recommendation_sets: list[AgentRecommendationSet],
+    *,
+    limit: int = 8,
+) -> EcosystemRecommendationMergeReport:
+    """Merge multiple agents' tool recommendations into one coordinator view."""
+
+    grouped: dict[
+        tuple[str, str], list[tuple[AgentRecommendationSet, EcosystemRecommendation]]
+    ] = {}
+    for recommendation_set in recommendation_sets:
+        for recommendation in recommendation_set.recommendations:
+            key = (recommendation.kind, recommendation.name)
+            grouped.setdefault(key, []).append((recommendation_set, recommendation))
+
+    merged = [_merge_group(items) for items in grouped.values()]
+    merged.sort(
+        key=lambda item: (
+            -item.support_count,
+            item.user_approval_required,
+            -item.confidence,
+            item.kind,
+            item.name,
+        )
+    )
+    selected = merged[:limit]
+    conflicts = _recommendation_conflicts(grouped)
+    user_questions = _recommendation_user_questions(selected, conflicts)
+    agent_actions = _recommendation_agent_actions(selected, conflicts)
+    return EcosystemRecommendationMergeReport(
+        summary=(
+            f"Merged {sum(len(item.recommendations) for item in recommendation_sets)} "
+            f"recommendation(s) from {len(recommendation_sets)} agent(s): "
+            f"{len(selected)} selected, {len(conflicts)} conflict(s), "
+            f"{len(user_questions)} user-facing question(s)."
+        ),
+        agent_count=len(recommendation_sets),
+        recommendations=selected,
+        conflicts=conflicts,
+        user_questions=user_questions,
+        agent_actions=agent_actions,
+    )
+
+
+def render_recommendation_merge_report(report: EcosystemRecommendationMergeReport) -> str:
+    lines = [
+        "# Cross-Agent Ecosystem Recommendation Merge",
+        "",
+        report.summary,
+        "",
+        "## Needs The User",
+        _bullets(report.user_questions or ["No tool-routing decision is waiting on the user."]),
+        "",
+        "## Agent Can Use",
+    ]
+    if not report.recommendations:
+        lines.append("- No merged recommendations.")
+    for recommendation in report.recommendations:
+        approval = " User approval required." if recommendation.user_approval_required else ""
+        lines.append(
+            f"- {recommendation.kind}: {recommendation.name} ({recommendation.label}) "
+            f"supported by {recommendation.support_count} agent(s). "
+            f"{recommendation.reason}{approval}"
+        )
+        if recommendation.command_hint:
+            lines.append(f"  Command hint: `{recommendation.command_hint}`")
+    lines.extend(["", "## Conflicts"])
+    if not report.conflicts:
+        lines.append("- No recommendation conflicts.")
+    for conflict in report.conflicts:
+        marker = " user" if conflict.needs_user else ""
+        lines.append(f"- [{conflict.severity.upper()}{marker}] {conflict.summary}")
+        if conflict.options:
+            lines.append(f"  Options: {', '.join(conflict.options)}")
+    lines.extend(["", "## Agent Actions", _bullets(report.agent_actions or ["No action needed."])])
+    return "\n".join(lines) + "\n"
+
+
+def _merge_group(
+    items: list[tuple[AgentRecommendationSet, EcosystemRecommendation]],
+) -> MergedEcosystemRecommendation:
+    first = items[0][1]
+    agent_ids = _dedupe([item[0].agent_id for item in items])
+    reasons = _dedupe([_sanitize_text(item[1].reason) for item in items if item[1].reason])
+    command_hints = _dedupe(
+        [_sanitize_text(item[1].command_hint) for item in items if item[1].command_hint]
+    )
+    registries = _dedupe([item[1].source_registry for item in items if item[1].source_registry])
+    confidence = sum(item[1].confidence for item in items) / len(items)
+    user_approval_required = any(item[1].user_approval_required for item in items)
+    reason = f"{len(agent_ids)} agent(s) recommended this. " + (
+        reasons[0] if reasons else "Matches the current goal context."
+    )
+    return MergedEcosystemRecommendation(
+        kind=first.kind,
+        name=first.name,
+        label=first.label,
+        reason=reason,
+        confidence=min(confidence + (0.1 * (len(agent_ids) - 1)), 1.0),
+        command_hint=command_hints[0] if len(command_hints) == 1 else "",
+        source_registry=registries[0] if registries else first.source_registry,
+        user_approval_required=user_approval_required,
+        support_count=len(agent_ids),
+        agent_ids=agent_ids,
+        reasons=reasons,
+    )
+
+
+def _recommendation_conflicts(
+    grouped: dict[tuple[str, str], list[tuple[AgentRecommendationSet, EcosystemRecommendation]]],
+) -> list[EcosystemRecommendationConflict]:
+    conflicts: list[EcosystemRecommendationConflict] = []
+    for (kind, name), items in grouped.items():
+        agent_ids = _dedupe([item[0].agent_id for item in items])
+        command_hints = _dedupe(
+            [_sanitize_text(item[1].command_hint) for item in items if item[1].command_hint]
+        )
+        approval_values = {item[1].user_approval_required for item in items}
+        if len(command_hints) > 1:
+            conflicts.append(
+                EcosystemRecommendationConflict(
+                    severity="p2",
+                    kind=kind,  # type: ignore[arg-type]
+                    name=name,
+                    summary=f"Agents disagree on the command hint for {kind} {name}.",
+                    agent_ids=agent_ids,
+                    options=command_hints,
+                    needs_user=False,
+                )
+            )
+        if len(approval_values) > 1:
+            conflicts.append(
+                EcosystemRecommendationConflict(
+                    severity="p1",
+                    kind=kind,  # type: ignore[arg-type]
+                    name=name,
+                    summary=f"Agents disagree on whether {kind} {name} needs approval.",
+                    agent_ids=agent_ids,
+                    options=["Require approval", "Treat as agent-routine"],
+                    needs_user=False,
+                )
+            )
+    return conflicts
+
+
+def _recommendation_user_questions(
+    recommendations: list[MergedEcosystemRecommendation],
+    conflicts: list[EcosystemRecommendationConflict],
+) -> list[str]:
+    questions = [
+        f"Approve use of {item.kind} {item.name}?"
+        for item in recommendations
+        if item.user_approval_required
+    ]
+    questions.extend(conflict.summary for conflict in conflicts if conflict.needs_user)
+    return _dedupe(questions)
+
+
+def _recommendation_agent_actions(
+    recommendations: list[MergedEcosystemRecommendation],
+    conflicts: list[EcosystemRecommendationConflict],
+) -> list[str]:
+    actions = [
+        (
+            f"Use {item.kind} {item.name} for the next phase; "
+            f"{'ask for approval first' if item.user_approval_required else 'record it as agent-selected'}."
+        )
+        for item in recommendations
+    ]
+    actions.extend(
+        f"Resolve routing conflict without user input: {conflict.summary}"
+        for conflict in conflicts
+        if not conflict.needs_user
+    )
+    return _dedupe(actions)
+
+
+def _sanitize_text(text: str) -> str:
+    sanitized = text.replace(str(Path.home()), "~")
+    user_root = "/" + "Users" + "/"
+    temp_root = "/" + "private" + "/" + "var" + "/" + "folders" + "/"
+    sanitized = re.sub(re.escape(user_root) + r"[^/\s]+", "~", sanitized)
+    sanitized = re.sub(re.escape(temp_root) + r"[^\s]+", "<temp>", sanitized)
+    return sanitized
 
 
 def _registry_root(worktree: Path) -> Path:
@@ -241,3 +435,7 @@ def _dedupe(items: list[str]) -> list[str]:
             seen.add(item)
             result.append(item)
     return result
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items)

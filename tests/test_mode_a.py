@@ -44,6 +44,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals ecosystem discover" in plan.prompt
     assert "skills/plugins/adapters" in plan.prompt
     assert "goals ecosystem sync" in plan.prompt
+    assert "goals ecosystem merge" in plan.prompt
     assert "Self-evolution memory:" in plan.prompt
     assert "goals roadmap suggest" in plan.prompt
     assert "goals memory record" in plan.prompt

@@ -40,6 +40,7 @@ uv run goals architecture show
 uv run goals architecture brief
 uv run goals decision brief
 uv run goals ecosystem recommend
+uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals source list
@@ -134,6 +135,7 @@ Agents can also ask Goals which skills or plugins fit the current phase:
 
 ```bash
 uv run goals ecosystem recommend
+uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals ecosystem audit
@@ -141,10 +143,13 @@ uv run goals ecosystem audit
 
 Mode A handoffs include these recommendations automatically. Goals does not run
 external tools for the agent; it explains what looks relevant and whether user
-approval is needed. Discovery inspects local skills/plugins/adapters and suggests
-portable registry additions without printing local filesystem paths by default.
-Sync is a dry run unless `--apply` is passed. Audit checks whether registry
-entries are specific, safe, portable, and useful enough for automatic routing.
+approval is needed. `ecosystem merge` combines recommendations from multiple
+agents into one coordinator view, deduplicates consensus picks, keeps routine
+routing with the agent, and surfaces approval-required tools as plain user
+questions. Discovery inspects local skills/plugins/adapters and suggests portable
+registry additions without printing local filesystem paths by default. Sync is a
+dry run unless `--apply` is passed. Audit checks whether registry entries are
+specific, safe, portable, and useful enough for automatic routing.
 
 Agents can record repeated friction so future goals improve:
 
