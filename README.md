@@ -32,6 +32,8 @@ uv run goals create "Add tags to tasks and update tests" \
   --adapter claude
 uv run goals status
 uv run goals brief
+uv run goals checkpoint current
+uv run goals checkpoint list
 uv run goals issues
 uv run goals merge-check
 uv run goals run --adapter codex
@@ -97,9 +99,30 @@ shell-escaping a large JSON string:
 
 ```bash
 uv run goals phase evidence P1 --file .agent-workflow/goals/<goal-id>/evidence-p1.json
+uv run goals checkpoint current
 uv run goals phase review P1
 uv run goals phase accept P1
 ```
+
+Required checkpoints are phase-level stop signs. They let an agent record that a
+specific piece of validation, approval, understanding, external review, or
+handoff is still needed before the phase can be reviewed or accepted:
+
+```bash
+uv run goals checkpoint record P1 CP-plan \
+  --title "Confirm the plan" \
+  --kind human_validation \
+  --status needs_user \
+  --needs-user \
+  --summary "The user needs to confirm the plan before review."
+uv run goals checkpoint current
+uv run goals checkpoint waive P1 CP-plan --reason "User confirmed the plan in chat."
+```
+
+`checkpoint current` is the plain-language checkpoint readout. It shows what is
+being validated, who is waiting, what proof exists, what is unresolved, and the
+next safe step. Required checkpoints must pass or be waived before phase review
+and acceptance can move forward.
 
 Agents can explain only important decisions with active goal history:
 
@@ -152,14 +175,16 @@ user:
 
 ```bash
 uv run goals brief
+uv run goals checkpoint current
 uv run goals issues
 uv run goals merge-check
 ```
 
-The goal brief gives the user-safe summary. The issue report checks missing
-proof, failed gates, unresolved source claims, important decisions, blockers,
-and state mismatches. By default it is a read-only report; use `--strict` when a
-script should fail on blocking issues.
+The goal brief gives the user-safe summary and includes the current checkpoint.
+The issue report checks missing proof, incomplete required checkpoints, failed
+gates, unresolved source claims, important decisions, blockers, and state
+mismatches. By default it is a read-only report; use `--strict` when a script
+should fail on blocking issues.
 
 `merge-check` is the coordinator's pre-merge view. It looks for migration files
 without recorded ordering proof, scans sibling worktrees when Git exposes them,
@@ -354,7 +379,9 @@ uv run goals architecture update --file architecture.json
 
 The dashboard is the simple status view for end users. `architecture brief`
 summarizes what is built, what lacks evidence, what is blocked, and what to
-review next. `architecture check` compares changed code files and architecture
+review next. The dashboard also shows the Current Checkpoint so non-technical
+users can see whether the agent is waiting on them, waiting on proof, or safe to
+continue. `architecture check` compares changed code files and architecture
 evidence references with the worktree so agents can catch stale map evidence or
 code changes that are not represented in the map. `architecture.md` is the
 deeper Markdown/Mermaid view for people who want to question what is built,

@@ -325,10 +325,18 @@ choices include recommendation, options, risk, reversibility, confidence, known
 context, uncertainty, and a suggested reply, while routine reversible choices
 stay with the agent.
 
+Checkpoints apply the same idea to phase progress. `goals checkpoint current`
+shows the current validation point in plain language: what is being checked, who
+is waiting, what proof exists, what remains unresolved, and the next safe step.
+Required checkpoints must pass or be waived before a phase can be reviewed or
+accepted. This lets the agent keep working on repairable gaps while stopping
+only for approvals, validation, or understanding that genuinely needs the user.
+
 Visualization experience means:
 
 - the user can see what is happening,
 - the user can see whether the goal is blocked,
+- the user can see the current checkpoint and next safe step,
 - the user can see what issue needs attention,
 - the user can see what proof exists,
 - technical users can inspect details without forcing non-technical users to
@@ -378,6 +386,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
   surfacing blocked or restricted usage rights,
 - code-derived architecture checks that compare changed files and evidence refs
   with the goal architecture map,
+- checkpoints that make phase validation, approvals, and user-needed pauses
+  explicit,
 - a dashboard that makes progress and blockers visible,
 - decision explanations that non-technical users can understand.
 
