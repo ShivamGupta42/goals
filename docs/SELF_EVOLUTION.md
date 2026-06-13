@@ -106,12 +106,18 @@ Goals can record repeated friction and derive improvement suggestions:
 uv run goals memory record "Repeated setup confusion" --area skill --kind friction
 uv run goals memory absorb
 uv run goals memory suggest
+uv run goals memory sync ../similar-goals-project
 ```
 
 Use `record` when an agent notices a reusable issue during work. Use `absorb`
 after a goal has evidence, blockers, failed reviews, or learnings that should
 become reusable memory. Suggestions are surfaced when a pattern repeats or a gap
 is high severity.
+
+Use `memory sync` when another Goals project has already exposed useful
+friction. It is a dry run by default and imports only sanitized suggestions with
+`--apply`; raw source summaries and evidence refs stay out unless
+`--include-private` is explicitly used.
 
 Memory is local generated state under `.agent-workflow/self-evolution/`. It is
 not meant for public commits.

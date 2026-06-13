@@ -170,7 +170,10 @@ routing can now merge multiple agents' tool recommendations into one coordinator
 view with consensus ranking, conflict notes, and approval-required user
 questions. Permission policy checks now give Mode A agents a simple
 registry-backed way to keep local/reversible choices moving while escalating
-external, costly, destructive, or production-affecting actions.
+external, costly, destructive, or production-affecting actions. Cross-project
+memory sync can now inspect another Goals project or memory file, dry-run
+sanitized lesson imports, and apply them to the current project's local memory
+only when requested.
 
 ### Direction
 
@@ -181,6 +184,8 @@ external, costly, destructive, or production-affecting actions.
   history and private context.
 - Use memory to recommend small improvements to skills, phases, gates, docs, or
   registries after dogfood runs.
+- Use `goals memory sync PATH` when a similar Goals project already learned a
+  relevant lesson; keep it dry-run-first and import sanitized suggestions only.
 - Use coverage reports to spot goal families that need new scenarios, gates, or
   public product boundaries.
 - Use `goals eval self-check` as the default self-evolution health report before
@@ -204,10 +209,11 @@ external, costly, destructive, or production-affecting actions.
 
 ### Open Questions
 
-- Should memory remain project-local, or support an optional user-wide memory?
 - How should parallel worktree memories be reconciled?
 - When should a memory suggestion become a blocking user decision instead of an
   agent-handled improvement?
+- Should Goals add a separate user-wide memory registry, or keep cross-project
+  sync explicit and project-selected?
 
 ## Source Evidence
 
@@ -243,34 +249,34 @@ decision.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Cross Project Memory Sync** (`p1`)
-  - Source: self-check
-  - Capability: `cross_project_memory_sync`
-  - Why: Self-check recommends cross-project memory sync as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible cross-project memory sync slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Professional Boundary Templates** (`p2`)
+- **Professional Boundary Templates** (`p1`)
   - Source: self-check
   - Capability: `professional_boundary_templates`
   - Why: Self-check recommends professional boundary templates as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible professional boundary templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Asset Provenance Checks** (`p2`)
   - Source: self-check
   - Capability: `asset_provenance_checks`
   - Why: Self-check recommends asset provenance checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible asset provenance checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Citation Quality Review** (`p2`)
   - Source: self-check
   - Capability: `citation_quality_review`
   - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Code Derived Architecture Checks** (`p2`)
   - Source: self-check
   - Capability: `code_derived_architecture_checks`
   - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Creative Variant Comparison** (`p2`)
+  - Source: self-check
+  - Capability: `creative_variant_comparison`
+  - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

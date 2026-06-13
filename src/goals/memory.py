@@ -6,6 +6,8 @@ from goals.git_ops import git_root
 from goals.models import (
     GateVerdict,
     GoalSnapshot,
+    MemorySyncCandidate,
+    MemorySyncPlan,
     SelfEvolutionEntry,
     SelfEvolutionMemory,
     SelfEvolutionSuggestion,
@@ -50,6 +52,148 @@ def append_memory_entry(
         memory.entries.append(entry)
     save_memory(cwd, memory, snapshot)
     return memory
+
+
+def plan_memory_sync(
+    cwd: Path,
+    source: Path,
+    snapshot: GoalSnapshot | None = None,
+    *,
+    include_private: bool = False,
+    limit: int = 20,
+) -> MemorySyncPlan:
+    source_path = resolve_memory_source(source)
+    source_memory = _load_memory_file(source_path)
+    target_path = memory_path(cwd, snapshot)
+    if source_path == target_path.resolve():
+        raise GoalsError("Cross-project memory source is the current project memory.")
+    target_memory = load_memory(cwd, snapshot)
+    source_label = _source_label(source_path) if include_private else "external-project"
+    existing_notes = {(entry.area, entry.note) for entry in target_memory.entries}
+    candidates: list[MemorySyncCandidate] = []
+    skipped: list[MemorySyncCandidate] = []
+    for suggestion in derive_memory_suggestions(source_memory)[:limit]:
+        candidate = _sync_candidate(suggestion, source_label, include_private)
+        note = _sync_note(candidate, include_private)
+        if (candidate.area, note) in existing_notes:
+            skipped.append(candidate.model_copy(update={"skip_reason": "Already imported."}))
+            continue
+        candidates.append(candidate)
+    if candidates:
+        summary = (
+            f"Prepared {len(candidates)} cross-project memory import(s) from {source_label}. "
+            "Dry run only; use --apply after reviewing."
+        )
+        agent_actions = [
+            "Review the importable suggestions.",
+            "Apply only if the lessons are relevant to this project.",
+        ]
+    else:
+        summary = f"No new actionable cross-project memory suggestions found in {source_label}."
+        agent_actions = [
+            "Keep recording local friction with `goals memory record` until patterns repeat."
+        ]
+    return MemorySyncPlan(
+        source_path=str(source_path),
+        source_label=source_label,
+        target_path=str(target_path),
+        dry_run=True,
+        include_private=include_private,
+        candidates=candidates,
+        skipped=skipped,
+        summary=summary,
+        agent_actions=agent_actions,
+        user_questions=[],
+    )
+
+
+def apply_memory_sync(
+    cwd: Path,
+    plan: MemorySyncPlan,
+    snapshot: GoalSnapshot | None = None,
+) -> MemorySyncPlan:
+    memory = load_memory(cwd, snapshot)
+    existing_notes = {(entry.area, entry.note) for entry in memory.entries}
+    imported = 0
+    for candidate in plan.candidates:
+        note = _sync_note(candidate, plan.include_private)
+        if (candidate.area, note) in existing_notes:
+            continue
+        memory.entries.append(
+            SelfEvolutionEntry(
+                kind="learning",
+                area=candidate.area,  # type: ignore[arg-type]
+                note=note,
+                severity=candidate.severity,
+                goal_id=snapshot.goal_id if snapshot is not None else "",
+                phase_id=snapshot.current_phase if snapshot is not None else None,
+                evidence_refs=candidate.evidence_refs,
+            )
+        )
+        existing_notes.add((candidate.area, note))
+        imported += 1
+    if imported:
+        save_memory(cwd, memory, snapshot)
+    summary = (
+        f"Imported {imported} cross-project memory suggestion(s) from {plan.source_label}."
+        if imported
+        else f"No new cross-project memory suggestions imported from {plan.source_label}."
+    )
+    return plan.model_copy(
+        update={
+            "dry_run": False,
+            "imported_count": imported,
+            "summary": summary,
+            "agent_actions": [
+                "Run `goals memory suggest` to see how imported lessons affect this project.",
+                "Keep imported lessons local unless the user chooses to publish a sanitized change.",
+            ],
+        }
+    )
+
+
+def resolve_memory_source(source: Path) -> Path:
+    source = source.expanduser()
+    if source.is_dir():
+        source = source / ".agent-workflow" / "self-evolution" / "memory.json"
+    if not source.exists():
+        raise GoalsError(f"Cross-project memory source not found: {source}")
+    if not source.is_file():
+        raise GoalsError(f"Cross-project memory source is not a file: {source}")
+    return source.resolve()
+
+
+def render_memory_sync_plan(plan: MemorySyncPlan) -> str:
+    lines = [
+        "# Cross-Project Memory Sync",
+        "",
+        f"Mode: {'dry run' if plan.dry_run else 'applied'}",
+        f"Source: {plan.source_label}",
+        f"Importable suggestions: {len(plan.candidates)}",
+        f"Skipped suggestions: {len(plan.skipped)}",
+        f"Imported suggestions: {plan.imported_count}",
+        "",
+        plan.summary,
+    ]
+    if plan.candidates:
+        lines.extend(["", "## Importable Suggestions", ""])
+        for candidate in plan.candidates:
+            lines.extend(
+                [
+                    f"- {candidate.title} ({candidate.severity}, {candidate.occurrences} occurrence(s))",
+                    f"  Recommended change: {candidate.recommended_change}",
+                ]
+            )
+            if candidate.suggested_command:
+                lines.append(f"  Suggested command: `{candidate.suggested_command}`")
+    if plan.skipped:
+        lines.extend(["", "## Skipped Suggestions", ""])
+        for candidate in plan.skipped:
+            lines.append(f"- {candidate.title}: {candidate.skip_reason}")
+    lines.extend(["", "## Agent Actions", "", _bullets(plan.agent_actions)])
+    if plan.dry_run and plan.candidates:
+        lines.extend(["", "Run again with `--apply` to import the sanitized suggestions."])
+    return "\n".join(lines) + "\n"
 
 
 def absorb_goal_memory(cwd: Path, snapshot: GoalSnapshot) -> list[SelfEvolutionEntry]:
@@ -124,7 +268,9 @@ def derive_memory_suggestions(memory: SelfEvolutionMemory) -> list[SelfEvolution
                 occurrences=len(entries),
                 severity=severity,
                 evidence_refs=_evidence_refs(entries),
-                user_visible=severity == "high" or len(entries) >= 2,
+                user_visible=severity == "high"
+                or len(entries) >= 2
+                or _has_cross_project_memory(entries),
                 suggested_command=_suggested_command(area),
             )
         )
@@ -180,7 +326,11 @@ def _entry_key(entry: SelfEvolutionEntry) -> tuple[str, str, str, str | None]:
 
 
 def _is_actionable(entries: list[SelfEvolutionEntry]) -> bool:
-    return len(entries) >= 2 or any(entry.severity == "high" for entry in entries)
+    return (
+        len(entries) >= 2
+        or any(entry.severity == "high" for entry in entries)
+        or _has_cross_project_memory(entries)
+    )
 
 
 def _group_severity(entries: list[SelfEvolutionEntry]) -> str:
@@ -259,3 +409,60 @@ def _suggested_command(area: str) -> str:
         "test": "uv run pytest -q",
     }
     return commands.get(area, "")
+
+
+def _load_memory_file(path: Path) -> SelfEvolutionMemory:
+    try:
+        return SelfEvolutionMemory.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise GoalsError(f"Invalid cross-project memory at {path}: {exc}") from exc
+
+
+def _source_label(path: Path) -> str:
+    parts = path.parts
+    if ".agent-workflow" in parts:
+        index = parts.index(".agent-workflow")
+        if index > 0:
+            return parts[index - 1]
+    return path.stem
+
+
+def _sync_candidate(
+    suggestion: SelfEvolutionSuggestion,
+    source_label: str,
+    include_private: bool,
+) -> MemorySyncCandidate:
+    evidence_refs = [f"cross-project-memory:{source_label}:{suggestion.area}"]
+    if include_private:
+        evidence_refs.extend(suggestion.evidence_refs)
+    return MemorySyncCandidate(
+        source_label=source_label,
+        area=suggestion.area,
+        title=suggestion.title,
+        plain_summary=suggestion.plain_summary if include_private else "",
+        recommended_change=suggestion.recommended_change,
+        occurrences=suggestion.occurrences,
+        severity=suggestion.severity,
+        suggested_command=suggestion.suggested_command,
+        evidence_refs=sorted(set(evidence_refs)),
+    )
+
+
+def _sync_note(candidate: MemorySyncCandidate, include_private: bool) -> str:
+    note = (
+        f"Cross-project learning from {candidate.source_label}: {candidate.title}. "
+        f"Recommended change: {candidate.recommended_change}"
+    )
+    if include_private and candidate.plain_summary:
+        note += f" Source pattern: {candidate.plain_summary}"
+    return note
+
+
+def _has_cross_project_memory(entries: list[SelfEvolutionEntry]) -> bool:
+    return any(
+        ref.startswith("cross-project-memory:") for entry in entries for ref in entry.evidence_refs
+    )
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items) if items else "- None."

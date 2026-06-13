@@ -497,6 +497,38 @@ class SelfEvolutionMemory(BaseModel):
     updated_at: str = Field(default_factory=utc_now)
 
 
+class MemorySyncCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str = Field(default_factory=lambda: f"MS-{uuid4().hex[:8]}")
+    source_label: str
+    area: str
+    title: str
+    plain_summary: str
+    recommended_change: str
+    occurrences: int
+    severity: Literal["low", "medium", "high"] = "medium"
+    suggested_command: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    skip_reason: str = ""
+
+
+class MemorySyncPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str
+    source_label: str
+    target_path: str
+    dry_run: bool = True
+    include_private: bool = False
+    candidates: list[MemorySyncCandidate] = Field(default_factory=list)
+    skipped: list[MemorySyncCandidate] = Field(default_factory=list)
+    imported_count: int = 0
+    summary: str
+    agent_actions: list[str] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+
+
 class ArchitectureNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

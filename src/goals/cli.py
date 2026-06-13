@@ -44,9 +44,12 @@ from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
     absorb_goal_memory,
     append_memory_entry,
+    apply_memory_sync,
     derive_memory_suggestions,
     load_memory,
     memory_path,
+    plan_memory_sync,
+    render_memory_sync_plan,
     render_memory_suggestions,
 )
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
@@ -606,6 +609,45 @@ def memory_absorb() -> None:
         visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
         if visible:
             typer.echo(render_memory_suggestions(visible[:5]))
+
+    _handle(run)
+
+
+@memory_app.command("sync")
+def memory_sync(
+    source: Path = typer.Argument(
+        ...,
+        help="Another Goals project root or .agent-workflow/self-evolution/memory.json file.",
+    ),
+    apply_changes: bool = typer.Option(
+        False,
+        "--apply",
+        help="Import sanitized suggestions into this project's local memory.",
+    ),
+    include_private: bool = typer.Option(
+        False,
+        "--include-private",
+        help="Include source summaries and evidence refs. Off by default for privacy.",
+    ),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum suggestions to inspect."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Plan or apply sanitized memory imports from another Goals project."""
+
+    def run():
+        snapshot = _optional_snapshot(Path.cwd())
+        plan = plan_memory_sync(
+            Path.cwd(),
+            source,
+            snapshot,
+            include_private=include_private,
+            limit=limit,
+        )
+        result = apply_memory_sync(Path.cwd(), plan, snapshot) if apply_changes else plan
+        if json_output:
+            typer.echo(result.model_dump_json(indent=2))
+        else:
+            typer.echo(render_memory_sync_plan(result))
 
     _handle(run)
 
