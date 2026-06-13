@@ -12,6 +12,7 @@ Run the built-in scenario evaluator:
 uv run goals eval scenarios --adapter claude
 uv run goals eval scenarios --adapter codex
 uv run goals eval dogfood --adapter claude
+uv run goals eval coverage --adapter claude
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -35,6 +36,11 @@ checks whether each synthetic goal keeps user decisions small, documents what
 the agent can decide without interrupting the user, and names the proof required
 to accept the goal. This is the quick self-evolution check before and after
 larger product changes.
+
+`eval coverage` checks a wider matrix of representative goal families:
+personal, technical, business, research, creative, operations, high-stakes,
+ecosystem, and self-evolution. It shows which current capabilities cover each
+family and which planned capabilities should become future product work.
 
 ## Ecosystem Discovery
 

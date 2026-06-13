@@ -2,8 +2,11 @@ from pathlib import Path
 
 from goals.evaluations import (
     DEFAULT_GOAL_SCENARIOS,
+    DEFAULT_GOAL_USE_CASES,
     dogfood_goal_scenarios,
     evaluate_goal_scenarios,
+    evaluate_use_case_coverage,
+    render_coverage_report,
     render_dogfood_report,
 )
 
@@ -11,6 +14,21 @@ from goals.evaluations import (
 def test_default_scenarios_cover_core_goal_types() -> None:
     categories = {scenario.category for scenario in DEFAULT_GOAL_SCENARIOS}
     assert categories == {"personal", "technical", "business", "self_evolution", "ecosystem"}
+
+
+def test_default_use_cases_cover_broad_goal_families() -> None:
+    categories = {use_case.category for use_case in DEFAULT_GOAL_USE_CASES}
+    assert {
+        "personal",
+        "technical",
+        "business",
+        "research",
+        "creative",
+        "operations",
+        "high_stakes",
+        "ecosystem",
+        "self_evolution",
+    }.issubset(categories)
 
 
 def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: Path) -> None:
@@ -41,6 +59,7 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert any("local_ecosystem_discovery" in result.supported_capabilities for result in results)
     assert any("plugin_capability_discovery" in result.supported_capabilities for result in results)
     assert any("registry_sync_workflow" in result.supported_capabilities for result in results)
+    assert any("issue_discovery" in result.supported_capabilities for result in results)
     assert any("self_evolution_memory" in result.supported_capabilities for result in results)
     assert all("self_evolution_memory" not in result.planned_capabilities for result in results)
     assert any("source_registry" in result.supported_capabilities for result in results)
@@ -56,6 +75,39 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     personal = next(result for result in results if result.scenario_id == "personal-fitness-reset")
     assert "project_history_decision_context" in personal.supported_capabilities
     assert "project_history_decision_context" not in personal.planned_capabilities
+
+
+def test_use_case_coverage_reports_broad_current_and_future_fit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    for name, kind in {
+        "adapters.yml": "adapters",
+        "agents.yml": "agents",
+        "gates.yml": "gates",
+        "plugins.yml": "plugins",
+        "profiles.yml": "profiles",
+        "skills.yml": "skills",
+    }.items():
+        (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (True, f"{name} ready"))
+
+    report = evaluate_use_case_coverage(tmp_path, adapter="claude")
+    rendered = render_coverage_report(report)
+
+    assert report.passed is True
+    assert len(report.cases) >= 9
+    assert all(case.status == "covered" for case in report.cases)
+    assert any(case.category == "high_stakes" for case in report.cases)
+    assert any(
+        "professional_boundary_templates" in case.planned_capabilities for case in report.cases
+    )
+    assert "Goal Use-Case Coverage Report" in rendered
+    assert "Important User Decisions" in rendered
+    assert "Capability Coverage" in rendered
+    assert "high-stakes-boundary" in rendered
 
 
 def test_dogfood_report_checks_decision_burden_and_evidence(monkeypatch, tmp_path: Path) -> None:

@@ -42,6 +42,7 @@ uv run goals source list
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
+uv run goals eval coverage --adapter claude
 uv run goals adapter check codex
 ```
 
@@ -161,10 +162,16 @@ experience of decisions and visualization, not just backend state:
 ```bash
 uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
+uv run goals eval coverage --adapter claude
 ```
 
 `eval dogfood` prints a plain-language report for each synthetic goal type:
 what the user sees, what the agent can decide, what proof is required, and which
 gaps would block the goal.
+
+`eval coverage` checks a broader use-case matrix across personal, technical,
+business, research, creative, operations, high-stakes, ecosystem, and
+self-evolution goals. It separates current coverage from planned future
+capabilities.
 
 See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.

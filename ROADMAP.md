@@ -135,7 +135,9 @@ under `.agent-workflow/self-evolution/memory.json`, derives suggestions from
 repeated friction or high-severity gaps, includes those suggestions in Mode A
 handoffs, shows visible suggestions in the dashboard, and can run a synthetic
 dogfood report across personal, technical, business, self-evolution, and
-ecosystem goal types.
+ecosystem goal types. It also has a broader use-case coverage matrix for
+personal, technical, business, research, creative, operations, high-stakes,
+ecosystem, and self-evolution goals.
 
 ### Direction
 
@@ -146,6 +148,8 @@ ecosystem goal types.
   history and private context.
 - Use memory to recommend small improvements to skills, phases, gates, docs, or
   registries after dogfood runs.
+- Use coverage reports to spot goal families that need new scenarios, gates, or
+  public product boundaries.
 
 ### Open Questions
 
