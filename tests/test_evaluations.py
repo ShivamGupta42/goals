@@ -6,8 +6,10 @@ from goals.evaluations import (
     dogfood_goal_scenarios,
     evaluate_goal_scenarios,
     evaluate_use_case_coverage,
+    rehearse_goal_lifecycles,
     render_coverage_report,
     render_dogfood_report,
+    render_rehearsal_report,
 )
 
 
@@ -108,6 +110,20 @@ def test_use_case_coverage_reports_broad_current_and_future_fit(
     assert "Important User Decisions" in rendered
     assert "Capability Coverage" in rendered
     assert "high-stakes-boundary" in rendered
+
+
+def test_rehearsal_runs_real_temporary_goal_lifecycles() -> None:
+    report = rehearse_goal_lifecycles(scenarios=DEFAULT_GOAL_SCENARIOS[:3])
+    rendered = render_rehearsal_report(report)
+
+    assert report.passed is True
+    assert len(report.cases) == 3
+    assert all(case.status == "pass" for case in report.cases)
+    assert all(case.phases_accepted == 4 for case in report.cases)
+    assert all(case.dashboard_rendered for case in report.cases)
+    assert all(case.issue_count == 0 for case in report.cases)
+    assert "Goal Lifecycle Rehearsal Report" in rendered
+    assert "business-research-brief: pass" in rendered
 
 
 def test_dogfood_report_checks_decision_burden_and_evidence(monkeypatch, tmp_path: Path) -> None:

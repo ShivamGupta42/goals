@@ -137,7 +137,9 @@ handoffs, shows visible suggestions in the dashboard, and can run a synthetic
 dogfood report across personal, technical, business, self-evolution, and
 ecosystem goal types. It also has a broader use-case coverage matrix for
 personal, technical, business, research, creative, operations, high-stakes,
-ecosystem, and self-evolution goals.
+ecosystem, and self-evolution goals. Lifecycle rehearsal now creates temporary
+Git repositories and drives representative goals through evidence, issue
+discovery, review, acceptance, and dashboard rendering.
 
 ### Direction
 
@@ -150,6 +152,8 @@ ecosystem, and self-evolution goals.
   registries after dogfood runs.
 - Use coverage reports to spot goal families that need new scenarios, gates, or
   public product boundaries.
+- Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
+  is tested, not only described.
 
 ### Open Questions
 

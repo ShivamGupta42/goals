@@ -43,6 +43,7 @@ uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
+uv run goals eval rehearsal --adapter claude
 uv run goals adapter check codex
 ```
 
@@ -163,6 +164,7 @@ experience of decisions and visualization, not just backend state:
 uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
+uv run goals eval rehearsal --adapter claude
 ```
 
 `eval dogfood` prints a plain-language report for each synthetic goal type:
@@ -173,5 +175,10 @@ gaps would block the goal.
 business, research, creative, operations, high-stakes, ecosystem, and
 self-evolution goals. It separates current coverage from planned future
 capabilities.
+
+`eval rehearsal` creates temporary Git repositories and runs representative
+Goals lifecycles through evidence, issue discovery, review, acceptance, and
+dashboard rendering. It proves the workflow machinery can execute, not just
+describe, the goal loop.
 
 See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.
