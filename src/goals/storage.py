@@ -9,6 +9,7 @@ from typing import Iterator
 
 from goals.models import (
     AssetRecord,
+    CreativeVariant,
     Decision,
     Evidence,
     Event,
@@ -135,6 +136,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             asset = AssetRecord.model_validate(payload["asset"])
             if not any(existing.asset_id == asset.asset_id for existing in snapshot.assets):
                 snapshot.assets.append(asset)
+        elif event.event_type == EventType.CREATIVE_VARIANT_RECORDED:
+            variant = CreativeVariant.model_validate(payload["variant"])
+            if not any(
+                existing.variant_id == variant.variant_id for existing in snapshot.creative_variants
+            ):
+                snapshot.creative_variants.append(variant)
         elif event.event_type == EventType.SOURCE_RECORDED:
             source = SourceRecord.model_validate(payload["source"])
             if not any(existing.source_id == source.source_id for existing in snapshot.sources):

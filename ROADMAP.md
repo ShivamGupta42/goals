@@ -261,11 +261,12 @@ become a user-facing decision.
 
 ## Asset Provenance
 
-**Status:** First vertical slice implemented. Goals can record generated,
+**Status:** First vertical slices implemented. Goals can record generated,
 external, stock, derived, user-provided, or other assets as append-only goal
 events, include asset summaries in Mode A handoffs, check provenance with
-`goals asset provenance`, add asset findings to `goals issues`, and render
-recorded assets in the dashboard.
+`goals asset provenance`, compare creative directions with
+`goals creative compare`, add findings to `goals issues`, and render recorded
+assets and variants in the dashboard.
 
 ### Direction
 
@@ -275,8 +276,8 @@ recorded assets in the dashboard.
   tool, sanitized prompt, source ids, license, and usage-rights status.
 - Surface restricted or blocked usage rights as plain-language user questions.
 - Keep provenance portable by rejecting local machine paths in asset locators.
-- Later, add creative variant comparison, richer source-to-asset lineage, and
-  optional external rights verification adapters.
+- Next, add richer source-to-asset lineage and optional external rights
+  verification adapters.
 
 ### Open Questions
 
@@ -291,34 +292,34 @@ recorded assets in the dashboard.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Creative Variant Comparison** (`p1`)
-  - Source: self-check
-  - Capability: `creative_variant_comparison`
-  - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Handoff Owner Registry** (`p2`)
+- **Handoff Owner Registry** (`p1`)
   - Source: self-check
   - Capability: `handoff_owner_registry`
   - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Mandatory External Review Gate** (`p2`)
   - Source: self-check
   - Capability: `mandatory_external_review_gate`
   - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Optional Calendar Context** (`p2`)
   - Source: self-check
   - Capability: `optional_calendar_context`
   - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Private Memory Boundary** (`p2`)
   - Source: self-check
   - Capability: `private_memory_boundary`
   - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Recurring Goal Templates** (`p2`)
+  - Source: self-check
+  - Capability: `recurring_goal_templates`
+  - Why: Self-check recommends recurring goal templates as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible recurring goal templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

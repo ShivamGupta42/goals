@@ -101,6 +101,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals source citations" in run_prompt.stdout
     assert "goals source freshness" in run_prompt.stdout
     assert "goals asset provenance" in run_prompt.stdout
+    assert "goals creative compare" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
     architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
@@ -286,11 +287,71 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
         worktree,
     )
     assert "Recorded asset: AST-" in asset.stdout
+    asset_id = asset.stdout.strip().split(": ", 1)[1]
     asset_list = run(["python", "-m", "goals.cli", "asset", "list"], worktree)
     assert "Hero image" in asset_list.stdout
     asset_provenance = run(["python", "-m", "goals.cli", "asset", "provenance"], worktree)
     assert "Asset Provenance Report" in asset_provenance.stdout
     assert "Overall: pass" in asset_provenance.stdout
+    creative_a = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "creative",
+            "variant",
+            "add",
+            "Calm launch",
+            "--summary",
+            "Plain, trust-building campaign direction.",
+            "--best-for",
+            "non-technical buyers",
+            "--asset-id",
+            asset_id,
+            "--score",
+            "brand_fit=5:Matches the product tone",
+            "--score",
+            "clarity=5:Easy to understand",
+            "--strength",
+            "Clear and low-risk.",
+            "--status",
+            "selected",
+        ],
+        worktree,
+    )
+    assert "Recorded creative variant: VAR-" in creative_a.stdout
+    creative_b = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "creative",
+            "variant",
+            "add",
+            "Bold launch",
+            "--summary",
+            "Higher-energy campaign direction.",
+            "--best-for",
+            "awareness push",
+            "--score",
+            "brand_fit=3:May be louder than the brand",
+            "--score",
+            "clarity=4:Still understandable",
+            "--risk",
+            "Could feel too salesy.",
+            "--status",
+            "rejected",
+        ],
+        worktree,
+    )
+    assert "Recorded creative variant: VAR-" in creative_b.stdout
+    creative_list = run(["python", "-m", "goals.cli", "creative", "variants"], worktree)
+    assert "Calm launch" in creative_list.stdout
+    creative_compare = run(["python", "-m", "goals.cli", "creative", "compare"], worktree)
+    assert "Creative Variant Comparison" in creative_compare.stdout
+    assert "Overall: pass" in creative_compare.stdout
+    refreshed_dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
+    assert "Creative Variants" in Path(refreshed_dash.stdout.strip()).read_text()
     run(
         [
             "python",

@@ -1,6 +1,14 @@
 from pathlib import Path
 
-from goals.models import Event, EventType, GoalArchitectureMap, SourceClaim, SourceRecord
+from goals.models import (
+    CreativeVariant,
+    CreativeVariantScore,
+    Event,
+    EventType,
+    GoalArchitectureMap,
+    SourceClaim,
+    SourceRecord,
+)
 from goals.runtime import default_phases
 from goals.models import Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, WorktreeLease
 from goals.storage import EventStore
@@ -156,3 +164,42 @@ def test_source_record_replays_into_snapshot(tmp_path: Path) -> None:
 
     assert derived.sources[0].title == "Customer interview"
     assert derived.source_claims[0].claim == "Users need plain-language progress."
+
+
+def test_creative_variant_replays_into_snapshot(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    variant = CreativeVariant(
+        variant_id="VAR-demo",
+        title="Calm direction",
+        summary="Plain, trust-building direction.",
+        best_for="non-technical users",
+        scores=[CreativeVariantScore(criterion="clarity", score=5)],
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.CREATIVE_VARIANT_RECORDED,
+            payload={"variant": variant.model_dump()},
+        )
+    )
+
+    derived = store.snapshot()
+
+    assert derived.creative_variants[0].variant_id == "VAR-demo"
+    assert derived.creative_variants[0].scores[0].criterion == "clarity"

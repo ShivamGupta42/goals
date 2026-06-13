@@ -6,6 +6,7 @@ from goals.architecture import analyze_code_architecture
 from goals.assets import analyze_asset_provenance
 from goals.boundaries import detect_professional_domains
 from goals.citations import analyze_citation_quality
+from goals.creative import analyze_creative_variants
 from goals.decisions import should_surface_decision
 from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -28,6 +29,7 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_source_issues(snapshot))
     issues.extend(_citation_issues(snapshot))
     issues.extend(_asset_issues(snapshot))
+    issues.extend(_creative_issues(snapshot))
     issues.extend(_boundary_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
     issues.extend(_architecture_issues(snapshot))
@@ -373,6 +375,22 @@ def _asset_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
         GoalIssue(
             severity=finding.severity,
             area="asset",
+            summary=finding.summary,
+            detail=finding.detail,
+            suggested_action=finding.suggested_action,
+            needs_user=finding.needs_user,
+            evidence_refs=finding.evidence_refs,
+        )
+        for finding in report.findings
+    ]
+
+
+def _creative_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    report = analyze_creative_variants(snapshot)
+    return [
+        GoalIssue(
+            severity=finding.severity,
+            area="creative",
             summary=finding.summary,
             detail=finding.detail,
             suggested_action=finding.suggested_action,

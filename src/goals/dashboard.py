@@ -13,6 +13,7 @@ from goals.architecture import (
 from goals.assets import analyze_asset_provenance
 from goals.brief import build_goal_brief
 from goals.citations import analyze_citation_quality
+from goals.creative import analyze_creative_variants
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -60,6 +61,7 @@ def render_dashboard(
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
     assets = _assets_html(snapshot)
+    creative = _creative_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
@@ -137,6 +139,7 @@ def render_dashboard(
     <a href="#ecosystem">Skills & Plugins</a>
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
+    <a href="#creative">Creative</a>
     <a href="#evidence">Evidence</a>
     <a href="#assets">Assets</a>
     <a href="#sources">Sources</a>
@@ -169,6 +172,10 @@ def render_dashboard(
   <section id="architecture" class="panel">
     <h2>Architecture Map</h2>
     {architecture_html}
+  </section>
+  <section id="creative" class="panel">
+    <h2>Creative Variants</h2>
+    {creative}
   </section>
   <section id="evidence" class="panel">
     <h2>Proof and Evidence</h2>
@@ -561,6 +568,59 @@ def _assets_html(snapshot: GoalSnapshot) -> str:
     )
 
 
+def _creative_html(snapshot: GoalSnapshot) -> str:
+    report = analyze_creative_variants(snapshot)
+    if not snapshot.creative_variants:
+        return "<h3>Comparison</h3><p>No creative variants recorded yet.</p>"
+    recommended = report.recommended_variant_id or "none"
+    variant_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(variant.title)}</strong>"
+        f"<p>{escape(variant.summary or 'No summary recorded.')}</p>"
+        f'<span class="pill">{escape(variant.variant_id)}</span> '
+        f'<span class="status-label {escape(variant.status)}">{escape(variant.status)}</span>'
+        + (
+            f"<p><strong>Best for:</strong> {escape(variant.best_for)}</p>"
+            if variant.best_for
+            else ""
+        )
+        + (
+            f"<p><strong>Scores:</strong> {escape(_score_text(variant.scores))}</p>"
+            if variant.scores
+            else ""
+        )
+        + (
+            f"<p><strong>Assets:</strong> {escape(', '.join(variant.asset_ids))}</p>"
+            if variant.asset_ids
+            else ""
+        )
+        + "</li>"
+        for variant in snapshot.creative_variants
+    )
+    finding_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in report.findings[:5]
+    )
+    findings_html = (
+        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
+        if report.findings
+        else f"<p>{escape(report.summary)}</p>"
+    )
+    return (
+        f"<h3>Comparison</h3>{findings_html}"
+        f"<p><strong>Recommended variant:</strong> <code>{escape(recommended)}</code></p>"
+        f'<h3>Recorded Variants</h3><ul class="node-list">{variant_items}</ul>'
+    )
+
+
 def _architecture_html(
     snapshot: GoalSnapshot,
     architecture: GoalArchitectureMap,
@@ -640,4 +700,11 @@ def _architecture_brief_html(brief) -> str:
         f"{question_items}"
         "</details>"
         "</div>"
+    )
+
+
+def _score_text(scores) -> str:
+    return ", ".join(
+        f"{score.criterion} {score.score}/5" + (f" ({score.rationale})" if score.rationale else "")
+        for score in scores
     )
