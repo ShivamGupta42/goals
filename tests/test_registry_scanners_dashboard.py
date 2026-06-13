@@ -81,6 +81,7 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Review focus" in text
     assert "Evidence gaps and open questions" in text
     assert "Sources" in text
+    assert "Citation Quality" in text
     assert "Freshness" in text
     assert "Assets" in text
     assert "No assets recorded yet." in text

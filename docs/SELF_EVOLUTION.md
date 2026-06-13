@@ -146,15 +146,22 @@ uv run goals source add "Customer interview" \
   --source-type interview \
   --claim "Users need plain-language progress." \
   --confidence 0.8
+uv run goals source citations
 uv run goals source freshness
 uv run goals source list
 ```
 
 Mode A prompts include source summaries and ask agents to record sources when a
 phase makes customer, market, research, architecture, migration, or safety
-claims. `source freshness` checks source age against simple, type-specific
-freshness windows before an agent relies on claims. The dashboard shows recorded
-sources, claims, and freshness status separately from code checks.
+claims. `source citations` checks whether source-backed claims are traceable and
+appropriately qualified: source ids exist, cited sources have stable locators
+and summaries, confidence matches source strength, and absolute wording does not
+overstate the evidence. Most citation cleanup is agent repair work. Weak
+citation evidence for a high-stakes claim can become a user-facing decision
+because proceeding changes risk. `source freshness` checks source age against
+simple, type-specific freshness windows before an agent relies on claims. The
+dashboard shows recorded sources, claims, citation quality, and freshness status
+separately from code checks.
 
 ## Asset Provenance
 
@@ -285,6 +292,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
   external, costly, or destructive actions,
 - source freshness checks that keep stale evidence as agent repair work unless
   a high-stakes claim really needs the user,
+- citation quality review that keeps missing citation metadata with the agent
+  while surfacing weak high-stakes evidence,
 - asset provenance checks that keep missing metadata with the agent while
   surfacing blocked or restricted usage rights,
 - a dashboard that makes progress and blockers visible,

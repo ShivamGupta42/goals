@@ -6,6 +6,7 @@ from typing import Literal
 
 from goals.adapters import adapter_check
 from goals.assets import render_asset_summary
+from goals.citations import render_citation_quality_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
@@ -80,6 +81,7 @@ def recommended_checks(worktree: Path) -> list[str]:
             "uv run goals boundary explain --domain auto",
             "uv run goals asset provenance --strict",
             "uv run goals merge-check",
+            "uv run goals source citations --strict",
             "uv run goals source freshness --strict",
             "uv run goals validate",
             "uv run goals safety-check --mode local .",
@@ -96,6 +98,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     memory = render_memory_suggestions(plan.memory_suggestions)
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
+    citations = render_citation_quality_summary(snapshot)
     assets = render_asset_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
@@ -170,7 +173,10 @@ Source-backed claims:
 {claims}
 
 If this phase makes research, business, customer, market, architecture, migration, or safety claims, record sources with `goals source add "Source title" --locator "url-or-file" --claim "claim supported by this source" --confidence 0.8`.
-Before relying on source-backed claims, run `goals source freshness --strict`; refresh, replace, or mark stale sources before asking the user unless the report says the user must decide.
+Citation quality:
+{citations}
+
+Before relying on source-backed claims, run `goals source citations --strict` and `goals source freshness --strict`; add missing locators or summaries, fix missing source ids, soften absolute claims, refresh, replace, or mark stale sources before asking the user unless a report says the user must decide.
 
 Evidence JSON shape:
 ```json

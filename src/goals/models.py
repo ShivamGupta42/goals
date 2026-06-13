@@ -465,6 +465,30 @@ class SourceFreshnessReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class CitationQualityFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    claim: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CitationQualityReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    findings: list[CitationQualityFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class AssetRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -934,6 +958,7 @@ class GoalIssue(BaseModel):
         "architecture",
         "asset",
         "boundary",
+        "citation",
         "decision",
         "evidence",
         "gate",

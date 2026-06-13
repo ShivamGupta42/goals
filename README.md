@@ -45,6 +45,7 @@ uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals permission check github --kind plugin --action "inspect a remote issue"
+uv run goals source citations
 uv run goals source freshness
 uv run goals source list
 uv run goals asset provenance
@@ -140,9 +141,17 @@ uv run goals source add "Customer interview" \
   --source-type interview \
   --claim "Users need plain-language progress." \
   --confidence 0.8
+uv run goals source citations
 uv run goals source freshness
 uv run goals source list
 ```
+
+`source citations` checks whether source-backed claims are traceable and
+appropriately qualified. It catches claims with no source, missing source ids,
+missing source locators or summaries, absolute wording, low confidence, and
+high-confidence claims that rely only on low-credibility sources. Most citation
+cleanup stays with the agent. Weak citation evidence for high-stakes claims can
+become a simple user-facing decision before the agent relies on it.
 
 `source freshness` checks whether recorded sources are recent enough for the
 claims that rely on them. Stale sources are normally agent repair work: refresh,

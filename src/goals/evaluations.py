@@ -54,6 +54,7 @@ CURRENT_CAPABILITIES = {
     "automatic_gap_to_roadmap_patch",
     "architecture_map",
     "automatic_skill_selection",
+    "citation_quality_review",
     "durable_state",
     "end_user_decision_experience",
     "end_user_visualization",
@@ -197,6 +198,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "simple_decision_format",
             "project_history_decision_context",
             "source_registry",
+            "citation_quality_review",
             "source_freshness_gate",
         ],
         future_capabilities=[],
@@ -344,10 +346,11 @@ DEFAULT_GOAL_USE_CASES = [
             *CORE_GOAL_CAPABILITIES,
             "source_registry",
             "source_freshness_gate",
+            "citation_quality_review",
             "simple_decision_format",
             "project_history_decision_context",
         ],
-        planned_capabilities=["citation_quality_review"],
+        planned_capabilities=[],
         important_user_decisions=["Audience focus", "External source permission"],
         agent_can_decide=["Brief outline", "Follow-up task list", "Reversible formatting choice"],
         proof_required=["Recorded sources", "Source-backed claims", "Decision summary"],
@@ -949,9 +952,10 @@ def _rank_capabilities(counter: Counter[str]) -> list[tuple[str, int]]:
         "parallel_worktree_merge_gates": 1,
         "cross_agent_recommendation_merge": 2,
         "permission_policy_registry": 3,
-        "source_freshness_gate": 4,
-        "cross_project_memory_sync": 5,
-        "professional_boundary_templates": 6,
+        "citation_quality_review": 4,
+        "source_freshness_gate": 5,
+        "cross_project_memory_sync": 6,
+        "professional_boundary_templates": 7,
     }
     return sorted(
         counter.items(),
@@ -1050,6 +1054,7 @@ def _record_rehearsal_source(worktree: Path, goal_id: str) -> None:
     source = SourceRecord(
         source_id="SRC-rehearsal",
         title="Synthetic customer source",
+        locator="interview-001",
         source_type="interview",
         summary="Synthetic source used to rehearse source-backed business goals.",
         credibility="medium",
@@ -1686,6 +1691,10 @@ def _supported_capabilities(
         "goals source freshness" in check for check in recommended_checks
     ):
         supported.add("source_freshness_gate")
+    if "goals source citations" in prompt or any(
+        "goals source citations" in check for check in recommended_checks
+    ):
+        supported.add("citation_quality_review")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:

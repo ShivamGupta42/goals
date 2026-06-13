@@ -78,6 +78,7 @@ def test_issue_report_finds_blockers_missing_proof_and_user_decisions(tmp_path) 
     assert any(issue.area == "evidence" for issue in report.issues)
     assert any(issue.area == "gate" for issue in report.issues)
     assert any(issue.area == "source" for issue in report.issues)
+    assert any(issue.area == "citation" for issue in report.issues)
     assert "Choose whether a migration is allowed." in report.user_questions
     assert "Goal Issue Report" in rendered
     assert "Needs The User" in rendered
@@ -195,6 +196,47 @@ def test_issue_report_surfaces_high_stakes_stale_source(tmp_path) -> None:
     report = analyze_goal_issues(snapshot)
 
     assert "Source may be stale: Old legal memo" in report.user_questions
+
+
+def test_issue_report_surfaces_high_stakes_weak_citation(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Prepare legal safety brief",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[],
+        current_phase=None,
+        definition_of_done=["Done"],
+        sources=[
+            SourceRecord(
+                source_id="SRC-blog",
+                title="Legal blog",
+                locator="https://example.test/legal",
+                source_type="url",
+                summary="Informal commentary.",
+                credibility="low",
+            )
+        ],
+        source_claims=[
+            SourceClaim(
+                claim="The legal conclusion is safe.",
+                source_ids=["SRC-blog"],
+                confidence=0.9,
+            )
+        ],
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert (
+        "High-confidence claim relies only on low-credibility sources: The legal conclusion is safe."
+        in report.user_questions
+    )
+    assert any(issue.area == "citation" and issue.needs_user for issue in report.issues)
 
 
 def test_issue_report_suggests_professional_boundary_template(tmp_path) -> None:

@@ -97,6 +97,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals brief" in run_prompt.stdout
     assert "Architecture map:" in run_prompt.stdout
     assert "goals boundary explain --domain auto" in run_prompt.stdout
+    assert "goals source citations" in run_prompt.stdout
     assert "goals source freshness" in run_prompt.stdout
     assert "goals asset provenance" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
@@ -254,6 +255,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     source_freshness = run(["python", "-m", "goals.cli", "source", "freshness"], worktree)
     assert "Source Freshness Report" in source_freshness.stdout
     assert "Overall: pass" in source_freshness.stdout
+    source_citations = run(["python", "-m", "goals.cli", "source", "citations"], worktree)
+    assert "Citation Quality Report" in source_citations.stdout
+    assert "Overall: pass" in source_citations.stdout
     asset = run(
         [
             "python",
