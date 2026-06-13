@@ -3,9 +3,19 @@ from pathlib import Path
 import pytest
 
 from goals.discovery import discover_local_ecosystem, render_discovery_report
-from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.ecosystem import (
+    merge_agent_recommendations,
+    recommend_ecosystem_tools,
+    render_recommendation_merge_report,
+    render_recommendations,
+)
 from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
-from goals.models import GoalSnapshot, WorktreeLease
+from goals.models import (
+    AgentRecommendationSet,
+    EcosystemRecommendation,
+    GoalSnapshot,
+    WorktreeLease,
+)
 from goals.registry import validate_registry_file
 from goals.registry_sync import apply_registry_sync, plan_registry_sync
 from goals.runtime import default_phases
@@ -68,6 +78,58 @@ plugins:
     assert recommendations[0].source_registry == "skills.yml"
     assert "migration" in recommendations[0].reason
     assert "goals decision explain" in rendered
+
+
+def test_merge_agent_recommendations_ranks_consensus_and_surfaces_approval() -> None:
+    claude = AgentRecommendationSet(
+        agent_id="claude",
+        adapter="claude",
+        recommendations=[
+            _recommendation("skill", "testing", confidence=0.7),
+            _recommendation("plugin", "browser", confidence=0.6, approval=True),
+        ],
+    )
+    codex = AgentRecommendationSet(
+        agent_id="codex",
+        adapter="codex",
+        recommendations=[
+            _recommendation("skill", "testing", confidence=0.9),
+            _recommendation("skill", "docs", confidence=0.4),
+        ],
+    )
+
+    report = merge_agent_recommendations([claude, codex])
+    rendered = render_recommendation_merge_report(report)
+
+    assert report.agent_count == 2
+    assert report.recommendations[0].name == "testing"
+    assert report.recommendations[0].support_count == 2
+    assert report.recommendations[0].agent_ids == ["claude", "codex"]
+    assert "Approve use of plugin browser?" in report.user_questions
+    assert "No tool-routing decision" not in rendered
+    assert "supported by 2 agent(s)" in rendered
+
+
+def test_merge_agent_recommendations_keeps_command_conflict_with_agent() -> None:
+    local_hint = "/" + "Users" + "/example/private/run-browser"
+    claude = AgentRecommendationSet(
+        agent_id="claude",
+        recommendations=[_recommendation("plugin", "browser", command_hint=local_hint)],
+    )
+    codex = AgentRecommendationSet(
+        agent_id="codex",
+        recommendations=[_recommendation("plugin", "browser", command_hint="goals dashboard")],
+    )
+
+    report = merge_agent_recommendations([claude, codex])
+    rendered = render_recommendation_merge_report(report)
+
+    assert report.conflicts
+    assert report.conflicts[0].needs_user is False
+    assert report.user_questions == []
+    assert any("Resolve routing conflict" in action for action in report.agent_actions)
+    assert "/" + "Users" + "/example" not in rendered
+    assert "~" in rendered
 
 
 def test_registry_validation_rejects_unknown_skill_entry_field(tmp_path: Path) -> None:
@@ -278,3 +340,23 @@ def test_registry_sync_dry_run_and_apply(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert str(tmp_path) not in plugins_text
     validate_registry_file(registry_root / "skills.yml")
     validate_registry_file(registry_root / "plugins.yml")
+
+
+def _recommendation(
+    kind: str,
+    name: str,
+    *,
+    confidence: float = 0.5,
+    approval: bool = False,
+    command_hint: str = "",
+) -> EcosystemRecommendation:
+    return EcosystemRecommendation(
+        kind=kind,  # type: ignore[arg-type]
+        name=name,
+        label=name.title(),
+        reason=f"Matches {name}.",
+        confidence=confidence,
+        command_hint=command_hint,
+        source_registry=f"{kind}s.yml",
+        user_approval_required=approval,
+    )

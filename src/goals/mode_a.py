@@ -135,6 +135,7 @@ Recommended skills/plugins for this phase:
 Local ecosystem discovery:
 - If recommendations seem incomplete, run `goals ecosystem discover` to inspect installed local skills/plugins/adapters and suggest portable registry additions.
 - Use `goals ecosystem sync` for a dry-run registry update plan; only use `--apply` after reviewing the proposed portable YAML entries.
+- When multiple agents recommend tools, use `goals ecosystem merge` to deduplicate recommendations, surface approval-required tools, and keep routine routing decisions with the coordinator.
 
 Self-evolution memory:
 {memory}

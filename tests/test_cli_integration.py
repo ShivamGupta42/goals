@@ -107,6 +107,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "registries=6" in validate.stdout
     ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
     assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
+    merged_ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "merge"], worktree)
+    assert "Cross-Agent Ecosystem Recommendation Merge" in merged_ecosystem.stdout
+    assert "supported by 2 agent(s)" in merged_ecosystem.stdout
     audit = run(["python", "-m", "goals.cli", "ecosystem", "audit"], worktree)
     assert "Ecosystem Quality Audit" in audit.stdout
     skill_root = tmp_path / "skills"

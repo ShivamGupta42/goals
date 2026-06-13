@@ -65,6 +65,7 @@ CURRENT_CAPABILITIES = {
     "merge_readiness_check",
     "non_technical_goal_brief",
     "plugin_capability_discovery",
+    "cross_agent_recommendation_merge",
     "parallel_worktree_merge_gates",
     "phase_plan",
     "project_history_decision_context",
@@ -1639,6 +1640,8 @@ def _supported_capabilities(
         supported.add("plugin_capability_discovery")
     if "goals ecosystem sync" in prompt:
         supported.add("registry_sync_workflow")
+    if "goals ecosystem merge" in prompt:
+        supported.add("cross_agent_recommendation_merge")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:
