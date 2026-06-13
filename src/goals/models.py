@@ -133,6 +133,35 @@ class Decision(BaseModel):
     priority: Literal["blocking", "important", "later"] = "important"
     suggested_reply: str = ""
     technical_details: str = ""
+    what_we_know: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
+
+
+class DecisionContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_objective: str
+    goal_status: str
+    current_phase: str | None = None
+    accepted_phases: list[str] = Field(default_factory=list)
+    checks_run: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    known_gaps: list[str] = Field(default_factory=list)
+    prior_decisions: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    learnings: list[str] = Field(default_factory=list)
+
+
+class DecisionExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: Literal["basic", "detailed", "technical"]
+    surfaced_to_user: bool
+    reason_for_surface: str
+    markdown: str
+    decision: Decision
+    context: DecisionContext
 
 
 class ScenarioDecision(BaseModel):

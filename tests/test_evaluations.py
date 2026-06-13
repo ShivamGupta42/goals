@@ -29,3 +29,6 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
         assert result.surfaced_decisions
         assert all(decision.priority == "blocking" for decision in result.surfaced_decisions)
         assert result.agent_decisions
+    personal = next(result for result in results if result.scenario_id == "personal-fitness-reset")
+    assert "project_history_decision_context" in personal.supported_capabilities
+    assert "project_history_decision_context" not in personal.planned_capabilities

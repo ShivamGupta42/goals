@@ -6,7 +6,9 @@ questions to resolve before implementation.
 
 ## Decision Explainer V2
 
-**Status:** Planned, not implemented.
+**Status:** Partially implemented. Basic/Detailed/Technical rendering and active
+goal history context exist; richer memory limits and dashboard integration are
+still planned.
 
 Goals should help agents explain technical decisions in a way non-technical users
 can understand, while still giving technical users enough detail to challenge the

@@ -42,6 +42,18 @@ Decision experience means:
 - the reason for asking is visible,
 - reversible choices can be made by the agent and recorded as assumptions.
 
+Agents can generate a user-ready explanation from the active goal history:
+
+```bash
+uv run goals decision explain --file decision.json --level basic
+uv run goals decision explain --file decision.json --level detailed
+uv run goals decision explain --file decision.json --level technical
+```
+
+The explainer should include what Goals already knows from accepted phases,
+evidence, checks, changed files, blockers, learnings, and prior decisions. It
+should be clear about whether the user really needs to be interrupted.
+
 Visualization experience means:
 
 - the user can see what is happening,

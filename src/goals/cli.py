@@ -7,9 +7,10 @@ from typing import Optional
 import typer
 
 from goals.adapters import adapter_check
+from goals.decisions import build_decision_context, render_decision_explanation
 from goals.evaluations import evaluate_goal_scenarios
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
-from goals.models import Event, EventType, Evidence, GateVerdict
+from goals.models import Decision, Event, EventType, Evidence, GateVerdict
 from goals.registry import validate_registries
 from goals.runtime import (
     append_event,
@@ -25,9 +26,11 @@ from goals.storage import EventStore, GoalsError, atomic_write_text
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
+decision_app = typer.Typer(help="Explain decisions with goal history.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 app.add_typer(adapter_app, name="adapter")
+app.add_typer(decision_app, name="decision")
 app.add_typer(eval_app, name="eval")
 app.add_typer(phase_app, name="phase")
 
@@ -216,6 +219,36 @@ def eval_scenarios(
                 typer.echo(f"  missing: {', '.join(result.missing_capabilities)}")
     if any(not result.current_supported for result in results):
         raise typer.Exit(1)
+
+
+@decision_app.command("explain")
+def decision_explain(
+    file: Path = typer.Option(..., "--file", "-f", help="Read decision JSON from a file."),
+    level: str = typer.Option("basic", help="basic, detailed, or technical."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Explain a decision using the active goal history."""
+
+    def run():
+        if level not in {"basic", "detailed", "technical"}:
+            raise GoalsError("level must be basic, detailed, or technical.")
+        snapshot = load_active_snapshot(Path.cwd())
+        context = build_decision_context(snapshot)
+        decision = Decision.model_validate_json(file.read_text(encoding="utf-8"))
+        if not decision.suggested_reply:
+            decision.suggested_reply = f"I choose: {decision.recommendation}"
+        decision.what_we_know = decision.what_we_know or []
+        decision.evidence_refs = decision.evidence_refs or []
+        decision.uncertainty = decision.uncertainty or []
+        explanation = render_decision_explanation(decision, context, level=level)  # type: ignore[arg-type]
+        if json_output:
+            typer.echo(explanation.model_dump_json(indent=2))
+        else:
+            typer.echo(explanation.markdown)
+            if not explanation.surfaced_to_user:
+                typer.echo("\nAgent note: this does not need to interrupt the user.")
+
+    _handle(run)
 
 
 @phase_app.command("start")

@@ -62,6 +62,12 @@ uv run goals phase review P1
 uv run goals phase accept P1
 ```
 
+Agents can explain only important decisions with active goal history:
+
+```bash
+uv run goals decision explain --file decision.json --level basic
+```
+
 ## Public Safety
 
 During local work, generated goal state is expected:

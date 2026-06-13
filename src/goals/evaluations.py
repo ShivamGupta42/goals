@@ -22,6 +22,7 @@ CURRENT_CAPABILITIES = {
     "local_safety_check",
     "mode_a_handoff",
     "phase_plan",
+    "project_history_decision_context",
     "registry_awareness",
     "review_gate",
     "simple_decision_format",
@@ -44,8 +45,9 @@ DEFAULT_GOAL_SCENARIOS = [
             "review_gate",
             "important_decision_filter",
             "simple_decision_format",
+            "project_history_decision_context",
         ],
-        future_capabilities=["project_history_decision_context"],
+        future_capabilities=[],
         decisions=[
             ScenarioDecision(
                 title="Health constraints",
@@ -120,8 +122,9 @@ DEFAULT_GOAL_SCENARIOS = [
             "review_gate",
             "important_decision_filter",
             "simple_decision_format",
+            "project_history_decision_context",
         ],
-        future_capabilities=["source_registry", "project_history_decision_context"],
+        future_capabilities=["source_registry"],
         decisions=[
             ScenarioDecision(
                 title="Audience focus",
@@ -301,6 +304,7 @@ def _supported_capabilities(
     supported.add("important_decision_filter")
     supported.add("simple_decision_format")
     supported.add("end_user_decision_experience")
+    supported.add("project_history_decision_context")
     return supported
 
 

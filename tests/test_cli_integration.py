@@ -148,3 +148,50 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
     run(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
     accept = run(["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree)
     assert "Accepted phase P1" in accept.stdout
+    decision_file = worktree / "decision.json"
+    decision_file.write_text(
+        json.dumps(
+            {
+                "title": "Choose storage",
+                "plain_summary": "Pick where data should be stored.",
+                "why_it_matters": "This can affect migrations.",
+                "recommendation": "Use the existing file",
+                "options": [
+                    {
+                        "label": "Existing file",
+                        "explanation": "No migration needed.",
+                        "tradeoffs": ["Less flexible."],
+                        "reversible": True,
+                        "risk": "low",
+                    },
+                    {
+                        "label": "New migration",
+                        "explanation": "More structured.",
+                        "tradeoffs": ["Migration risk."],
+                        "reversible": False,
+                        "risk": "high",
+                    },
+                ],
+                "confidence": 0.8,
+                "priority": "blocking",
+                "technical_details": "Migration order has to be coordinated.",
+            }
+        )
+    )
+    explanation = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "decision",
+            "explain",
+            "--file",
+            str(decision_file),
+            "--level",
+            "detailed",
+        ],
+        worktree,
+    )
+    assert "Choose storage" in explanation.stdout
+    assert "What we know so far" in explanation.stdout
+    assert "Suggested reply" in explanation.stdout
