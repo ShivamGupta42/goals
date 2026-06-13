@@ -75,19 +75,19 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Handoff owners:" in plan.prompt
     assert "goals handoff owner add" in plan.prompt
     assert "goals handoff check" in plan.prompt
-    assert "uv run goals asset provenance --strict" in plan.recommended_checks
-    assert "uv run goals creative compare --strict" in plan.recommended_checks
-    assert "uv run goals handoff check --strict" in plan.recommended_checks
-    assert "uv run goals external-review check --strict" in plan.recommended_checks
-    assert "uv run goals architecture check --strict" in plan.recommended_checks
-    assert "uv run goals source citations --strict" in plan.recommended_checks
-    assert "uv run goals source freshness --strict" in plan.recommended_checks
-    assert "uv run goals boundary explain --domain auto" in plan.recommended_checks
+    assert "goals asset provenance --strict" in plan.recommended_checks
+    assert "goals creative compare --strict" in plan.recommended_checks
+    assert "goals handoff check --strict" in plan.recommended_checks
+    assert "goals external-review check --strict" in plan.recommended_checks
+    assert "goals architecture check --strict" in plan.recommended_checks
+    assert "goals source citations --strict" in plan.recommended_checks
+    assert "goals source freshness --strict" in plan.recommended_checks
+    assert "goals boundary explain --domain auto" in plan.recommended_checks
     assert "uv run pytest -q" in plan.recommended_checks
-    assert "uv run goals brief" in plan.recommended_checks
-    assert "uv run goals checkpoint current" in plan.recommended_checks
+    assert "goals brief" in plan.recommended_checks
+    assert "goals checkpoint current" in plan.recommended_checks
     assert "source_ids" in plan.evidence_template.model_dump()
-    assert "uv run goals safety-check --mode local ." in plan.recommended_checks
+    assert "goals safety-check --mode local ." in plan.recommended_checks
 
 
 def test_build_mode_a_plan_can_target_codex_when_not_ready(monkeypatch, tmp_path: Path) -> None:

@@ -1,440 +1,181 @@
 # Goals
 
-**Goals helps AI agents finish bigger tasks without losing track.**
+Goals helps Codex, Claude Code, and other local agents finish bigger repo tasks
+without losing the thread.
 
-Goals breaks a goal into steps, gives each step a durable state file, checks the
-work, remembers what happened, and shows progress in a simple dashboard.
+It does not replace the native agent. It gives the agent a durable workflow
+layer: a goal worktree, phase state, evidence, checks, decisions, handoffs, and
+a dashboard a human can read.
 
-Claude Code and Codex already have native `/goal` loops. Goals does not replace
-those loops. It gives them a file-backed workflow layer: worktrees, phases,
-evidence, review gates, decisions, learnings, and a status page.
+## The Simple Command Set
 
-## Status
+Most users should only need these four commands:
 
-This repository is an early MVP. Mode A is implemented first:
+| Command | What it combines |
+| --- | --- |
+| `goals start` | Creates the goal worktree, goal state, dashboard, and first agent handoff instructions. |
+| `goals next` | Refreshes generated files and prints the paste-ready `/goal` handoff for Codex or Claude. |
+| `goals check` | Combines the brief, checkpoint, issues, merge readiness, architecture check, and registry validation into one status view. |
+| `goals view` | Refreshes the dashboard and architecture map, then prints their file paths. |
 
-- Claude or Codex owns the outer native `/goal` loop.
-- Goals owns project-local state and instructions.
-- The CLI does not launch or control Claude/Codex processes.
+The lower-level commands still exist as advanced building blocks, but the daily
+loop should feel like: start, paste, check, view.
 
-Mode B, a standalone runner for local AI or schedulers, is represented by the
-runtime interfaces but intentionally not complete in this version.
+## Install
 
-See [ROADMAP.md](ROADMAP.md) for planned directions that are intentionally not
-implemented yet.
+From this repository:
 
-## Quick Start
+```bash
+uv tool install --editable .
+```
+
+That puts `goals` on your PATH so the generated handoff can tell Codex or Claude
+to run plain `goals ...` commands inside your project.
+
+For development inside this repository, use:
 
 ```bash
 uv sync
-uv run goals create "Add tags to tasks and update tests" \
-  --why "Make tasks easier to organize." \
-  --adapter claude
-uv run goals status
-uv run goals brief
-uv run goals checkpoint current
-uv run goals checkpoint list
-uv run goals issues
-uv run goals merge-check
-uv run goals run --adapter codex
-uv run goals dashboard
-uv run goals architecture show
-uv run goals architecture brief
-uv run goals architecture check
-uv run goals decision brief
-uv run goals boundary explain --domain auto
-uv run goals ecosystem recommend
-uv run goals ecosystem merge
-uv run goals ecosystem discover
-uv run goals ecosystem sync
-uv run goals permission check github --kind plugin --action "inspect a remote issue"
-uv run goals source citations
-uv run goals source freshness
-uv run goals source list
-uv run goals asset provenance
-uv run goals asset list
-uv run goals creative variant add "Calm launch" \
-  --summary "Plain, trust-building direction." \
-  --best-for "non-technical buyers" \
-  --score "brand_fit=5:Matches the product tone"
-uv run goals creative compare
-uv run goals creative variants
-uv run goals handoff owner add "Support lead" \
-  --role reviewer \
-  --responsibility "Review the rollout checklist." \
-  --phase-id P2 \
-  --confirmation agent_confirmed
-uv run goals handoff check
-uv run goals handoff owners
-uv run goals memory suggest
-uv run goals memory sync ../similar-goals-project
-uv run goals eval scenarios --adapter claude
-uv run goals eval dogfood --adapter claude
-uv run goals eval coverage --adapter claude
-uv run goals eval rehearsal --adapter claude
-uv run goals eval issue-stress --adapter claude
-uv run goals eval self-check
-uv run goals roadmap suggest
-uv run goals adapter check codex
+uv run pytest -q
 ```
 
-Goals writes generated state under `.agent-workflow/goals/` in the goal worktree.
-That directory is ignored by default because it can include local paths and
-private run history.
+## Use With Codex
 
-## Mode A
-
-Mode A is the native-agent path. Goals does not launch Claude or Codex for you;
-it generates a concrete `/goal` handoff for the adapter you choose.
+Run this inside a clean git repo with at least one commit:
 
 ```bash
-uv run goals run --adapter claude
-uv run goals run --adapter codex
+goals start "Ship the onboarding cleanup" --agent codex
+cd <worktree printed by goals>
+goals next --agent codex | pbcopy
 ```
 
-The generated handoff includes the active phase, the goal state file, the
-dashboard path, phase acceptance criteria, recommended checks, and an evidence
-JSON template. Agents can write that template to a file and record it without
-shell-escaping a large JSON string:
+Paste the copied output into Codex. If the Codex native `/goal` feature is not
+enabled locally, the generated prompt still works: paste it into the current
+Codex thread and let Goals remain the state layer.
+
+During the run:
 
 ```bash
-uv run goals phase evidence P1 --file .agent-workflow/goals/<goal-id>/evidence-p1.json
-uv run goals checkpoint current
-uv run goals phase review P1
-uv run goals phase accept P1
+goals check
+goals view
+goals next --agent codex | pbcopy
 ```
 
-Required checkpoints are phase-level stop signs. They let an agent record that a
-specific piece of validation, approval, understanding, external review, or
-handoff is still needed before the phase can be reviewed or accepted:
+## Use With Claude Code
+
+The Claude flow is the same, with a different handoff adapter:
 
 ```bash
-uv run goals checkpoint record P1 CP-plan \
-  --title "Confirm the plan" \
-  --kind human_validation \
-  --status needs_user \
-  --needs-user \
-  --summary "The user needs to confirm the plan before review."
-uv run goals checkpoint current
-uv run goals checkpoint waive P1 CP-plan --reason "User confirmed the plan in chat."
+goals start "Ship the onboarding cleanup" --agent claude
+cd <worktree printed by goals>
+goals next --agent claude | pbcopy
 ```
 
-`checkpoint current` is the plain-language checkpoint readout. It shows what is
-being validated, who is waiting, what proof exists, what is unresolved, and the
-next safe step. Required checkpoints must pass or be waived before phase review
-and acceptance can move forward.
+Paste the copied output into Claude Code. If Claude is not installed or not on
+PATH, Goals still generates a Claude-shaped handoff that you can copy manually.
 
-Agents can explain only important decisions with active goal history:
+During the run:
 
 ```bash
-uv run goals brief
-uv run goals decision brief
-uv run goals decision explain --file decision.json --level basic
-uv run goals boundary explain --domain auto
+goals check
+goals view
+goals next --agent claude | pbcopy
 ```
 
-For medical, legal, financial, safety, or similar high-stakes goals, agents can
-use `goals boundary explain` to get simple wording for what the agent can do,
-what needs the user or a qualified professional, what evidence is expected, and
-which next steps are safe to take.
+## Screenshots
 
-Agents can also record external review requirements and outcomes:
+These screenshots were generated from a fresh temporary git repo after an
+editable `uv tool install`, using the same commands shown above.
+
+### Four-command help surface
+
+![Goals help showing the simple workflow](docs/screenshots/goals-help.png)
+
+### Start a Codex goal
+
+![goals start for Codex](docs/screenshots/goals-start-codex.png)
+
+### Paste-ready Codex handoff
+
+![goals next for Codex](docs/screenshots/goals-next-codex.png)
+
+### Paste-ready Claude handoff
+
+![goals next for Claude](docs/screenshots/goals-next-claude.png)
+
+### Combined goal check
+
+![goals check output](docs/screenshots/goals-check.png)
+
+### Dashboard
+
+![Goals dashboard](docs/screenshots/goals-dashboard.png)
+
+## How It Works
+
+`goals start` creates a git worktree and writes generated state under:
+
+```text
+.agent-workflow/goals/<goal-id>/
+```
+
+That state is ignored by git by default because it can contain local paths and
+private run history. The generated dashboard lives in the same directory.
+
+The native agent owns the work. Goals owns the structure around the work:
+
+- phases and acceptance criteria
+- proof and evidence
+- user-facing decisions
+- source, asset, and review records
+- merge-readiness checks
+- a dashboard for humans
+
+## Extending Goals
+
+Goals is intentionally built as a small workflow layer over composable
+primitives.
+
+- Add or change high-level user workflows in `src/goals/workflows.py`.
+- Keep `src/goals/cli.py` thin: CLI commands should mostly call workflow helpers
+  or existing domain modules.
+- Add reusable capabilities as focused modules under `src/goals/`.
+- Add portable tool, skill, plugin, permission, and adapter metadata under
+  `registries/*.yml`.
+- Keep advanced commands available for agents and scripts, but prefer a small
+  memorable top-level command set for humans.
+
+The current advanced building blocks include:
 
 ```bash
-uv run goals external-review add "Security review" \
-  --reviewer "Security lead" \
-  --reviewer-type security \
-  --risk-domain security \
-  --status passed \
-  --phase-id P2 \
-  --scope "Prompt injection checks" \
-  --summary "Security lead approved the mitigation." \
-  --evidence evidence:P2
-uv run goals external-review check
-uv run goals external-review list
+goals phase evidence
+goals phase review
+goals phase accept
+goals brief
+goals issues
+goals merge-check
+goals checkpoint current
+goals source citations
+goals asset provenance
+goals creative compare
+goals external-review check
+goals handoff check
+goals ecosystem recommend
+goals permission check
+goals safety-check --mode local .
 ```
 
-`external-review check` keeps routine proof cleanup with the agent: missing
-scope, summaries, phase links, and evidence references. It asks the user only
-when a reviewer must be chosen, review is blocked or failed, or the user wants
-to waive a high-stakes review.
+## Status
 
-`brief` is the first non-technical view. It answers: what is happening, what
-needs your answer, what the agent can do next, what proof exists, and what
-technical details are available if someone wants to inspect them.
+This repository is an early MVP.
 
-`decision brief` answers the simple end-user question: what needs my answer,
-what does Goals recommend, what should I reply, what happens next, and how many
-routine choices can stay with the agent. The dashboard shows the same brief,
-then turns important decisions into plain-language cards with the recommendation,
-options, risk, reversibility, confidence, known context, and a suggested reply.
-Routine reversible choices stay with the agent.
+Mode A is implemented:
 
-Agents can ask Goals what could block the current goal before interrupting the
-user:
+- Codex or Claude owns the native goal loop.
+- Goals owns project-local state, evidence, checks, and dashboard output.
+- The CLI does not launch or control Codex or Claude processes.
 
-```bash
-uv run goals brief
-uv run goals checkpoint current
-uv run goals issues
-uv run goals merge-check
-```
+Mode B, a standalone runner for local AI or schedulers, is represented by
+runtime interfaces but is not complete yet.
 
-The goal brief gives the user-safe summary and includes the current checkpoint.
-The issue report checks missing proof, incomplete required checkpoints, failed
-gates, unresolved source claims, important decisions, blockers, and state
-mismatches. By default it is a read-only report; use `--strict` when a script
-should fail on blocking issues.
-
-`merge-check` is the coordinator's pre-merge view. It looks for migration files
-without recorded ordering proof, scans sibling worktrees when Git exposes them,
-checks dirty workers, branch drift, file overlap, parallel migration risk,
-base-branch or conflict risks, and high-risk merge choices that really need the
-user. Routine merge cleanup stays as an agent action.
-
-Agents can record source evidence for research, business, customer, market, or
-technical claims:
-
-```bash
-uv run goals source add "Customer interview" \
-  --locator "interview-001" \
-  --source-type interview \
-  --claim "Users need plain-language progress." \
-  --confidence 0.8
-uv run goals source citations
-uv run goals source freshness
-uv run goals source list
-```
-
-`source citations` checks whether source-backed claims are traceable and
-appropriately qualified. It catches claims with no source, missing source ids,
-missing source locators or summaries, absolute wording, low confidence, and
-high-confidence claims that rely only on low-credibility sources. Most citation
-cleanup stays with the agent. Weak citation evidence for high-stakes claims can
-become a simple user-facing decision before the agent relies on it.
-
-`source freshness` checks whether recorded sources are recent enough for the
-claims that rely on them. Stale sources are normally agent repair work: refresh,
-replace, or mark them stale. For high-stakes goals such as medical, legal,
-financial, production, privacy, or safety work, stale high-confidence evidence
-can become a simple user-facing decision before the agent relies on it.
-
-Agents can record asset provenance for creative, product, document, data, or
-publishing work:
-
-```bash
-uv run goals asset add "Hero image" \
-  --locator "assets/hero.png" \
-  --asset-type image \
-  --origin generated \
-  --creator-tool image-model \
-  --usage-rights allowed \
-  --prompt "Simple product hero"
-uv run goals asset provenance
-uv run goals asset list
-```
-
-`asset provenance` checks whether recorded assets have enough information to be
-used safely: a stable locator, rights or license details when needed, source
-links for derived assets, generated-asset prompts, and no local machine paths.
-Most gaps stay as agent repair work. Restricted or blocked rights become simple
-user-facing questions because they can change whether the asset may be used.
-
-Agents can compare creative directions without turning every taste choice into
-a blocker:
-
-```bash
-uv run goals creative variant add "Calm launch" \
-  --summary "Plain, trust-building direction." \
-  --best-for "non-technical buyers" \
-  --asset-id AST-example \
-  --score "brand_fit=5:Matches the product tone" \
-  --score "clarity=5:Easy to understand" \
-  --status selected
-uv run goals creative compare
-uv run goals creative variants
-```
-
-`creative compare` ranks recorded directions, catches missing comparison proof,
-checks linked asset rights, and recommends the best current direction. Routine
-variant cleanup stays with the agent. Brand direction, publishing approval, and
-restricted or blocked asset rights stay as simple user-facing decisions.
-
-Agents can require or record external review when a phase touches high-stakes
-domains, production rollout, security, compliance, privacy, public claims, or an
-irreversible user/business decision:
-
-```bash
-uv run goals external-review add "Legal review" \
-  --reviewer "Counsel" \
-  --reviewer-type legal \
-  --risk-domain legal \
-  --status requested \
-  --phase-id P2 \
-  --scope "Terms update" \
-  --summary "Waiting on counsel to review the changed terms."
-uv run goals external-review check
-uv run goals external-review list
-```
-
-`external-review check` turns missing review proof into agent repair work, while
-failed, blocked, or high-stakes waived review stays visible as an important
-user decision. The dashboard includes an External Reviews view so non-technical
-users can see what was reviewed and what is still waiting.
-
-Agents can record handoff owners when work changes hands:
-
-```bash
-uv run goals handoff owner add "Support lead" \
-  --role reviewer \
-  --responsibility "Review the rollout checklist." \
-  --owner-type team \
-  --phase-id P2 \
-  --decision-scope "checklist rollout" \
-  --escalation-path "Create a follow-up task for the coordinator." \
-  --confirmation agent_confirmed \
-  --status active
-uv run goals handoff check
-uv run goals handoff owners
-```
-
-`handoff check` verifies that owners have clear roles, responsibilities, phase
-links, and escalation paths. Routine cleanup stays with the agent. A handoff
-becomes user-facing only when it is blocked or marked `--confirmation
-needs_user`, which keeps accountability changes visible without asking the user
-to route every routine follow-up.
-
-Agents can also ask Goals which skills or plugins fit the current phase:
-
-```bash
-uv run goals ecosystem recommend
-uv run goals ecosystem merge
-uv run goals ecosystem discover
-uv run goals ecosystem sync
-uv run goals ecosystem audit
-```
-
-Mode A handoffs include these recommendations automatically. Goals does not run
-external tools for the agent; it explains what looks relevant and whether user
-approval is needed. `ecosystem merge` combines recommendations from multiple
-agents into one coordinator view, deduplicates consensus picks, keeps routine
-routing with the agent, and surfaces approval-required tools as plain user
-questions. Discovery inspects local skills/plugins/adapters and suggests portable
-registry additions without printing local filesystem paths by default. Sync is a
-dry run unless `--apply` is passed. Audit checks whether registry entries are
-specific, safe, portable, and useful enough for automatic routing.
-
-Agents can check whether a tool or action should stay with the agent, ask the
-user, or stop as unsafe:
-
-```bash
-uv run goals permission check github --kind plugin --action "inspect a remote issue"
-uv run goals permission check cleanup-script --kind command --action "delete production data"
-```
-
-Permission policies live in `registries/permissions.yml`. If a project does not
-define one, Goals uses built-in conservative defaults. The report is written for
-agents and non-technical users: what needs the user, what the agent can do, and
-which policy made the call.
-
-Agents can record repeated friction so future goals improve:
-
-```bash
-uv run goals memory record "Repeated setup confusion" --area skill --kind friction
-uv run goals memory suggest
-uv run goals memory sync ../similar-goals-project
-```
-
-Self-evolution memory is local generated state under `.agent-workflow/` and is
-ignored by default. `memory sync` is a dry run by default: it reads another
-Goals project or memory file, turns actionable lessons into sanitized
-suggestions, and imports them only when rerun with `--apply`. Use
-`--include-private` only when you explicitly want source summaries and evidence
-references copied into the current project's local memory.
-
-Agents can also run the full self-evolution matrix in one command:
-
-```bash
-uv run goals eval self-check
-uv run goals roadmap suggest
-```
-
-`self-check` runs the scenario, dogfood, coverage, lifecycle rehearsal, and
-issue-stress suites for Claude and Codex adapter shapes, then summarizes current
-coverage, user-decision burden, agent repair actions, ecosystem signals, and the
-next product slices worth exploring.
-
-`roadmap suggest` turns those next slices into a dry-run `ROADMAP.md` update
-plan. It writes only a generated block when `--apply` is passed, so agents can
-propose self-evolution work without rewriting human roadmap notes.
-
-Agents and technical reviewers can inspect a goal-level architecture map:
-
-```bash
-uv run goals architecture show
-uv run goals architecture brief
-uv run goals architecture check
-uv run goals architecture update --file architecture.json
-```
-
-The dashboard is the simple status view for end users. `architecture brief`
-summarizes what is built, what lacks evidence, what is blocked, and what to
-review next. The dashboard also shows the Current Checkpoint so non-technical
-users can see whether the agent is waiting on them, waiting on proof, or safe to
-continue. `architecture check` compares changed code files and architecture
-evidence references with the worktree so agents can catch stale map evidence or
-code changes that are not represented in the map. `architecture.md` is the
-deeper Markdown/Mermaid view for people who want to question what is built,
-planned, blocked, or deferred.
-
-## Public Safety
-
-During local work, generated goal state is expected:
-
-```bash
-uv run goals safety-check --mode local
-```
-
-Before publishing a repository that has used Goals, use publish mode:
-
-```bash
-uv run goals safety-check --mode publish
-```
-
-The scanner checks for secrets, local paths, prompt-injection text, destructive
-operations, generated private state, license hygiene concerns, and external
-supply-chain references.
-
-## Self-Evolution
-
-Goals includes scenario evaluations for personal, technical, business,
-self-evolution, and ecosystem use cases. These evaluations focus on the end-user
-experience of decisions and visualization, not just backend state:
-
-```bash
-uv run goals eval scenarios --adapter claude
-uv run goals eval dogfood --adapter claude
-uv run goals eval coverage --adapter claude
-uv run goals eval rehearsal --adapter claude
-uv run goals eval issue-stress --adapter claude
-```
-
-`eval dogfood` prints a plain-language report for each synthetic goal type:
-what the user sees, what the agent can decide, what proof is required, and which
-gaps would block the goal.
-
-`eval coverage` checks a broader use-case matrix across personal, technical,
-business, research, creative, operations, high-stakes, ecosystem, and
-self-evolution goals. It separates current coverage from planned future
-capabilities.
-
-`eval rehearsal` creates temporary Git repositories and runs representative
-Goals lifecycles through evidence, issue discovery, review, acceptance, and
-dashboard rendering. It proves the workflow machinery can execute, not just
-describe, the goal loop.
-
-`eval issue-stress` injects broken goal states and checks whether Goals finds
-missing proof, failed gates, source gaps, architecture questions, unsafe reviews,
-and high-impact user decisions while keeping routine repair work with the agent.
-
-See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.
+See [ROADMAP.md](ROADMAP.md) for planned directions.

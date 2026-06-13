@@ -80,19 +80,19 @@ def recommended_checks(worktree: Path) -> list[str]:
             checks.append("uv run ruff check .")
     checks.extend(
         [
-            "uv run goals brief",
-            "uv run goals checkpoint current",
-            "uv run goals architecture check --strict",
-            "uv run goals boundary explain --domain auto",
-            "uv run goals external-review check --strict",
-            "uv run goals asset provenance --strict",
-            "uv run goals creative compare --strict",
-            "uv run goals handoff check --strict",
-            "uv run goals merge-check",
-            "uv run goals source citations --strict",
-            "uv run goals source freshness --strict",
-            "uv run goals validate",
-            "uv run goals safety-check --mode local .",
+            "goals brief",
+            "goals checkpoint current",
+            "goals architecture check --strict",
+            "goals boundary explain --domain auto",
+            "goals external-review check --strict",
+            "goals asset provenance --strict",
+            "goals creative compare --strict",
+            "goals handoff check --strict",
+            "goals merge-check",
+            "goals source citations --strict",
+            "goals source freshness --strict",
+            "goals validate",
+            "goals safety-check --mode local .",
         ]
     )
     return checks

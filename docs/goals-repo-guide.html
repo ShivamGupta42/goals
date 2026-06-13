@@ -3,28 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Goals Repo Guide</title>
+  <title>Goals Usage Guide</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #182230;
-      --muted: #5b6675;
-      --line: #d7dde7;
-      --soft: #f6f8fb;
+      --ink: #172033;
+      --muted: #5c6778;
+      --line: #d8e0ea;
+      --soft: #f5f7fa;
       --panel: #ffffff;
       --accent: #0f766e;
       --blue: #1d4ed8;
-      --amber: #a16207;
-      --red: #b42318;
-      --code: #eef2ff;
     }
 
     * {
       box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
     }
 
     body {
@@ -36,10 +29,9 @@
     }
 
     header,
-    nav,
     main,
     footer {
-      max-width: 1120px;
+      max-width: 1060px;
       margin: 0 auto;
       padding: 1.25rem;
     }
@@ -50,25 +42,25 @@
 
     h1 {
       margin: 0 0 .75rem;
-      font-size: clamp(2rem, 4vw, 3.25rem);
+      font-size: clamp(2rem, 4vw, 3.2rem);
       line-height: 1.05;
       letter-spacing: 0;
     }
 
     h2 {
-      margin: 0 0 .85rem;
+      margin: 0 0 .8rem;
       font-size: 1.35rem;
       letter-spacing: 0;
     }
 
     h3 {
-      margin: 0 0 .5rem;
-      font-size: 1.05rem;
+      margin: 0 0 .45rem;
+      font-size: 1rem;
       letter-spacing: 0;
     }
 
     p {
-      margin: .25rem 0 .8rem;
+      margin: .25rem 0 .85rem;
     }
 
     a {
@@ -81,13 +73,13 @@
     }
 
     code {
-      background: var(--code);
+      background: #eef2ff;
       border-radius: 4px;
       padding: .1rem .25rem;
     }
 
     pre {
-      margin: .75rem 0;
+      margin: .7rem 0 0;
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -96,44 +88,29 @@
       font-size: .92rem;
     }
 
-    ul,
-    ol {
-      padding-left: 1.25rem;
-    }
-
-    nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .5rem;
-      padding-top: 0;
-      padding-bottom: 1.5rem;
-    }
-
-    nav a {
-      display: inline-block;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: .35rem .65rem;
-      color: var(--ink);
-      text-decoration: none;
-      background: #fff;
-      font-size: .92rem;
-    }
-
     section {
       border-top: 1px solid var(--line);
       padding: 1.45rem 0;
     }
 
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
     .lede {
-      max-width: 780px;
+      max-width: 760px;
       color: var(--muted);
       font-size: 1.08rem;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: .8rem;
     }
 
@@ -144,777 +121,134 @@
       background: var(--panel);
     }
 
-    .card strong {
-      display: block;
-      margin-bottom: .25rem;
-    }
-
-    .soft {
-      background: var(--soft);
-    }
-
     .callout {
       border-left: 4px solid var(--accent);
+      border-radius: 8px;
       background: var(--soft);
       padding: .85rem 1rem;
-      border-radius: 8px;
       margin: .9rem 0;
     }
 
-    .warning {
-      border-left-color: var(--amber);
-    }
-
-    .danger {
-      border-left-color: var(--red);
-    }
-
-    .flow {
+    .shots {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: .65rem;
-      align-items: stretch;
-      margin: 1rem 0;
-    }
-
-    .step {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: .75rem;
-      background: var(--soft);
-      min-height: 5rem;
-    }
-
-    .step span {
-      display: block;
-      color: var(--muted);
-      font-size: .86rem;
-      margin-top: .25rem;
-    }
-
-    .pill {
-      display: inline-block;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: .15rem .5rem;
-      background: #fff;
-      font-size: .82rem;
-      color: var(--muted);
-      margin-right: .25rem;
-    }
-
-    .table-wrap {
-      overflow: auto;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      margin: .75rem 0;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 720px;
-    }
-
-    th,
-    td {
-      text-align: left;
-      vertical-align: top;
-      border-bottom: 1px solid var(--line);
-      padding: .7rem;
-    }
-
-    th {
-      background: var(--soft);
-      font-size: .86rem;
-      color: var(--muted);
-    }
-
-    tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .two-col {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, .75fr);
       gap: 1rem;
     }
 
-    .muted {
-      color: var(--muted);
-    }
-
-    footer {
-      color: var(--muted);
-      font-size: .9rem;
-      padding-bottom: 2rem;
-    }
-
-    @media (max-width: 760px) {
-      .two-col {
-        grid-template-columns: 1fr;
+    @media (max-width: 700px) {
+      header,
+      main,
+      footer {
+        padding: 1rem;
       }
     }
   </style>
 </head>
 <body>
   <header>
-    <p><span class="pill">Goals</span><span class="pill">Repo Guide</span><span class="pill">Mode A</span></p>
-    <h1>Understand the Goals repo</h1>
+    <h1>Goals Usage Guide</h1>
     <p class="lede">
-      This guide condenses the teaching notes for the Goals repository into one
-      standalone reference. It explains how the repo is built, how the workflow
-      functions, which files matter most, and how to use or modify the project
-      without getting lost.
+      Goals gives Codex and Claude Code a file-backed workflow layer for bigger
+      repo tasks: a worktree, phases, proof, checks, decisions, and a dashboard.
     </p>
   </header>
 
-  <nav aria-label="Guide sections">
-    <a href="#mental-model">Mental Model</a>
-    <a href="#daily-use">Daily Use</a>
-    <a href="#state">State</a>
-    <a href="#phases">Phases</a>
-    <a href="#files">Core Files</a>
-    <a href="#decisions">Decisions</a>
-    <a href="#checkpoints">Checkpoints</a>
-    <a href="#worktrees">Worktrees</a>
-    <a href="#registries">Registries</a>
-    <a href="#dashboard">Dashboard</a>
-    <a href="#validation">Validation</a>
-    <a href="#modify">Modify</a>
-    <a href="#tests">Tests</a>
-    <a href="#mode-a">Mode A/B</a>
-    <a href="#quiz">Quiz</a>
-    <a href="#memory-hooks">Memory</a>
-  </nav>
-
   <main>
-    <section id="mental-model">
-      <h2>1. The Core Mental Model</h2>
-      <p>
-        Goals is a file-backed workflow layer for native agent goal loops. Claude
-        and Codex keep attention on the work through <code>/goal</code>. Goals
-        keeps durable state, phases, proof, review gates, decisions, worktrees,
-        checkpoints, dashboard views, and safety checks.
-      </p>
-
-      <div class="callout">
-        <strong>One-line architecture:</strong>
-        Goals stores a durable event history, derives current state, gives
-        Claude or Codex the next phase prompt, then checks proof before letting
-        the goal advance.
-      </div>
-
-      <div class="flow" aria-label="Core flow">
-        <div class="step"><strong>events.jsonl</strong><span>Permanent history</span></div>
-        <div class="step"><strong>goal.json</strong><span>Current summary</span></div>
-        <div class="step"><strong>goals run</strong><span>Next native /goal handoff</span></div>
-        <div class="step"><strong>agent works</strong><span>Codex or Claude executes</span></div>
-        <div class="step"><strong>evidence</strong><span>Proof is recorded</span></div>
-        <div class="step"><strong>checkpoint</strong><span>Current validation is clear</span></div>
-        <div class="step"><strong>review</strong><span>Gate checks proof</span></div>
-        <div class="step"><strong>accept</strong><span>Move to next phase</span></div>
-      </div>
-
-      <pre><code>events -> snapshot -> agent prompt -> work -> evidence -> checkpoint -> review -> accept -> next prompt</code></pre>
-
-      <p>
-        The easiest analogy is a bank account:
-      </p>
-      <pre><code>events.jsonl    = transaction history
-goal.json       = current balance
-dashboard.html  = friendly banking screen</code></pre>
-    </section>
-
-    <section id="daily-use">
-      <h2>2. Day-to-Day Use</h2>
-      <p>
-        The main workflow is small. Create a goal, move into the generated
-        worktree, ask Goals for the next agent handoff, then record and review
-        proof as phases finish.
-      </p>
-
-      <pre><code>uv run goals create "Add tags to tasks and update tests" --adapter codex
-cd ../your-repo-add-tags-to-tasks-and-update-tests
-uv run goals run --adapter codex</code></pre>
-
-      <p>After an agent finishes a phase:</p>
-
-      <pre><code>uv run goals phase evidence P1 --file .agent-workflow/goals/&lt;goal-id&gt;/evidence-p1.json
-uv run goals checkpoint current
-uv run goals phase review P1
-uv run goals phase accept P1
-uv run goals run --adapter codex</code></pre>
-
-      <div class="grid">
-        <div class="card soft">
-          <strong><code>goals brief</code></strong>
-          Human-friendly status: what is happening, what needs the user, and
-          what the agent can do next.
-        </div>
-        <div class="card soft">
-          <strong><code>goals checkpoint current</code></strong>
-          Plain-language validation point: what is being checked, who is
-          waiting, what proof exists, and the next safe step.
-        </div>
-        <div class="card soft">
-          <strong><code>goals issues</code></strong>
-          Coordinator/debug report: blockers, incomplete checkpoints, missing
-          proof, failed gates, unresolved claims, and user-worthy decisions.
-        </div>
-        <div class="card soft">
-          <strong><code>goals run --adapter codex</code></strong>
-          Prints the next native Codex <code>/goal</code> handoff. It does not
-          launch or control Codex.
-        </div>
-      </div>
-    </section>
-
-    <section id="state">
-      <h2>3. State: events.jsonl, goal.json, dashboard.html</h2>
-      <p>
-        The repo uses an event-sourced shape. Goals records what happened first,
-        then derives current state and views from that history.
-      </p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Artifact</th>
-              <th>Meaning</th>
-              <th>Trust level</th>
-              <th>What to do if wrong</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>events.jsonl</code></td>
-              <td>The permanent log of goal events.</td>
-              <td>Source of truth.</td>
-              <td>Inspect events carefully. If invalid, state cannot be safely derived.</td>
-            </tr>
-            <tr>
-              <td><code>goal.json</code></td>
-              <td>The current snapshot derived from events.</td>
-              <td>Useful summary, not the source of truth.</td>
-              <td>Run <code>uv run goals repair</code>.</td>
-            </tr>
-            <tr>
-              <td><code>dashboard.html</code></td>
-              <td>Read-only human explanation of goal state.</td>
-              <td>Presentation layer.</td>
-              <td>Run <code>uv run goals dashboard</code>.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p>
-        The implementation lives mostly in
-        <a href="../src/goals/storage.py"><code>src/goals/storage.py</code></a>.
-        <code>EventStore.append</code> appends the event, rewrites the event log
-        atomically, derives the snapshot, and writes <code>goal.json</code>.
-      </p>
-
-      <pre><code>events.jsonl = what happened
-goal.json    = where we are now
-dashboard    = how to explain it to people</code></pre>
-    </section>
-
-    <section id="phases">
-      <h2>4. The Phase Loop</h2>
-      <p>
-        A phase is one step inside a goal. The default phases are:
-      </p>
-      <ol>
-        <li>Confirm outcome and plan</li>
-        <li>Inspect project and choose approach</li>
-        <li>Execute the core change</li>
-        <li>Review, explain, and close</li>
-      </ol>
-
-      <div class="flow" aria-label="Phase lifecycle">
-        <div class="step"><strong>pending</strong><span>Phase exists</span></div>
-        <div class="step"><strong>in progress</strong><span>Agent starts work</span></div>
-        <div class="step"><strong>evidence</strong><span>Proof is recorded</span></div>
-        <div class="step"><strong>review</strong><span>Gate checks proof</span></div>
-        <div class="step"><strong>accepted</strong><span>Next phase allowed</span></div>
-      </div>
-
-      <p>
-        The three commands are separate because they do different jobs:
-      </p>
-      <pre><code>phase evidence = what the agent claims it did
-phase review   = whether the proof is good enough
-phase accept   = permission to move forward</code></pre>
-
-      <p>
-        The review gate is deliberately simple. A phase fails review if there is
-        no evidence, unmet acceptance criteria, ambiguity, confidence below
-        <code>0.7</code>, or no checks/tests recorded. After repeated failed
-        attempts, review becomes blocked so the agent does not loop forever.
-      </p>
-    </section>
-
-    <section id="files">
-      <h2>5. The Core Files</h2>
-      <p>
-        If you understand these files, you understand the spine of the repo.
-      </p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Plain-English role</th>
-              <th>When to open it</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><a href="../src/goals/models.py"><code>models.py</code></a></td>
-              <td>The nouns: Goal, Phase, Evidence, Decision, GateResult.</td>
-              <td>Adding or understanding tracked state.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/storage.py"><code>storage.py</code></a></td>
-              <td>The history layer: append events, replay events, rebuild snapshots.</td>
-              <td>State integrity or repair behavior.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/runtime.py"><code>runtime.py</code></a></td>
-              <td>The coordinator: create goals, transition phases, emit dashboard.</td>
-              <td>Goal lifecycle behavior.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/cli.py"><code>cli.py</code></a></td>
-              <td>The command surface.</td>
-              <td>Adding or finding commands.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/mode_a.py"><code>mode_a.py</code></a></td>
-              <td>The Claude/Codex <code>/goal</code> prompt builder.</td>
-              <td>Changing agent instructions.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/gates.py"><code>gates.py</code></a></td>
-              <td>The proof checker.</td>
-              <td>Changing phase review rules.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/decisions.py"><code>decisions.py</code></a></td>
-              <td>Decides when the user should be asked.</td>
-              <td>Too many or too few user interruptions.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/brief.py"><code>brief.py</code></a></td>
-              <td>Plain-language human summary.</td>
-              <td>Improving non-technical wording.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/issues.py"><code>issues.py</code></a></td>
-              <td>Coordinator report: user questions and agent actions.</td>
-              <td>Debugging blockers or repair suggestions.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/dashboard.py"><code>dashboard.py</code></a></td>
-              <td>Read-only HTML status page.</td>
-              <td>Changing the dashboard UI.</td>
-            </tr>
-            <tr>
-              <td><a href="../src/goals/architecture.py"><code>architecture.py</code></a></td>
-              <td>Goal-level architecture map, Mermaid, and code/map checks.</td>
-              <td>Technical visualization and architecture coverage.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="decisions">
-      <h2>6. Decisions and User Interruptions</h2>
-      <p>
-        Goals should reduce unnecessary user interruptions while still surfacing
-        meaningful risk. The core rule is in
-        <a href="../src/goals/decisions.py"><code>decisions.py</code></a>.
-      </p>
-
-      <pre><code>blocking decision              -> ask user
-any high-risk option           -> ask user
-medium-risk and irreversible   -> ask user
-low-risk or reversible choice  -> agent decides and records assumption</code></pre>
-
-      <div class="callout">
-        <strong>Practical diagnosis:</strong>
-        If the agent asks too many small questions, inspect
-        <code>decisions.py</code>. If the issue report creates too many user
-        questions, inspect <code>issues.py</code>. If the wording is bad, inspect
-        <code>brief.py</code> and <code>dashboard.py</code>.
-      </div>
-
-      <p>
-        Tool approval is separate from product/technical decisions. External
-        services, connectors, destructive actions, production-impacting actions,
-        and costly actions are governed through
-        <a href="../registries/permissions.yml"><code>registries/permissions.yml</code></a>
-        and applied by
-        <a href="../src/goals/permission_policy.py"><code>permission_policy.py</code></a>.
-      </p>
-    </section>
-
-    <section id="checkpoints">
-      <h2>7. Checkpoints and Safe Continuation</h2>
-      <p>
-        Checkpoints are phase-level stop signs. They make validation explicit
-        before an agent reviews or accepts a phase.
-      </p>
-
-      <pre><code>uv run goals checkpoint record P1 CP-plan \
-  --title "Confirm the plan" \
-  --kind human_validation \
-  --status needs_user \
-  --needs-user
-uv run goals checkpoint current
-uv run goals checkpoint waive P1 CP-plan --reason "User confirmed the plan."</code></pre>
-
-      <div class="callout">
-        <strong>Rule:</strong>
-        Required checkpoints must pass or be waived before phase review and
-        acceptance can move forward. Optional checkpoints can inform the
-        dashboard without blocking the agent.
-      </div>
-
-      <p>
-        Use checkpoints for human validation, approvals, understanding checks,
-        external reviews, handoffs, and custom validation points. They are
-        generic on purpose: a coding project, research brief, creative review,
-        operations process, or high-stakes support goal can all use the same
-        checkpoint shape.
-      </p>
-    </section>
-
-    <section id="worktrees">
-      <h2>8. Worktrees</h2>
-      <p>
-        A worktree is the physical workspace for a goal. It gives one goal its
-        own folder and branch so changes are easier to attribute and review.
-      </p>
-
-      <pre><code>base repo:       my-app
-goal id:         add-tags-to-tasks
-branch:          goal/add-tags-to-tasks
-worktree folder: my-app-add-tags-to-tasks</code></pre>
-
-      <p>
-        Goals records this as a <code>WorktreeLease</code>: base repo, base
-        branch, worktree path, branch, creation time, and topology mode.
-      </p>
-
-      <div class="callout warning">
-        <strong>Why dirty repos are refused:</strong>
-        Goals needs a clean starting line. If the repo already has uncommitted
-        changes, the agent cannot reliably know what existed before the goal and
-        what the goal itself changed.
-      </div>
-
-      <p>
-        In v1 the default topology is one goal, one worktree. The data model is
-        ready for <code>parallel</code>, <code>swarm</code>, and
-        <code>rewrite</code> modes, while deeper multi-worktree orchestration is
-        future work.
-      </p>
-    </section>
-
-    <section id="registries">
-      <h2>9. Registries, Skills, and Plugins</h2>
-      <p>
-        Goals keeps portable ecosystem configuration in YAML registries. This
-        lets the project recommend tools without hardcoding one person's local
-        setup.
-      </p>
-
+    <section>
+      <h2>The Four Commands</h2>
       <div class="grid">
         <div class="card">
-          <strong><a href="../registries/skills.yml"><code>skills.yml</code></a></strong>
-          Skill routing hints such as decision explainer, architecture map,
-          testing, security review, and docs update.
+          <h3><code>goals start</code></h3>
+          <p>Creates the goal worktree, state files, dashboard, and first next step.</p>
         </div>
         <div class="card">
-          <strong><a href="../registries/plugins.yml"><code>plugins.yml</code></a></strong>
-          Plugin routing hints such as GitHub, Browser, Build Web Apps, and
-          Product Design.
+          <h3><code>goals next</code></h3>
+          <p>Refreshes generated files and prints the paste-ready agent handoff.</p>
         </div>
         <div class="card">
-          <strong><a href="../registries/permissions.yml"><code>permissions.yml</code></a></strong>
-          Human-readable policy for agent-decide, ask-user, or deny decisions.
+          <h3><code>goals check</code></h3>
+          <p>Combines the brief, checkpoint, issues, merge, architecture, and registry checks.</p>
         </div>
         <div class="card">
-          <strong><a href="../registries/gates.yml"><code>gates.yml</code></a></strong>
-          Gate names and scanner groups.
+          <h3><code>goals view</code></h3>
+          <p>Refreshes the dashboard and architecture map, then prints their paths.</p>
         </div>
       </div>
+    </section>
 
-      <pre><code>uv run goals ecosystem recommend
-uv run goals ecosystem discover
-uv run goals ecosystem sync
-uv run goals ecosystem audit</code></pre>
-
+    <section>
+      <h2>Install Once</h2>
+      <pre><code>uv tool install --editable .</code></pre>
       <p>
-        <code>ecosystem discover</code> inspects local skills/plugins/adapters.
-        <code>ecosystem sync</code> proposes portable registry additions.
-        <code>registry.py</code> rejects unknown critical fields so unsafe YAML
-        does not silently become trusted behavior.
+        This puts <code>goals</code> on PATH, which is the command the generated
+        handoffs ask Codex and Claude to run inside your project worktree.
       </p>
     </section>
 
-    <section id="dashboard">
-      <h2>10. Dashboard, Brief, and Architecture Map</h2>
+    <section>
+      <h2>Use With Codex</h2>
+      <pre><code>goals start "Ship the onboarding cleanup" --agent codex
+cd &lt;worktree printed by goals&gt;
+goals next --agent codex | pbcopy</code></pre>
       <p>
-        The dashboard is a read-only explanation layer. It should not mutate goal
-        state. State changes happen through CLI commands that append events.
+        Paste the copied output into Codex. If Codex's native goal feature is not
+        enabled, paste the prompt into the current Codex thread and keep Goals as
+        the state layer.
       </p>
-
-      <div class="two-col">
-        <div>
-          <h3>For non-technical users</h3>
-          <ul>
-            <li><code>goals brief</code> explains what is happening.</li>
-            <li><code>goals checkpoint current</code> explains the current validation point.</li>
-            <li><code>goals dashboard</code> renders a status page.</li>
-            <li><code>goals decision brief</code> shows only important decisions.</li>
-          </ul>
-        </div>
-        <div>
-          <h3>For technical reviewers</h3>
-          <ul>
-            <li><code>goals architecture show</code> writes <code>architecture.md</code>.</li>
-            <li><code>goals architecture brief</code> summarizes map quality.</li>
-            <li><code>goals architecture check</code> compares changed files with the map.</li>
-          </ul>
-        </div>
-      </div>
-
-      <p>
-        The product idea is the same state, different explanations for different
-        audiences.
-      </p>
-
-      <pre><code>goal.json -> brief -> plain-language status
-goal.json -> dashboard.html -> read-only visual status
-goal.json -> architecture.md -> technical shape of the goal
-goal.json -> issues -> coordinator/debug report</code></pre>
     </section>
 
-    <section id="validation">
-      <h2>11. Validation, Safety, and Debugging</h2>
+    <section>
+      <h2>Use With Claude Code</h2>
+      <pre><code>goals start "Ship the onboarding cleanup" --agent claude
+cd &lt;worktree printed by goals&gt;
+goals next --agent claude | pbcopy</code></pre>
       <p>
-        <code>goals validate</code> and <code>goals safety-check</code> sound
-        similar, but they protect different things.
+        Paste the copied output into Claude Code. Goals generates the handoff even
+        when the local adapter is not detected, so the workflow remains copyable.
       </p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Command</th>
-              <th>Question it answers</th>
-              <th>Typical fix</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>uv run goals validate</code></td>
-              <td>Is Goals state structurally trustworthy?</td>
-              <td>Run <code>uv run goals repair</code> if snapshot differs from events.</td>
-            </tr>
-            <tr>
-              <td><code>uv run goals safety-check --mode local</code></td>
-              <td>Is local work free of obvious safety findings while allowing generated state?</td>
-              <td>Fix reported scanner findings.</td>
-            </tr>
-            <tr>
-              <td><code>uv run goals safety-check --mode publish</code></td>
-              <td>Is this safe to publish or share?</td>
-              <td>Remove private generated state, secrets, local paths, unsafe text, or license gaps.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h3>Debug map</h3>
-      <pre><code>goal.json stale/wrong       -> goals repair
-registry YAML broken        -> goals validate
-agent asks too often        -> decisions.py + issues.py
-phase cannot advance        -> gates.py + phase evidence
-dashboard looks wrong       -> dashboard.py, then goals dashboard
-Codex prompt looks wrong    -> mode_a.py
-worktree/branch issue       -> git_ops.py + runtime.py
-merge/migration risk        -> goals merge-check
-public release concern      -> goals safety-check --mode publish</code></pre>
     </section>
 
-    <section id="modify">
-      <h2>12. How to Safely Modify the Repo</h2>
-      <p>
-        Most feature changes follow this path:
-      </p>
-
-      <pre><code>model -> event/storage -> runtime/analysis -> CLI -> read model -> tests</code></pre>
-
-      <p>Example: adding a new kind of tracked evidence.</p>
-      <ol>
-        <li>Inspect <code>models.py</code> to understand the data shape.</li>
-        <li>Add or reuse an <code>EventType</code>.</li>
-        <li>Teach <code>storage.py</code> how to replay the event into <code>goal.json</code>.</li>
-        <li>Add runtime or analysis behavior if needed.</li>
-        <li>Add a CLI command in <code>cli.py</code> if users or agents need one.</li>
-        <li>Show it in <code>brief</code>, <code>dashboard</code>, <code>issues</code>, or <code>mode_a</code> if relevant.</li>
-        <li>Add focused tests.</li>
-      </ol>
-
+    <section>
+      <h2>During The Run</h2>
+      <pre><code>goals check
+goals view
+goals next --agent codex | pbcopy
+goals next --agent claude | pbcopy</code></pre>
       <div class="callout">
-        <strong>Rule of thumb:</strong>
-        If you are changing what Goals knows, start with <code>models.py</code>.
-        If you are changing how Goals explains what it knows, start with
-        <code>brief.py</code> or <code>dashboard.py</code>. If you are changing
-        what agents are told to do, start with <code>mode_a.py</code>.
+        Use <code>goals check</code> before interrupting the user. It separates
+        what needs the user from what the agent can repair alone.
       </div>
     </section>
 
-    <section id="tests">
-      <h2>13. Test Map</h2>
-      <p>
-        Use focused tests based on the behavior you touched.
-      </p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Change area</th>
-              <th>Tests to inspect or run</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Storage and event replay</td>
-              <td><a href="../tests/test_storage.py"><code>tests/test_storage.py</code></a></td>
-            </tr>
-            <tr>
-              <td>CLI and worktree lifecycle</td>
-              <td><a href="../tests/test_cli_integration.py"><code>tests/test_cli_integration.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Gates and decisions</td>
-              <td><a href="../tests/test_gates_decisions.py"><code>tests/test_gates_decisions.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Brief and issue reports</td>
-              <td><a href="../tests/test_brief.py"><code>tests/test_brief.py</code></a>, <a href="../tests/test_issues.py"><code>tests/test_issues.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Dashboard and public scanners</td>
-              <td><a href="../tests/test_registry_scanners_dashboard.py"><code>tests/test_registry_scanners_dashboard.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Ecosystem routing and registries</td>
-              <td><a href="../tests/test_ecosystem.py"><code>tests/test_ecosystem.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Architecture maps</td>
-              <td><a href="../tests/test_architecture.py"><code>tests/test_architecture.py</code></a></td>
-            </tr>
-            <tr>
-              <td>Self-evolution and broad scenarios</td>
-              <td><a href="../tests/test_evaluations.py"><code>tests/test_evaluations.py</code></a></td>
-            </tr>
-          </tbody>
-        </table>
+    <section>
+      <h2>Screenshots</h2>
+      <div class="shots">
+        <img src="screenshots/goals-help.png" alt="Goals help showing the simple workflow">
+        <img src="screenshots/goals-start-codex.png" alt="Starting a Codex-managed goal">
+        <img src="screenshots/goals-next-codex.png" alt="Paste-ready Codex handoff">
+        <img src="screenshots/goals-next-claude.png" alt="Paste-ready Claude handoff">
+        <img src="screenshots/goals-check.png" alt="Combined goals check">
+        <img src="screenshots/goals-dashboard.png" alt="Goals dashboard">
       </div>
-
-      <pre><code>uv run pytest
-uv run ruff check .</code></pre>
     </section>
 
-    <section id="mode-a">
-      <h2>14. Mode A and Mode B</h2>
+    <section>
+      <h2>Extensibility</h2>
       <p>
-        The current repo is Mode A first.
+        The simple commands are orchestration, not a closed system. Add new user
+        workflows in <code>src/goals/workflows.py</code>, keep CLI wiring thin in
+        <code>src/goals/cli.py</code>, and add reusable domain behavior in focused
+        modules under <code>src/goals/</code>.
       </p>
-
-      <pre><code>Mode A:
-Goals prepares the work.
-Codex or Claude does the work.
-Goals records proof and checks progress.</code></pre>
-
       <p>
-        <code>goals run --adapter codex</code> prints a Codex
-        <code>/goal</code> handoff. It does not launch Codex, control Codex,
-        or replace the native goal loop.
+        Registries under <code>registries/*.yml</code> keep adapters, plugins,
+        skills, permissions, and profiles portable. The advanced command groups
+        remain available for agents and scripts.
       </p>
-
-      <p>
-        Mode B is future work: a standalone runner shape for local AI or
-        schedulers. Runtime interfaces are present, but the standalone runner is
-        intentionally not complete in this version.
-      </p>
-    </section>
-
-    <section id="quiz">
-      <h2>15. Self-Check Quiz</h2>
-      <p>
-        If you can answer these, you understand the practical 80 percent of the
-        repo.
-      </p>
-
-      <ol>
-        <li>What is the source of truth: <code>events.jsonl</code>, <code>goal.json</code>, or <code>dashboard.html</code>?</li>
-        <li>What does <code>goals run --adapter codex</code> actually do?</li>
-        <li>Why does a phase need evidence, review, and accept?</li>
-        <li>Where do skill/plugin recommendations come from?</li>
-        <li>What kind of choices should reach the user?</li>
-        <li>What does <code>goals checkpoint current</code> tell you?</li>
-        <li>Why does <code>goals create</code> refuse a dirty repo?</li>
-        <li>What is the difference between <code>goals validate</code> and <code>goals safety-check</code>?</li>
-        <li>If the dashboard UI needs improvement, which file do you inspect first?</li>
-      </ol>
-
-      <h3>Answer key</h3>
-      <ol>
-        <li><code>events.jsonl</code> is the source of truth.</li>
-        <li>It prints the next native Codex <code>/goal</code> handoff.</li>
-        <li>Evidence records proof, review checks proof, accept moves to the next phase.</li>
-        <li>YAML registries plus local discovery, scored by ecosystem code.</li>
-        <li>Blocking, high-risk, irreversible, external, destructive, costly, or direction-changing choices.</li>
-        <li>The current validation point, who is waiting, what proof exists, and the next safe step.</li>
-        <li>Because dirty starting state makes later diffs and proof ambiguous.</li>
-        <li><code>validate</code> checks internal state integrity; <code>safety-check</code> checks public-sharing safety.</li>
-        <li><code>src/goals/dashboard.py</code>.</li>
-      </ol>
-    </section>
-
-    <section id="memory-hooks">
-      <h2>16. Memory Hooks</h2>
-      <pre><code>events.jsonl is truth.
-goal.json is summary.
-dashboard.html is explanation.
-goals run is the next /goal prompt.
-phase review is the proof gate.
-worktree is the physical workspace.
-registries make tool routing portable.
-brief is for humans.
-issues is for coordinators.
-safety-check --mode publish is for sharing.</code></pre>
     </section>
   </main>
 
   <footer>
-    <p>
-      This guide is a public-safe educational artifact. It uses relative links
-      and does not rely on local machine paths or private generated goal state.
-    </p>
+    <p>Goals is an early MVP. Mode A, the native Codex and Claude handoff path, is implemented.</p>
   </footer>
 </body>
 </html>
