@@ -11,6 +11,7 @@ from goals.decisions import build_decision_context, render_decision_explanation
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.evaluations import dogfood_goal_scenarios, evaluate_goal_scenarios, render_dogfood_report
+from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
     absorb_goal_memory,
     append_memory_entry,
@@ -110,6 +111,28 @@ def status() -> None:
         typer.echo(f"Status: {snapshot.status}")
         typer.echo(f"Current phase: {snapshot.current_phase or 'none'}")
         typer.echo(f"Events: {snapshot.event_count}")
+
+    _handle(run)
+
+
+@app.command()
+def issues(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+    strict: bool = typer.Option(
+        False, "--strict", help="Exit non-zero when blocking issues exist."
+    ),
+) -> None:
+    """Report issues that could stop the active goal from succeeding."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_goal_issues(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_issue_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
 
     _handle(run)
 

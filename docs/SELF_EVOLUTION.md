@@ -96,6 +96,16 @@ checks.
 The decision layer and visualization layer should be judged from the user's
 point of view, not from the storage model.
 
+Agents should run the issue report before escalating:
+
+```bash
+uv run goals issues
+```
+
+The report separates important user questions from agent-side repair actions.
+It is meant to help agents discover blockers, missing proof, failed reviews,
+unresolved source claims, and state mismatches before asking the user for help.
+
 Decision experience means:
 
 - only blocking or high-risk choices are surfaced to the user,
@@ -120,6 +130,7 @@ Visualization experience means:
 
 - the user can see what is happening,
 - the user can see whether the goal is blocked,
+- the user can see what issue needs attention,
 - the user can see what proof exists,
 - technical users can inspect details without forcing non-technical users to
   read raw JSON.

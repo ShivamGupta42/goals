@@ -109,9 +109,10 @@ Required loop:
 3. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
 4. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
 5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
-6. Run `goals phase review {plan.current_phase}`.
-7. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-8. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+6. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
+7. Run `goals phase review {plan.current_phase}`.
+8. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+9. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Recommended checks for this repo:
 {checks}

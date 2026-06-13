@@ -397,6 +397,38 @@ class ScenarioDogfoodReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class GoalIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    area: Literal[
+        "architecture",
+        "decision",
+        "evidence",
+        "gate",
+        "phase",
+        "source",
+        "state",
+        "risk",
+    ]
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class GoalIssueReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    issues: list[GoalIssue] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class ScanResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

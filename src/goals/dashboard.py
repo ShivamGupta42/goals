@@ -11,6 +11,7 @@ from goals.decisions import (
 )
 from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
+from goals.issues import analyze_goal_issues
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
 from goals.sources import unresolved_claims
@@ -28,7 +29,8 @@ def render_dashboard(
     current = escape(snapshot.current_phase or "none")
     architecture = architecture or architecture_for_snapshot(snapshot)
     surfaced_decisions = [d for d in snapshot.decisions if should_surface_decision(d)[0]]
-    waiting_on = _waiting_on(snapshot, surfaced_decisions)
+    issue_report = analyze_goal_issues(snapshot)
+    waiting_on = _waiting_on(snapshot, surfaced_decisions, issue_report.user_questions)
     accepted_count = len([p for p in snapshot.phases if p.status == "accepted"])
     total_count = len(snapshot.phases)
     proof_count = len([p for p in snapshot.phases if p.evidence is not None])
@@ -40,6 +42,7 @@ def render_dashboard(
         for p in snapshot.phases
     )
     decisions = _decision_html(snapshot, surfaced_decisions)
+    issues = _issues_html(issue_report)
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
     sources = _sources_html(snapshot)
@@ -105,6 +108,7 @@ def render_dashboard(
   </header>
   <nav aria-label="Dashboard views">
     <a href="#progress">Progress</a>
+    <a href="#issues">Issues</a>
     <a href="#decisions">Decisions</a>
     <a href="#ecosystem">Skills & Plugins</a>
     <a href="#memory">Memory</a>
@@ -116,6 +120,10 @@ def render_dashboard(
   <section id="progress" class="panel">
     <h2>Progress</h2>
     <table><thead><tr><th>ID</th><th>Step</th><th>Status</th><th>Plain goal</th></tr></thead><tbody>{phase_rows}</tbody></table>
+  </section>
+  <section id="issues" class="panel">
+    <h2>Issues</h2>
+    {issues}
   </section>
   <section id="decisions" class="panel">
     <h2>Decisions Needed</h2>
@@ -154,14 +162,36 @@ def render_dashboard(
     atomic_write_text(output_path, html)
 
 
-def _waiting_on(snapshot: GoalSnapshot, surfaced_decisions: list) -> str:
-    if surfaced_decisions:
+def _waiting_on(snapshot: GoalSnapshot, surfaced_decisions: list, user_questions: list[str]) -> str:
+    if surfaced_decisions or user_questions:
         return "you"
     if snapshot.blockers or snapshot.status == "blocked":
         return "agent to resolve blocker"
     if snapshot.status == "complete":
         return "no one"
     return "agent"
+
+
+def _issues_html(report) -> str:
+    if not report.issues:
+        return "<p>No goal issues found.</p>"
+    items = "\n".join(
+        "<li>"
+        f"<strong>{escape(issue.summary)}</strong>"
+        f'<p><span class="status-label {escape(issue.severity)}">{escape(issue.severity.upper())}</span> '
+        f'<span class="pill">{escape(issue.area)}</span>'
+        + (' <span class="pill">needs user</span>' if issue.needs_user else "")
+        + "</p>"
+        + (f"<p>{escape(issue.detail)}</p>" if issue.detail else "")
+        + (
+            f"<p><strong>Next:</strong> {escape(issue.suggested_action)}</p>"
+            if issue.suggested_action
+            else ""
+        )
+        + "</li>"
+        for issue in report.issues[:8]
+    )
+    return f"<p>{escape(report.summary)}</p><ul>{items}</ul>"
 
 
 def _status_label(status: str) -> str:
