@@ -14,6 +14,7 @@ ALLOWED_KEYS = {
     "gates": {"version", "kind", "gates"},
     "agents": {"version", "kind", "agents"},
     "adapters": {"version", "kind", "adapters"},
+    "permissions": {"version", "kind", "permissions"},
 }
 
 ENTRY_KEYS = {
@@ -39,6 +40,15 @@ ENTRY_KEYS = {
     },
     "adapters": {
         "label",
+    },
+    "permissions": {
+        "label",
+        "description",
+        "match",
+        "decision",
+        "risk",
+        "user_question",
+        "agent_action",
     },
 }
 

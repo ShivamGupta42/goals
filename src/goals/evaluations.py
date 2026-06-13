@@ -68,6 +68,7 @@ CURRENT_CAPABILITIES = {
     "cross_agent_recommendation_merge",
     "parallel_worktree_merge_gates",
     "phase_plan",
+    "permission_policy_registry",
     "project_history_decision_context",
     "registry_awareness",
     "registry_sync_workflow",
@@ -269,6 +270,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "automatic_skill_selection",
             "local_ecosystem_discovery",
             "plugin_capability_discovery",
+            "permission_policy_registry",
             "registry_sync_workflow",
         ],
         future_capabilities=[],
@@ -366,6 +368,7 @@ DEFAULT_GOAL_USE_CASES = [
             *CORE_GOAL_CAPABILITIES,
             "automatic_skill_selection",
             "plugin_capability_discovery",
+            "permission_policy_registry",
             "registry_awareness",
         ],
         planned_capabilities=["asset_provenance_checks", "creative_variant_comparison"],
@@ -417,9 +420,10 @@ DEFAULT_GOAL_USE_CASES = [
             "automatic_skill_selection",
             "local_ecosystem_discovery",
             "plugin_capability_discovery",
+            "permission_policy_registry",
             "registry_sync_workflow",
         ],
-        planned_capabilities=["cross_agent_recommendation_merge", "permission_policy_registry"],
+        planned_capabilities=["cross_agent_recommendation_merge"],
         important_user_decisions=[
             "External plugin permission",
             "Cost or remote side-effect approval",
@@ -1642,6 +1646,8 @@ def _supported_capabilities(
         supported.add("registry_sync_workflow")
     if "goals ecosystem merge" in prompt:
         supported.add("cross_agent_recommendation_merge")
+    if "goals permission check" in prompt:
+        supported.add("permission_policy_registry")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:

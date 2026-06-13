@@ -15,6 +15,7 @@ from goals.models import (
     MergedEcosystemRecommendation,
     Phase,
 )
+from goals.permission_policy import apply_permission_to_recommendation
 
 STOPWORDS = {
     "acceptance",
@@ -69,9 +70,13 @@ def recommend_ecosystem_tools(
             continue
         scored.append((score, candidate["kind"], candidate["name"], candidate, reason_terms))
     scored.sort(key=lambda item: (-item[0], item[1], item[2]))
-    return [
+    recommendations = [
         _to_recommendation(candidate, score, reason_terms)
         for score, _kind, _name, candidate, reason_terms in scored[:limit]
+    ]
+    return [
+        apply_permission_to_recommendation(worktree, recommendation)
+        for recommendation in recommendations
     ]
 
 
@@ -92,6 +97,7 @@ def merge_agent_recommendations(
     recommendation_sets: list[AgentRecommendationSet],
     *,
     limit: int = 8,
+    worktree: Path | None = None,
 ) -> EcosystemRecommendationMergeReport:
     """Merge multiple agents' tool recommendations into one coordinator view."""
 
@@ -100,6 +106,8 @@ def merge_agent_recommendations(
     ] = {}
     for recommendation_set in recommendation_sets:
         for recommendation in recommendation_set.recommendations:
+            if worktree is not None:
+                recommendation = apply_permission_to_recommendation(worktree, recommendation)
             key = (recommendation.kind, recommendation.name)
             grouped.setdefault(key, []).append((recommendation_set, recommendation))
 

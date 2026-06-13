@@ -76,6 +76,7 @@ uv run goals ecosystem merge
 uv run goals ecosystem discover
 uv run goals ecosystem sync
 uv run goals ecosystem audit
+uv run goals permission check github --kind plugin --action "inspect a remote issue"
 ```
 
 `recommend` uses portable registries to route the current phase. `merge`
@@ -90,6 +91,12 @@ turns those suggestions into a reviewed registry update plan; it is a dry run
 unless `--apply` is passed. `audit` checks whether registry entries are specific
 enough to route, safe enough for handoff prompts, and ready for validation-gated
 self-evolution.
+
+`permission check` answers a narrower question before the agent uses a tool or
+action: can this stay with the agent, should the user approve it, or is it unsafe
+without explicit approval? Project policies live in `registries/permissions.yml`;
+without a project policy, Goals uses built-in conservative defaults for local,
+external, destructive, costly, and production-affecting work.
 
 ## Memory Loop
 
@@ -225,6 +232,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
 - phase evidence and review gates,
 - adapter-aware native `/goal` instructions,
 - registries for skills, gates, agents, profiles, and adapters,
+- permission policies that keep routine tool choices with agents while surfacing
+  external, costly, or destructive actions,
 - a dashboard that makes progress and blockers visible,
 - decision explanations that non-technical users can understand.
 

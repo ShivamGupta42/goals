@@ -1,0 +1,26 @@
+version: 1
+kind: permissions
+permissions:
+  repo-local-safe:
+    label: Repo-local safe work
+    description: Local read-only or reversible repository work can stay with the agent.
+    match: [repo-local, local, tests, dashboard, docs, safety-check, skill]
+    decision: agent_decide
+    risk: low
+    agent_action: Proceed locally and record evidence.
+  external-service:
+    label: External service or connector
+    description: Remote services, connectors, account data, or network-visible actions need user approval.
+    match: [github, external, remote, connector, pull request, issue, ci]
+    decision: ask_user
+    risk: medium
+    user_question: Approve use of this external service or connector?
+    agent_action: Explain the tool, scope, and side effects before use.
+  destructive-or-costly:
+    label: Destructive, costly, or irreversible action
+    description: Destructive operations, paid actions, production data changes, and irreversible remote changes are unsafe without explicit approval.
+    match: [delete, destructive, production, paid, cost, billing, irreversible, force, wipe]
+    decision: deny
+    risk: high
+    user_question: This action is high risk. Do you explicitly approve it?
+    agent_action: Stop and choose a reversible local alternative unless the user explicitly approves.

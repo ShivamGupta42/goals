@@ -137,6 +137,10 @@ Local ecosystem discovery:
 - Use `goals ecosystem sync` for a dry-run registry update plan; only use `--apply` after reviewing the proposed portable YAML entries.
 - When multiple agents recommend tools, use `goals ecosystem merge` to deduplicate recommendations, surface approval-required tools, and keep routine routing decisions with the coordinator.
 
+Permission policy:
+- Before using an external service, connector, paid tool, production-affecting action, or destructive command, run `goals permission check NAME --kind plugin --action "plain-language action"`.
+- If the permission report says `agent_decide`, proceed with a reversible local action and record evidence. If it says `ask_user`, use `goals brief` wording before asking. If it says `deny`, stop and choose a safer local alternative unless the user explicitly approves.
+
 Self-evolution memory:
 {memory}
 
