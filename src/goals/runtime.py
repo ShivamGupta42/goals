@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from goals.architecture import architecture_for_snapshot, render_architecture_markdown
 from goals.dashboard import render_dashboard
 from goals.git_ops import (
     create_worktree,
@@ -200,15 +201,23 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int = 3) -> GateResult:
 
 def emit_dashboard(cwd: Path) -> Path:
     snapshot = load_active_snapshot(cwd)
-    output_path = (
-        Path(snapshot.topology.worktree_path)
-        / ".agent-workflow"
-        / "goals"
-        / snapshot.goal_id
-        / "dashboard.html"
+    goal_dir = (
+        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
     )
-    render_dashboard(snapshot, output_path)
+    output_path = goal_dir / "dashboard.html"
+    architecture_path = emit_architecture(cwd)
+    render_dashboard(snapshot, output_path, architecture_path=architecture_path)
     return output_path
+
+
+def emit_architecture(cwd: Path) -> Path:
+    snapshot = load_active_snapshot(cwd)
+    goal_dir = (
+        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
+    )
+    architecture_path = goal_dir / "architecture.md"
+    render_architecture_markdown(architecture_for_snapshot(snapshot), architecture_path)
+    return architecture_path
 
 
 def write_workflow_gitignore(repo: Path) -> None:

@@ -22,7 +22,8 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     results = evaluate_goal_scenarios(tmp_path, adapter="claude")
 
     assert all(result.current_supported for result in results)
-    assert any("architecture_map" in result.planned_capabilities for result in results)
+    assert any("architecture_map" in result.supported_capabilities for result in results)
+    assert all("architecture_map" not in result.planned_capabilities for result in results)
     assert any("automatic_skill_selection" in result.planned_capabilities for result in results)
     for result in results:
         assert "end_user_decision_experience" in result.supported_capabilities

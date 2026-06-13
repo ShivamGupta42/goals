@@ -10,12 +10,13 @@ from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
 from goals.evaluations import evaluate_goal_scenarios
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
-from goals.models import Decision, Event, EventType, Evidence, GateVerdict
+from goals.models import Decision, Event, EventType, Evidence, GateVerdict, GoalArchitectureMap
 from goals.registry import validate_registries
 from goals.runtime import (
     append_event,
     claim_worktree,
     create_goal,
+    emit_architecture,
     emit_dashboard,
     load_active_snapshot,
     run_gate,
@@ -26,10 +27,12 @@ from goals.storage import EventStore, GoalsError, atomic_write_text
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
+architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 app.add_typer(adapter_app, name="adapter")
+app.add_typer(architecture_app, name="architecture")
 app.add_typer(decision_app, name="decision")
 app.add_typer(eval_app, name="eval")
 app.add_typer(phase_app, name="phase")
@@ -193,6 +196,40 @@ def adapter_check_command(name: str) -> None:
     typer.echo(f"{name}: {'ok' if ok else 'not ready'} - {detail}")
     if not ok:
         raise typer.Exit(1)
+
+
+@architecture_app.command("show")
+def architecture_show() -> None:
+    """Regenerate and print the active goal architecture Markdown path."""
+
+    def run():
+        typer.echo(str(emit_architecture(Path.cwd())))
+
+    _handle(run)
+
+
+@architecture_app.command("update")
+def architecture_update(
+    file: Path = typer.Option(..., "--file", "-f", help="Read architecture JSON from a file."),
+) -> None:
+    """Record a project-specific architecture map for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        architecture = GoalArchitectureMap.model_validate_json(file.read_text(encoding="utf-8"))
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.ARCHITECTURE_UPDATED,
+                payload={"architecture": architecture.model_dump()},
+            ),
+        )
+        architecture_path = emit_architecture(Path.cwd())
+        emit_dashboard(Path.cwd())
+        typer.echo(f"Updated architecture map: {architecture_path}")
+
+    _handle(run)
 
 
 @eval_app.command("scenarios")

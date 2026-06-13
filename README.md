@@ -33,6 +33,7 @@ uv run goals create "Add tags to tasks and update tests" \
 uv run goals status
 uv run goals run --adapter codex
 uv run goals dashboard
+uv run goals architecture show
 uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
 ```
@@ -67,6 +68,17 @@ Agents can explain only important decisions with active goal history:
 ```bash
 uv run goals decision explain --file decision.json --level basic
 ```
+
+Agents and technical reviewers can inspect a goal-level architecture map:
+
+```bash
+uv run goals architecture show
+uv run goals architecture update --file architecture.json
+```
+
+The dashboard is the simple status view for end users. `architecture.md` is the
+deeper Markdown/Mermaid view for people who want to question what is built,
+planned, blocked, or deferred.
 
 ## Public Safety
 

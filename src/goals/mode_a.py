@@ -32,6 +32,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         adapter_detail=detail,
         goal_file=str(goal_dir / "goal.json"),
         dashboard_file=str(goal_dir / "dashboard.html"),
+        architecture_file=str(goal_dir / "architecture.md"),
         current_phase=phase.phase_id,
         phase_title=phase.title,
         phase_goal=phase.goal,
@@ -81,6 +82,7 @@ Adapter status: {"ready" if plan.adapter_ready else "not confirmed"} - {plan.ada
 State files:
 - Goal snapshot: `{plan.goal_file}`
 - Dashboard: `{plan.dashboard_file}`
+- Architecture map: `{plan.architecture_file}`
 - Evidence draft: `{plan.evidence_file}`
 
 Current phase: {plan.current_phase} - {plan.phase_title}
@@ -92,11 +94,12 @@ Acceptance criteria:
 Required loop:
 1. Read `goal.json` before each turn and work only on the current phase.
 2. Make reversible progress without changing unrelated files.
-3. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
-4. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
-5. Run `goals phase review {plan.current_phase}`.
-6. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-7. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+3. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
+4. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
+5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
+6. Run `goals phase review {plan.current_phase}`.
+7. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+8. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Recommended checks for this repo:
 {checks}

@@ -45,6 +45,7 @@ class EventType(StrEnum):
     PHASE_REVIEWED = "phase_reviewed"
     PHASE_ACCEPTED = "phase_accepted"
     DECISION_REQUESTED = "decision_requested"
+    ARCHITECTURE_UPDATED = "architecture_updated"
     LEARNING_CAPTURED = "learning_captured"
     SCAN_COMPLETED = "scan_completed"
 
@@ -164,6 +165,39 @@ class DecisionExplanation(BaseModel):
     context: DecisionContext
 
 
+class ArchitectureNode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: str
+    label: str
+    plain_summary: str
+    status: Literal["planned", "in_progress", "built", "blocked", "deferred", "removed"] = "planned"
+    owner_phase: str | None = None
+    user_value: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    technical_notes: list[str] = Field(default_factory=list)
+
+
+class ArchitectureEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_node: str
+    to_node: str
+    relation: str = "leads_to"
+    plain_summary: str = ""
+
+
+class GoalArchitectureMap(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    overview: str
+    nodes: list[ArchitectureNode] = Field(default_factory=list)
+    edges: list[ArchitectureEdge] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+    updated_at: str = Field(default_factory=utc_now)
+
+
 class ScenarioDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -218,6 +252,7 @@ class ModeAPlan(BaseModel):
     adapter_detail: str = ""
     goal_file: str
     dashboard_file: str
+    architecture_file: str
     current_phase: str
     phase_title: str
     phase_goal: str
@@ -242,6 +277,7 @@ class GoalSnapshot(BaseModel):
     phases: list[Phase]
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
+    architecture: GoalArchitectureMap | None = None
     blockers: list[str] = Field(default_factory=list)
     learnings: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)

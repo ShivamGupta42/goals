@@ -14,6 +14,7 @@ from goals.runtime import default_phases
 
 CURRENT_CAPABILITIES = {
     "adapter_awareness",
+    "architecture_map",
     "durable_state",
     "end_user_decision_experience",
     "end_user_visualization",
@@ -83,11 +84,12 @@ DEFAULT_GOAL_SCENARIOS = [
             "evidence_contract",
             "end_user_decision_experience",
             "end_user_visualization",
+            "architecture_map",
             "review_gate",
             "local_safety_check",
             "important_decision_filter",
         ],
-        future_capabilities=["architecture_map"],
+        future_capabilities=[],
         decisions=[
             ScenarioDecision(
                 title="Migration risk",
@@ -160,11 +162,12 @@ DEFAULT_GOAL_SCENARIOS = [
             "evidence_contract",
             "end_user_decision_experience",
             "end_user_visualization",
+            "architecture_map",
             "review_gate",
             "local_safety_check",
             "important_decision_filter",
         ],
-        future_capabilities=["self_evolution_memory", "architecture_map"],
+        future_capabilities=["self_evolution_memory"],
         decisions=[
             ScenarioDecision(
                 title="Scope expansion",
@@ -283,6 +286,8 @@ def _supported_capabilities(
         supported.add("durable_state")
     if "Dashboard:" in prompt and "dashboard.html" in prompt:
         supported.add("end_user_visualization")
+    if "Architecture map:" in prompt and "architecture.md" in prompt:
+        supported.add("architecture_map")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:

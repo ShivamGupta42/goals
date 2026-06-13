@@ -13,6 +13,7 @@ from goals.models import (
     Event,
     EventType,
     GateResult,
+    GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
     PhaseStatus,
@@ -125,6 +126,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             snapshot.decisions.append(decision)
             if payload["decision"].get("priority") == "blocking":
                 snapshot.status = GoalStatus.BLOCKED
+        elif event.event_type == EventType.ARCHITECTURE_UPDATED:
+            snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
         elif event.event_type == EventType.LEARNING_CAPTURED:
             snapshot.learnings.append(payload["learning"])
     return GoalSnapshot.model_validate(snapshot.model_dump())

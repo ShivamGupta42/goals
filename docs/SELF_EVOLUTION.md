@@ -62,9 +62,10 @@ Visualization experience means:
 - technical users can inspect details without forcing non-technical users to
   read raw JSON.
 
-The future architecture view should extend this principle: it should help a
-technical user question what is built, planned, deferred, or missing while
-keeping the default view simple.
+The architecture view extends this principle: the dashboard gives a simple map,
+while `architecture.md` gives technical users a Markdown/Mermaid diagram they
+can question. It should show what is built, planned, blocked, deferred, or
+missing while keeping the default view simple.
 
 ## Decision Rule
 

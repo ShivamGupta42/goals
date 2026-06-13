@@ -60,8 +60,13 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Add tags" in status.stdout
     run_prompt = run(["python", "-m", "goals.cli", "run", "--adapter", "codex"], worktree)
     assert "Codex Mode A notes" in run_prompt.stdout
+    assert "Architecture map:" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
+    architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
+    architecture_path = Path(architecture.stdout.strip())
+    assert architecture_path.exists()
+    assert "```mermaid" in architecture_path.read_text()
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
     eval_result = run(
@@ -78,6 +83,70 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert publish_safety.returncode == 1
     assert "public_repo_hygiene: fail" in publish_safety.stdout
+
+
+def test_architecture_update_records_project_specific_map(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    result = run(["python", "-m", "goals.cli", "create", "Ship demo"], repo)
+    worktree = Path(
+        next(line for line in result.stdout.splitlines() if line.startswith("Worktree:"))
+        .split(":", 1)[1]
+        .strip()
+    )
+    architecture_file = worktree / "architecture.json"
+    architecture_file.write_text(
+        json.dumps(
+            {
+                "title": "Demo architecture",
+                "overview": "A user-facing dashboard backed by event state.",
+                "nodes": [
+                    {
+                        "node_id": "state",
+                        "label": "Goal state",
+                        "plain_summary": "Stores events and derived snapshots.",
+                        "status": "built",
+                        "user_value": "Keeps work resumable.",
+                    },
+                    {
+                        "node_id": "dashboard",
+                        "label": "Dashboard",
+                        "plain_summary": "Shows progress and decisions.",
+                        "status": "in_progress",
+                        "user_value": "Makes the goal understandable.",
+                    },
+                ],
+                "edges": [
+                    {
+                        "from_node": "state",
+                        "to_node": "dashboard",
+                        "relation": "renders",
+                        "plain_summary": "State renders into the dashboard.",
+                    }
+                ],
+            }
+        )
+    )
+
+    update = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "architecture",
+            "update",
+            "--file",
+            str(architecture_file),
+        ],
+        worktree,
+    )
+    output_path = Path(update.stdout.split(":", 1)[1].strip())
+    text = output_path.read_text()
+
+    assert "Updated architecture map" in update.stdout
+    assert "Demo architecture" in text
+    assert "State renders into the dashboard" in text
 
 
 def test_create_refuses_dirty_repo(tmp_path: Path) -> None:

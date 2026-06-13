@@ -8,7 +8,8 @@ questions to resolve before implementation.
 
 **Status:** Partially implemented. Basic/Detailed/Technical rendering and active
 goal history context exist; richer memory limits and dashboard integration are
-still planned.
+still planned. The dashboard now filters routine decisions and shows only
+important user-facing decisions by default.
 
 Goals should help agents explain technical decisions in a way non-technical users
 can understand, while still giving technical users enough detail to challenge the
@@ -35,7 +36,10 @@ may need to understand what has already happened in the project.
 
 ## Goal Architecture Map
 
-**Status:** Planned, not implemented.
+**Status:** Partially implemented. Goals now renders a default phase-derived
+`architecture.md`, accepts a typed project-specific architecture map, includes it
+in Mode A handoffs, and shows an Architecture section in the dashboard. Deeper
+code-derived validation and parallel-worktree merge behavior are still planned.
 
 For larger goals, technical users need a way to inspect what is being built,
 what is not built yet, and how each phase changes the project. Goals should
@@ -44,17 +48,17 @@ state.
 
 ### Direction
 
-- Add an optional Markdown artifact, for example
+- Maintain an optional Markdown artifact at
   `.agent-workflow/goals/<goal-id>/architecture.md`.
-- Let agents record one architecture diagram for the entire goal, updated as the
-  goal evolves.
+- Let agents record one typed architecture diagram for the entire goal, updated
+  as the goal evolves.
 - Prefer Mermaid in Markdown for portability, with room for generated HTML later.
 - Track modules, files, data flow, external systems, and status labels such as
   planned, in progress, built, deferred, or removed.
 - Link each architecture node to phases, decisions, evidence, or changed files
   when possible.
-- Render this in the dashboard as an optional Architecture tab/view beside:
-  Progress, Decisions, Evidence, Logs, and Technical Details.
+- Render this in the dashboard as an Architecture view beside Progress,
+  Decisions, Evidence, and Technical Details.
 
 ### Why It Matters
 
@@ -71,12 +75,14 @@ state.
 - Should Goals validate the diagram against changed files or keep it advisory?
 - How should conflicting diagrams from parallel worktrees be merged?
 
-## Dashboard Tabs
+## Dashboard Views
 
-**Status:** Planned, not implemented.
+**Status:** Partially implemented.
 
-The current dashboard is a single read-only status page. Future dashboard work
-should split the page into clear views without making it a control plane.
+The dashboard is still a single read-only HTML file, but it now has clear view
+anchors for Progress, Decisions, Architecture, Evidence, and Technical Details.
+Future dashboard work should deepen those views without making it a control
+plane.
 
 Likely views:
 
