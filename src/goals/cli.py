@@ -10,8 +10,24 @@ from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.evaluations import evaluate_goal_scenarios
+from goals.memory import (
+    absorb_goal_memory,
+    append_memory_entry,
+    derive_memory_suggestions,
+    load_memory,
+    memory_path,
+    render_memory_suggestions,
+)
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
-from goals.models import Decision, Event, EventType, Evidence, GateVerdict, GoalArchitectureMap
+from goals.models import (
+    Decision,
+    Event,
+    EventType,
+    Evidence,
+    GateVerdict,
+    GoalArchitectureMap,
+    SelfEvolutionEntry,
+)
 from goals.registry import validate_registries
 from goals.runtime import (
     append_event,
@@ -32,12 +48,14 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
+memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
+app.add_typer(memory_app, name="memory")
 app.add_typer(phase_app, name="phase")
 
 
@@ -255,6 +273,90 @@ def ecosystem_recommend(
     _handle(run)
 
 
+@memory_app.command("record")
+def memory_record(
+    note: str,
+    area: str = typer.Option("other", help="phase, skill, gate, decision, docs, test, etc."),
+    kind: str = typer.Option("friction", help="friction, gap, learning, or success."),
+    severity: str = typer.Option("medium", help="low, medium, or high."),
+    phase: Optional[str] = typer.Option(None, help="Phase id related to the observation."),
+    evidence: Optional[list[str]] = typer.Option(None, "--evidence", help="Evidence reference."),
+) -> None:
+    """Record reusable friction, gaps, learnings, or successes."""
+
+    def run():
+        snapshot = _optional_snapshot(Path.cwd())
+        entry = SelfEvolutionEntry(
+            kind=_validate_choice(kind, {"friction", "gap", "learning", "success"}, "kind"),  # type: ignore[arg-type]
+            area=_validate_choice(
+                area,
+                {
+                    "adapter",
+                    "architecture",
+                    "dashboard",
+                    "decision",
+                    "docs",
+                    "ecosystem",
+                    "gate",
+                    "phase",
+                    "safety",
+                    "skill",
+                    "test",
+                    "other",
+                },
+                "area",
+            ),  # type: ignore[arg-type]
+            note=note,
+            severity=_validate_choice(severity, {"low", "medium", "high"}, "severity"),  # type: ignore[arg-type]
+            goal_id=snapshot.goal_id if snapshot is not None else "",
+            phase_id=phase or (snapshot.current_phase if snapshot is not None else None),
+            evidence_refs=evidence or [],
+        )
+        memory = append_memory_entry(Path.cwd(), entry, snapshot)
+        suggestions = derive_memory_suggestions(memory)
+        typer.echo(f"Recorded memory: {entry.entry_id}")
+        visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
+        if visible:
+            typer.echo(render_memory_suggestions(visible[:3]))
+
+    _handle(run)
+
+
+@memory_app.command("suggest")
+def memory_suggest(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show self-evolution suggestions derived from repeated friction."""
+
+    def run():
+        snapshot = _optional_snapshot(Path.cwd())
+        memory = load_memory(Path.cwd(), snapshot)
+        suggestions = derive_memory_suggestions(memory)
+        if json_output:
+            typer.echo(json.dumps([item.model_dump(mode="json") for item in suggestions], indent=2))
+        else:
+            typer.echo(render_memory_suggestions(suggestions))
+            typer.echo(f"Memory file: {memory_path(Path.cwd(), snapshot)}")
+
+    _handle(run)
+
+
+@memory_app.command("absorb")
+def memory_absorb() -> None:
+    """Absorb active goal gaps, blockers, failed reviews, and learnings into memory."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        entries = absorb_goal_memory(Path.cwd(), snapshot)
+        suggestions = derive_memory_suggestions(load_memory(Path.cwd(), snapshot))
+        typer.echo(f"Absorbed {len(entries)} new memory entries.")
+        visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
+        if visible:
+            typer.echo(render_memory_suggestions(visible[:5]))
+
+    _handle(run)
+
+
 @eval_app.command("scenarios")
 def eval_scenarios(
     adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
@@ -309,6 +411,19 @@ def decision_explain(
                 typer.echo("\nAgent note: this does not need to interrupt the user.")
 
     _handle(run)
+
+
+def _optional_snapshot(cwd: Path):
+    try:
+        return load_active_snapshot(cwd)
+    except GoalsError:
+        return None
+
+
+def _validate_choice(value: str, choices: set[str], label: str) -> str:
+    if value not in choices:
+        raise GoalsError(f"{label} must be one of: {', '.join(sorted(choices))}")
+    return value
 
 
 @phase_app.command("start")

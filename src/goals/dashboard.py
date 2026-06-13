@@ -11,6 +11,7 @@ from goals.decisions import (
 )
 from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
+from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
 from goals.storage import atomic_write_text
 
@@ -39,6 +40,7 @@ def render_dashboard(
     )
     decisions = _decision_html(snapshot, surfaced_decisions)
     recommendations = _recommendations_html(snapshot)
+    memory = _memory_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
         for p in snapshot.phases
@@ -103,6 +105,7 @@ def render_dashboard(
     <a href="#progress">Progress</a>
     <a href="#decisions">Decisions</a>
     <a href="#ecosystem">Skills & Plugins</a>
+    <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#evidence">Evidence</a>
     <a href="#technical">Technical Details</a>
@@ -118,6 +121,10 @@ def render_dashboard(
   <section id="ecosystem" class="panel">
     <h2>Suggested Skills and Plugins</h2>
     {recommendations}
+  </section>
+  <section id="memory" class="panel">
+    <h2>Self-Evolution Memory</h2>
+    {memory}
   </section>
   <section id="architecture" class="panel">
     <h2>Architecture Map</h2>
@@ -201,6 +208,30 @@ def _recommendations_html(snapshot: GoalSnapshot) -> str:
         + ("<p>User approval needed before using this.</p>" if rec.user_approval_required else "")
         + "</li>"
         for rec in recommendations
+    )
+    return f'<ul class="node-list">{items}</ul>'
+
+
+def _memory_html(snapshot: GoalSnapshot) -> str:
+    suggestions = derive_memory_suggestions(
+        load_memory(Path(snapshot.topology.worktree_path), snapshot)
+    )
+    visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
+    if not visible:
+        return "<p>No repeated self-evolution friction recorded.</p>"
+    items = "\n".join(
+        "<li>"
+        f"<strong>{escape(suggestion.title)}</strong>"
+        f"<p>{escape(suggestion.plain_summary)}</p>"
+        f"<p><strong>Recommended change:</strong> {escape(suggestion.recommended_change)}</p>"
+        f'<span class="status-label {escape(suggestion.severity)}">{escape(suggestion.severity)}</span>'
+        + (
+            f"<p><code>{escape(suggestion.suggested_command)}</code></p>"
+            if suggestion.suggested_command
+            else ""
+        )
+        + "</li>"
+        for suggestion in visible[:6]
     )
     return f'<ul class="node-list">{items}</ul>'
 

@@ -178,6 +178,56 @@ class EcosystemRecommendation(BaseModel):
     user_approval_required: bool = False
 
 
+class SelfEvolutionEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entry_id: str = Field(default_factory=lambda: f"M-{uuid4().hex[:8]}")
+    kind: Literal["friction", "gap", "learning", "success"] = "learning"
+    area: Literal[
+        "adapter",
+        "architecture",
+        "dashboard",
+        "decision",
+        "docs",
+        "ecosystem",
+        "gate",
+        "phase",
+        "safety",
+        "skill",
+        "test",
+        "other",
+    ] = "other"
+    note: str
+    severity: Literal["low", "medium", "high"] = "medium"
+    goal_id: str = ""
+    phase_id: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=utc_now)
+
+
+class SelfEvolutionSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suggestion_id: str = Field(default_factory=lambda: f"S-{uuid4().hex[:8]}")
+    area: str
+    title: str
+    plain_summary: str
+    recommended_change: str
+    occurrences: int
+    severity: Literal["low", "medium", "high"] = "medium"
+    evidence_refs: list[str] = Field(default_factory=list)
+    user_visible: bool = False
+    suggested_command: str = ""
+
+
+class SelfEvolutionMemory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = SCHEMA_VERSION
+    entries: list[SelfEvolutionEntry] = Field(default_factory=list)
+    updated_at: str = Field(default_factory=utc_now)
+
+
 class ArchitectureNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -272,6 +322,7 @@ class ModeAPlan(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     recommended_checks: list[str] = Field(default_factory=list)
     recommended_tools: list[EcosystemRecommendation] = Field(default_factory=list)
+    memory_suggestions: list[SelfEvolutionSuggestion] = Field(default_factory=list)
     evidence_file: str
     evidence_template: Evidence
     prompt: str

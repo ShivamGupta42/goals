@@ -63,6 +63,19 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     worktree = Path(worktree_line.split(":", 1)[1].strip())
     goal_file = next((worktree / ".agent-workflow" / "goals").glob("*/goal.json"))
     assert json.loads(goal_file.read_text())["why"] == "Make tasks easier to organize."
+    exclude_path = Path(
+        run(["git", "rev-parse", "--git-path", "info/exclude"], worktree).stdout.strip()
+    )
+    if not exclude_path.is_absolute():
+        exclude_path = worktree / exclude_path
+    exclude = exclude_path.read_text()
+    assert ".agent-workflow/self-evolution/" in exclude
+    base_exclude_path = Path(
+        run(["git", "rev-parse", "--git-path", "info/exclude"], repo).stdout.strip()
+    )
+    if not base_exclude_path.is_absolute():
+        base_exclude_path = repo / base_exclude_path
+    assert ".agent-workflow/self-evolution/" in base_exclude_path.read_text()
     status = run(["python", "-m", "goals.cli", "status"], worktree)
     assert "Add tags" in status.stdout
     run_prompt = run(["python", "-m", "goals.cli", "run", "--adapter", "codex"], worktree)
@@ -79,6 +92,39 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "registries=6" in validate.stdout
     ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
     assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Repeated friction choosing the right skill.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        worktree,
+    )
+    memory = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Repeated friction choosing the right skill again.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        worktree,
+    )
+    assert "Improve or add a skill" in memory.stdout
+    suggestions = run(["python", "-m", "goals.cli", "memory", "suggest"], worktree)
+    assert "Improve or add a skill" in suggestions.stdout
     eval_result = run(
         ["python", "-m", "goals.cli", "eval", "scenarios", "--adapter", "claude"], worktree
     )

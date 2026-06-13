@@ -116,3 +116,27 @@ discover every installed skill or plugin automatically.
 - Should local discovery update the registry, or stay as a transient suggestion?
 - How should conflicting skill recommendations from different agents be merged?
 - How much should Goals learn from repeated recommendation misses across goals?
+
+## Self-Evolution Memory
+
+**Status:** Partially implemented. Goals now stores local self-evolution memory
+under `.agent-workflow/self-evolution/memory.json`, derives suggestions from
+repeated friction or high-severity gaps, includes those suggestions in Mode A
+handoffs, and shows visible suggestions in the dashboard.
+
+### Direction
+
+- Record friction, gaps, learnings, and successes by area: phase, skill, gate,
+  decision, dashboard, safety, docs, tests, ecosystem, and more.
+- Derive suggestions only when the issue is repeated or high severity.
+- Keep the memory local and ignored by default because it can include project
+  history and private context.
+- Use memory to recommend small improvements to skills, phases, gates, docs, or
+  registries after dogfood runs.
+
+### Open Questions
+
+- Should memory remain project-local, or support an optional user-wide memory?
+- How should parallel worktree memories be reconciled?
+- When should a memory suggestion become a blocking user decision instead of an
+  agent-handled improvement?

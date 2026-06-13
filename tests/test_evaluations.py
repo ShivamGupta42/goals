@@ -33,6 +33,8 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     assert all("architecture_map" not in result.planned_capabilities for result in results)
     assert any("automatic_skill_selection" in result.supported_capabilities for result in results)
     assert all("automatic_skill_selection" not in result.planned_capabilities for result in results)
+    assert any("self_evolution_memory" in result.supported_capabilities for result in results)
+    assert all("self_evolution_memory" not in result.planned_capabilities for result in results)
     for result in results:
         assert "end_user_decision_experience" in result.supported_capabilities
         assert result.surfaced_decisions

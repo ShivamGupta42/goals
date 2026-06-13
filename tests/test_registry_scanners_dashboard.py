@@ -29,6 +29,17 @@ def test_safety_scanner_detects_secret_and_local_path(tmp_path: Path) -> None:
     assert results["local_paths"].findings
 
 
+def test_publish_safety_blocks_self_evolution_memory(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE").write_text("MIT\n")
+    memory_dir = tmp_path / ".agent-workflow" / "self-evolution"
+    memory_dir.mkdir(parents=True)
+    (memory_dir / "memory.json").write_text('{"entries":[]}\n')
+
+    results = {result.scanner: result for result in run_safety_scanners(tmp_path)}
+
+    assert results["public_repo_hygiene"].findings
+
+
 def test_dashboard_escapes_html(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",
@@ -50,6 +61,7 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Progress" in text
     assert "Decisions Needed" in text
     assert "Suggested Skills and Plugins" in text
+    assert "Self-Evolution Memory" in text
     assert "Architecture Map" in text
     assert "No decisions are waiting on you." in text
     assert "Goal ID:" in text

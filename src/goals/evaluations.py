@@ -27,6 +27,7 @@ CURRENT_CAPABILITIES = {
     "project_history_decision_context",
     "registry_awareness",
     "review_gate",
+    "self_evolution_memory",
     "simple_decision_format",
     "worktree_isolation",
 }
@@ -167,8 +168,9 @@ DEFAULT_GOAL_SCENARIOS = [
             "review_gate",
             "local_safety_check",
             "important_decision_filter",
+            "self_evolution_memory",
         ],
-        future_capabilities=["self_evolution_memory"],
+        future_capabilities=[],
         decisions=[
             ScenarioDecision(
                 title="Scope expansion",
@@ -292,6 +294,8 @@ def _supported_capabilities(
         supported.add("architecture_map")
     if "Recommended skills/plugins for this phase:" in prompt:
         supported.add("automatic_skill_selection")
+    if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
+        supported.add("self_evolution_memory")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
         supported.add("worktree_isolation")
     if snapshot.current_phase and snapshot.phases and "Acceptance criteria:" in prompt:

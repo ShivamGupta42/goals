@@ -35,6 +35,7 @@ uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
 uv run goals ecosystem recommend
+uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
 ```
@@ -79,6 +80,16 @@ uv run goals ecosystem recommend
 Mode A handoffs include these recommendations automatically. Goals does not run
 external tools for the agent; it explains what looks relevant and whether user
 approval is needed.
+
+Agents can record repeated friction so future goals improve:
+
+```bash
+uv run goals memory record "Repeated setup confusion" --area skill --kind friction
+uv run goals memory suggest
+```
+
+Self-evolution memory is local generated state under `.agent-workflow/` and is
+ignored by default.
 
 Agents and technical reviewers can inspect a goal-level architecture map:
 

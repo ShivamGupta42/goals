@@ -80,9 +80,10 @@ def _is_allowed_line(lines: list[str], index: int) -> bool:
 def _scan_generated_state(root: Path, mode: str) -> ScanResult:
     if mode == "local":
         return ScanResult(scanner="public_repo_hygiene", verdict=GateVerdict.PASS)
+    generated_root = root / ".agent-workflow"
     generated = (
-        [str(p) for p in (root / ".agent-workflow" / "goals").rglob("*") if p.is_file()]
-        if (root / ".agent-workflow" / "goals").exists()
+        [str(p) for p in generated_root.rglob("*") if p.is_file()]
+        if generated_root.exists()
         else []
     )
     return ScanResult(

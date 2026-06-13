@@ -6,6 +6,7 @@ from typing import Literal
 
 from goals.adapters import adapter_check
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
+from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.storage import GoalsError
 
@@ -19,6 +20,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
     goal_dir = worktree / ".agent-workflow" / "goals" / snapshot.goal_id
     checks = recommended_checks(worktree)
     recommended_tools = recommend_ecosystem_tools(worktree, snapshot)
+    memory_suggestions = derive_memory_suggestions(load_memory(worktree, snapshot))[:5]
     evidence_file = goal_dir / f"evidence-{phase.phase_id.lower()}.json"
     evidence = Evidence(
         changed_files=[],
@@ -41,6 +43,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         acceptance_criteria=phase.acceptance_criteria,
         recommended_checks=checks,
         recommended_tools=recommended_tools,
+        memory_suggestions=memory_suggestions,
         evidence_file=str(evidence_file),
         evidence_template=evidence,
         prompt="",
@@ -77,6 +80,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     criteria = _bullets(plan.acceptance_criteria)
     checks = _bullets(plan.recommended_checks)
     tools = render_recommendations(plan.recommended_tools)
+    memory = render_memory_suggestions(plan.memory_suggestions)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -111,6 +115,9 @@ Recommended checks for this repo:
 Recommended skills/plugins for this phase:
 {tools}
 
+Self-evolution memory:
+{memory}
+
 Evidence JSON shape:
 ```json
 {evidence_json}
@@ -118,7 +125,9 @@ Evidence JSON shape:
 
 {adapter_notes}
 
-Goals is the durable state and review layer. The native agent goal loop owns persistence of attention; Goals owns phases, evidence, gates, decisions, learnings, and the dashboard.
+If you hit repeated friction, record it with `goals memory record "what happened" --area phase --kind friction` so future runs can improve phases, skills, gates, or docs.
+
+Goals is the durable state and review layer. The native agent goal loop owns persistence of attention; Goals owns phases, evidence, gates, decisions, learnings, memory, and the dashboard.
 """
 
 

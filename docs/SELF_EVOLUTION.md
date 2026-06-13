@@ -29,6 +29,24 @@ Each scenario has required current capabilities and planned future capabilities.
 The command fails when current capabilities are missing, but planned
 capabilities remain visible as the next frontier.
 
+## Memory Loop
+
+Goals can record repeated friction and derive improvement suggestions:
+
+```bash
+uv run goals memory record "Repeated setup confusion" --area skill --kind friction
+uv run goals memory absorb
+uv run goals memory suggest
+```
+
+Use `record` when an agent notices a reusable issue during work. Use `absorb`
+after a goal has evidence, blockers, failed reviews, or learnings that should
+become reusable memory. Suggestions are surfaced when a pattern repeats or a gap
+is high severity.
+
+Memory is local generated state under `.agent-workflow/self-evolution/`. It is
+not meant for public commits.
+
 ## End-User Experience
 
 The decision layer and visualization layer should be judged from the user's
@@ -97,6 +115,7 @@ permissions. Goals should not replace them. Its unique value is to provide:
 
 Future work should connect scenario results to automatic skill/plugin selection,
 and the first registry-backed version now recommends skills/plugins in Mode A
-handoffs and the dashboard. Goals must still always know what phase it is in,
-what evidence exists, what remains uncertain, whether a decision really needs
-the user, and whether an external tool needs approval before use.
+handoffs and the dashboard. Self-evolution memory records repeated friction and
+turns it into improvement suggestions. Goals must still always know what phase
+it is in, what evidence exists, what remains uncertain, whether a decision
+really needs the user, and whether an external tool needs approval before use.

@@ -124,6 +124,7 @@ def create_goal(
             payload={"snapshot": snapshot.model_dump()},
         )
     )
+    write_workflow_gitignore(repo)
     write_workflow_gitignore(worktree)
     return store.snapshot()
 
@@ -223,7 +224,7 @@ def emit_architecture(cwd: Path) -> Path:
 def write_workflow_gitignore(repo: Path) -> None:
     path = git_path(repo, "info/exclude")
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    rules = [".agent-workflow/goals/", ".goals-worktrees/"]
+    rules = [".agent-workflow/goals/", ".agent-workflow/self-evolution/", ".goals-worktrees/"]
     missing = [rule for rule in rules if rule not in existing.splitlines()]
     if missing:
         suffix = "\n".join(["", "# Goals local state", *missing, ""])
