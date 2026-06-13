@@ -113,7 +113,8 @@ and state mismatches. By default it is a read-only report; use `--strict` when a
 script should fail on blocking issues.
 
 `merge-check` is the coordinator's pre-merge view. It looks for migration files
-without recorded ordering proof, parallel-worktree reconciliation gaps,
+without recorded ordering proof, scans sibling worktrees when Git exposes them,
+checks dirty workers, branch drift, file overlap, parallel migration risk,
 base-branch or conflict risks, and high-risk merge choices that really need the
 user. Routine merge cleanup stays as an agent action.
 

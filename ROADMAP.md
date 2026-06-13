@@ -158,7 +158,9 @@ gaps, unsafe reviews, merge-readiness risks, and user-decision filtering. The
 self-check roll-up now runs the evaluation matrix across Claude and Codex
 adapter shapes and summarizes recommended next product slices. Goals can now
 turn those slices into a dry-run `ROADMAP.md` update plan with `goals roadmap
-suggest`, and `--apply` updates only a generated roadmap block.
+suggest`, and `--apply` updates only a generated roadmap block. Merge readiness
+now includes a parallel worktree scan that reports dirty sibling worktrees,
+branch drift, overlapping files, and parallel migration-ordering risk.
 
 ### Direction
 
@@ -180,8 +182,9 @@ suggest`, and `--apply` updates only a generated roadmap block.
 - Keep issue stress evaluation in the merge checklist so Goals proves it can
   find bad states and avoid unnecessary user interruptions.
 - Keep `goals merge-check` in coordinator merge flows so migration ordering,
-  branch drift, and parallel-worktree reconciliation are checked before humans
-  are asked to resolve only genuinely high-risk choices.
+  branch drift, dirty sibling worktrees, file overlap, parallel migration risk,
+  and parallel-worktree reconciliation are checked before humans are asked to
+  resolve only genuinely high-risk choices.
 
 ### Open Questions
 
@@ -218,34 +221,34 @@ now treats source evidence as a current capability.
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Parallel Worktree Merge Gates** (`p1`)
-  - Source: self-check
-  - Capability: `parallel_worktree_merge_gates`
-  - Why: Self-check recommends parallel worktree merge gates as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible parallel worktree merge gates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Cross Agent Recommendation Merge** (`p2`)
+- **Cross Agent Recommendation Merge** (`p1`)
   - Source: self-check
   - Capability: `cross_agent_recommendation_merge`
   - Why: Self-check recommends cross-agent recommendation merge as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible cross-agent recommendation merge slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Permission Policy Registry** (`p2`)
   - Source: self-check
   - Capability: `permission_policy_registry`
   - Why: Self-check recommends permission policy registry as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible permission policy registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Source Freshness Gate** (`p2`)
   - Source: self-check
   - Capability: `source_freshness_gate`
   - Why: Self-check recommends source freshness gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible source freshness gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Cross Project Memory Sync** (`p2`)
   - Source: self-check
   - Capability: `cross_project_memory_sync`
   - Why: Self-check recommends cross-project memory sync as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible cross-project memory sync slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Professional Boundary Templates** (`p2`)
+  - Source: self-check
+  - Capability: `professional_boundary_templates`
+  - Why: Self-check recommends professional boundary templates as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible professional boundary templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

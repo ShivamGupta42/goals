@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
 import re
+import subprocess
 
 from goals.decisions import should_surface_decision
+from goals.git_ops import run_git
 from goals.models import (
     Evidence,
     GoalSnapshot,
     MergeReadinessFinding,
     MergeReadinessReport,
+    ParallelMergeScan,
+    ParallelWorktreeInfo,
 )
 
 MIGRATION_PROOF_PATTERNS = [
@@ -66,8 +71,9 @@ def analyze_merge_readiness(snapshot: GoalSnapshot) -> MergeReadinessReport:
     """Inspect a goal snapshot for coordination risks before merge."""
 
     findings: list[MergeReadinessFinding] = []
+    parallel_scan = _parallel_merge_scan(snapshot)
     findings.extend(_migration_findings(snapshot))
-    findings.extend(_parallel_findings(snapshot))
+    findings.extend(_parallel_findings(snapshot, parallel_scan))
     findings.extend(_merge_risk_findings(snapshot))
     findings.extend(_architecture_findings(snapshot))
     blocking = [finding for finding in findings if finding.severity == "p0"]
@@ -89,6 +95,7 @@ def analyze_merge_readiness(snapshot: GoalSnapshot) -> MergeReadinessReport:
         findings=findings,
         user_questions=user_questions,
         agent_actions=agent_actions,
+        parallel_scan=parallel_scan,
     )
 
 
@@ -118,6 +125,31 @@ def render_merge_readiness_report(report: MergeReadinessReport) -> str:
             lines.append(f"  Detail: {finding.detail}")
         if finding.suggested_action:
             lines.append(f"  Next: {finding.suggested_action}")
+    if report.parallel_scan is not None:
+        lines.extend(
+            [
+                "",
+                "## Parallel Worktree Scan",
+                "",
+                f"Base branch: {report.parallel_scan.base_branch}",
+                f"Active branch: {report.parallel_scan.active_branch}",
+                "Sibling worktrees:",
+                _bullets(
+                    [
+                        (
+                            f"{item.label} ({item.branch}): "
+                            f"{len(item.changed_files)} changed file(s), "
+                            f"{'dirty' if item.dirty else 'clean'}, "
+                            f"behind base by {item.behind_base}"
+                        )
+                        for item in report.parallel_scan.sibling_worktrees
+                    ]
+                    or ["No sibling worktrees with merge-relevant changes."],
+                ),
+                "Overlaps:",
+                _bullets(report.parallel_scan.overlapping_files or ["No file overlap detected."]),
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -145,7 +177,13 @@ def _migration_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
     ]
 
 
-def _parallel_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
+def _parallel_findings(
+    snapshot: GoalSnapshot,
+    scan: ParallelMergeScan | None,
+) -> list[MergeReadinessFinding]:
+    findings = _parallel_scan_findings(scan)
+    if findings:
+        return findings
     if snapshot.topology.mode == "single":
         return []
     if _has_merge_coordination_proof(snapshot):
@@ -165,6 +203,145 @@ def _parallel_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
             ),
         )
     ]
+
+
+def _parallel_scan_findings(scan: ParallelMergeScan | None) -> list[MergeReadinessFinding]:
+    if scan is None or not scan.sibling_worktrees:
+        return []
+    findings: list[MergeReadinessFinding] = []
+    dirty = [item for item in scan.sibling_worktrees if item.dirty]
+    if dirty:
+        labels = ", ".join(_worktree_ref(item) for item in dirty[:5])
+        more = "" if len(dirty) <= 5 else f" and {len(dirty) - 5} more"
+        findings.append(
+            MergeReadinessFinding(
+                severity="p1",
+                area="parallel",
+                summary="Parallel worktree has uncommitted changes before merge.",
+                detail=f"Dirty sibling worktrees: {labels}{more}.",
+                suggested_action=(
+                    "Ask worker agents to commit, stash, or discard local changes before the "
+                    "coordinator attempts a merge rehearsal."
+                ),
+            )
+        )
+    drifted = [
+        item for item in scan.sibling_worktrees if item.behind_base > 0 or item.ahead_base > 0
+    ]
+    active_drift = scan.active_changed_files and any(item.behind_base > 0 for item in drifted)
+    if drifted or active_drift:
+        labels = ", ".join(
+            f"{_worktree_ref(item)} behind={item.behind_base} ahead={item.ahead_base}"
+            for item in drifted[:5]
+        )
+        findings.append(
+            MergeReadinessFinding(
+                severity="p1",
+                area="branch",
+                summary="Parallel worktree branches need coordinator sync proof.",
+                detail=labels or "Active branch has merge-relevant changes without sync proof.",
+                suggested_action=(
+                    "Fetch the target branch, rebase or merge each active worktree as needed, "
+                    "and record the merge rehearsal result before asking the user."
+                ),
+            )
+        )
+    if scan.overlapping_files:
+        files = ", ".join(scan.overlapping_files[:8])
+        more = (
+            ""
+            if len(scan.overlapping_files) <= 8
+            else f" and {len(scan.overlapping_files) - 8} more"
+        )
+        findings.append(
+            MergeReadinessFinding(
+                severity="p1",
+                area="parallel",
+                summary="Parallel worktrees touch the same files.",
+                detail=f"Overlapping files: {files}{more}.",
+                suggested_action=(
+                    "Run a merge rehearsal or integration branch for the overlapping files and "
+                    "record the resolved owner before merge."
+                ),
+            )
+        )
+    if scan.overlapping_migrations:
+        files = ", ".join(scan.overlapping_migrations[:8])
+        findings.append(
+            MergeReadinessFinding(
+                severity="p1",
+                area="migration",
+                summary="Parallel worktrees include overlapping migration changes.",
+                detail=f"Migration-like overlap: {files}.",
+                suggested_action=(
+                    "Reconcile migration numbering against the target branch and other worktrees, "
+                    "then record the migration-order proof before merge."
+                ),
+            )
+        )
+    return _dedupe_findings(findings)
+
+
+def _parallel_merge_scan(snapshot: GoalSnapshot) -> ParallelMergeScan | None:
+    base_repo = Path(snapshot.topology.base_repo)
+    active_path = Path(snapshot.topology.worktree_path)
+    worktrees = _git_worktrees(base_repo)
+    if len(worktrees) <= 1:
+        return None
+    base_branch = snapshot.topology.base_branch
+    active_changed = sorted(
+        set(_snapshot_changed_files(snapshot))
+        | set(_changed_files_since_base(active_path, base_branch))
+    )
+    active_migrations = sorted(path for path in active_changed if _is_migration_path(path))
+    active_branch = snapshot.topology.branch
+    sibling_infos: list[ParallelWorktreeInfo] = []
+    active_resolved = _safe_resolve(active_path)
+    for worktree in worktrees:
+        path = worktree["path"]
+        if not isinstance(path, Path):
+            path = Path(str(path))
+        if _safe_resolve(path) == active_resolved:
+            continue
+        branch = str(worktree["branch"])
+        if branch == base_branch:
+            continue
+        changed = _changed_files_since_base(path, base_branch)
+        dirty = _is_dirty(path)
+        if not changed and not dirty:
+            continue
+        ahead, behind = _ahead_behind_base(path, base_branch)
+        migrations = sorted(item for item in changed if _is_migration_path(item))
+        sibling_infos.append(
+            ParallelWorktreeInfo(
+                label=path.name,
+                branch=branch,
+                head=str(worktree["head"]),
+                dirty=dirty,
+                changed_files=changed,
+                migration_files=migrations,
+                ahead_base=ahead,
+                behind_base=behind,
+            )
+        )
+    if not sibling_infos:
+        return None
+    sibling_changed = {path for item in sibling_infos for path in item.changed_files}
+    sibling_migrations = {path for item in sibling_infos for path in item.migration_files}
+    overlapping_migrations = (
+        sorted(set(active_migrations) | sibling_migrations)
+        if active_migrations and sibling_migrations
+        else []
+    )
+    return ParallelMergeScan(
+        base_branch=base_branch,
+        active_branch=active_branch,
+        active_changed_files=active_changed,
+        active_migration_files=active_migrations,
+        sibling_worktrees=sibling_infos,
+        overlapping_files=sorted(set(active_changed) & sibling_changed),
+        overlapping_migrations=overlapping_migrations,
+    )
 
 
 def _merge_risk_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
@@ -229,6 +406,15 @@ def _migration_changes(snapshot: GoalSnapshot) -> list[tuple[str, str]]:
     return changed
 
 
+def _snapshot_changed_files(snapshot: GoalSnapshot) -> list[str]:
+    changed: list[str] = []
+    for phase in snapshot.phases:
+        if phase.evidence is None:
+            continue
+        changed.extend(phase.evidence.changed_files)
+    return changed
+
+
 def _has_migration_order_proof(snapshot: GoalSnapshot) -> bool:
     return any(
         _contains_any(_evidence_positive_text(phase.evidence), MIGRATION_PROOF_PATTERNS)
@@ -281,6 +467,97 @@ def _covered_by_decision(snapshot: GoalSnapshot, risk_text: str) -> bool:
         if risk_terms and any(term in decision_text for term in risk_terms):
             return True
     return False
+
+
+def _git_worktrees(repo: Path) -> list[dict[str, str | Path]]:
+    try:
+        result = run_git(["worktree", "list", "--porcelain"], repo)
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    records: list[dict[str, str | Path]] = []
+    current: dict[str, str | Path] = {}
+    for line in result.stdout.splitlines():
+        if not line:
+            if current:
+                records.append(_normalize_worktree_record(current))
+                current = {}
+            continue
+        key, _, value = line.partition(" ")
+        if key == "worktree":
+            if current:
+                records.append(_normalize_worktree_record(current))
+            current = {"path": Path(value)}
+        elif key == "HEAD":
+            current["head"] = value[:12]
+        elif key == "branch":
+            current["branch"] = value.removeprefix("refs/heads/")
+        elif key == "detached":
+            current["branch"] = "(detached)"
+    if current:
+        records.append(_normalize_worktree_record(current))
+    return records
+
+
+def _normalize_worktree_record(record: dict[str, str | Path]) -> dict[str, str | Path]:
+    path = record.get("path")
+    if not isinstance(path, Path):
+        path = Path(str(path or ""))
+    branch = str(record.get("branch") or "(unknown)")
+    return {
+        "path": path,
+        "branch": branch,
+        "head": str(record.get("head") or ""),
+    }
+
+
+def _changed_files_since_base(worktree: Path, base_branch: str) -> list[str]:
+    candidates = [base_branch, f"origin/{base_branch}"]
+    for candidate in candidates:
+        result = run_git(["diff", "--name-only", f"{candidate}...HEAD"], worktree, check=False)
+        if result.returncode == 0:
+            return sorted(line for line in result.stdout.splitlines() if line)
+    result = run_git(["diff", "--name-only", "HEAD"], worktree, check=False)
+    if result.returncode == 0:
+        return sorted(line for line in result.stdout.splitlines() if line)
+    return []
+
+
+def _is_dirty(worktree: Path) -> bool:
+    result = run_git(["status", "--porcelain"], worktree, check=False)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _ahead_behind_base(worktree: Path, base_branch: str) -> tuple[int, int]:
+    candidates = [base_branch, f"origin/{base_branch}"]
+    for candidate in candidates:
+        result = run_git(
+            ["rev-list", "--left-right", "--count", f"{candidate}...HEAD"],
+            worktree,
+            check=False,
+        )
+        if result.returncode != 0:
+            continue
+        left, _, right = result.stdout.strip().partition("\t")
+        if not right:
+            left, _, right = result.stdout.strip().partition(" ")
+        try:
+            behind = int(left)
+            ahead = int(right)
+        except ValueError:
+            return (0, 0)
+        return (ahead, behind)
+    return (0, 0)
+
+
+def _safe_resolve(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _worktree_ref(item: ParallelWorktreeInfo) -> str:
+    return f"{item.label} ({item.branch})"
 
 
 def _is_migration_path(path: str) -> bool:
