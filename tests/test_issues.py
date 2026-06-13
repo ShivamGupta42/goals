@@ -1,5 +1,6 @@
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.models import (
+    AssetRecord,
     Decision,
     DecisionOption,
     Evidence,
@@ -218,3 +219,33 @@ def test_issue_report_suggests_professional_boundary_template(tmp_path) -> None:
     assert any(
         "goals boundary explain --domain financial" in action for action in report.agent_actions
     )
+
+
+def test_issue_report_includes_asset_provenance_actions(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Create launch visuals",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[],
+        current_phase=None,
+        definition_of_done=["Done"],
+        assets=[
+            AssetRecord(
+                title="Launch hero",
+                locator="assets/hero.png",
+                asset_type="image",
+                origin="external",
+                usage_rights="unknown",
+            )
+        ],
+    )
+
+    report = analyze_goal_issues(snapshot)
+
+    assert any(issue.area == "asset" for issue in report.issues)
+    assert any("Confirm usage rights" in action for action in report.agent_actions)

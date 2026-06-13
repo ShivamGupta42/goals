@@ -9,6 +9,7 @@ from goals.architecture import (
     build_architecture_brief,
     render_mermaid,
 )
+from goals.assets import analyze_asset_provenance
 from goals.brief import build_goal_brief
 from goals.decisions import (
     build_decision_brief,
@@ -56,6 +57,7 @@ def render_dashboard(
     issues = _issues_html(issue_report)
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
+    assets = _assets_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
@@ -134,6 +136,7 @@ def render_dashboard(
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#evidence">Evidence</a>
+    <a href="#assets">Assets</a>
     <a href="#sources">Sources</a>
     <a href="#technical">Technical Details</a>
   </nav>
@@ -168,6 +171,10 @@ def render_dashboard(
   <section id="evidence" class="panel">
     <h2>Proof and Evidence</h2>
     <ul>{evidence}</ul>
+  </section>
+  <section id="assets" class="panel">
+    <h2>Assets</h2>
+    {assets}
   </section>
   <section id="sources" class="panel">
     <h2>Sources</h2>
@@ -493,6 +500,44 @@ def _sources_html(snapshot: GoalSnapshot) -> str:
         f"{warning}<h3>Freshness</h3>{freshness_html}"
         f'<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
         f"<h3>Source-backed Claims</h3><ul>{claim_items or '<li>No claims recorded yet.</li>'}</ul>"
+    )
+
+
+def _assets_html(snapshot: GoalSnapshot) -> str:
+    if not snapshot.assets:
+        return "<h3>Provenance</h3><p>No assets recorded yet.</p>"
+    report = analyze_asset_provenance(snapshot)
+    asset_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(asset.title)}</strong>"
+        f"<p>{escape(asset.notes or asset.locator or 'No note recorded.')}</p>"
+        f'<span class="pill">{escape(asset.asset_type)}</span> '
+        f'<span class="pill">{escape(asset.origin)}</span> '
+        f'<span class="status-label {escape(asset.usage_rights)}">{escape(asset.usage_rights)}</span>'
+        + (f"<p>License: {escape(asset.license)}</p>" if asset.license else "")
+        + "</li>"
+        for asset in snapshot.assets
+    )
+    finding_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in report.findings[:5]
+    )
+    provenance_html = (
+        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
+        if report.findings
+        else f"<p>{escape(report.summary)}</p>"
+    )
+    return (
+        f"<h3>Provenance</h3>{provenance_html}"
+        f'<h3>Recorded Assets</h3><ul class="node-list">{asset_items}</ul>'
     )
 
 

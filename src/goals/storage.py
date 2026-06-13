@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile
 from typing import Iterator
 
 from goals.models import (
+    AssetRecord,
     Decision,
     Evidence,
     Event,
@@ -130,6 +131,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
+        elif event.event_type == EventType.ASSET_RECORDED:
+            asset = AssetRecord.model_validate(payload["asset"])
+            if not any(existing.asset_id == asset.asset_id for existing in snapshot.assets):
+                snapshot.assets.append(asset)
         elif event.event_type == EventType.SOURCE_RECORDED:
             source = SourceRecord.model_validate(payload["source"])
             if not any(existing.source_id == source.source_id for existing in snapshot.sources):

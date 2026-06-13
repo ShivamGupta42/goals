@@ -56,6 +56,10 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Source evidence:" in plan.prompt
     assert "goals source add" in plan.prompt
     assert "goals source freshness" in plan.prompt
+    assert "Asset provenance:" in plan.prompt
+    assert "goals asset add" in plan.prompt
+    assert "goals asset provenance" in plan.prompt
+    assert "uv run goals asset provenance --strict" in plan.recommended_checks
     assert "uv run goals source freshness --strict" in plan.recommended_checks
     assert "uv run goals boundary explain --domain auto" in plan.recommended_checks
     assert "uv run pytest -q" in plan.recommended_checks

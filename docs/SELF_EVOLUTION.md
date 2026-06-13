@@ -156,6 +156,34 @@ claims. `source freshness` checks source age against simple, type-specific
 freshness windows before an agent relies on claims. The dashboard shows recorded
 sources, claims, and freshness status separately from code checks.
 
+## Asset Provenance
+
+Creative, product, data, and publishing goals often create or reuse assets. The
+agent should record each important asset before it appears in a deliverable:
+
+```bash
+uv run goals asset add "Hero image" \
+  --locator "assets/hero.png" \
+  --asset-type image \
+  --origin generated \
+  --creator-tool image-model \
+  --usage-rights allowed \
+  --prompt "Simple product hero"
+uv run goals asset provenance
+uv run goals asset list
+```
+
+Mode A prompts now include an asset provenance block. The check keeps ordinary
+cleanup with the agent: add missing locators, remove local machine paths, record
+the generation tool and prompt, attach source ids, and fill in license or rights
+details. Restricted or blocked usage rights are user-facing because they can
+change whether the project is allowed to use the asset at all.
+
+The dashboard shows recorded assets and provenance findings beside sources and
+architecture. Non-technical users see whether an asset is safe to rely on;
+technical users can still inspect the event log and source ids when they need
+the deeper trail.
+
 ## End-User Experience
 
 The decision layer and visualization layer should be judged from the user's
@@ -257,6 +285,8 @@ permissions. Goals should not replace them. Its unique value is to provide:
   external, costly, or destructive actions,
 - source freshness checks that keep stale evidence as agent repair work unless
   a high-stakes claim really needs the user,
+- asset provenance checks that keep missing metadata with the agent while
+  surfacing blocked or restricted usage rights,
 - a dashboard that makes progress and blockers visible,
 - decision explanations that non-technical users can understand.
 

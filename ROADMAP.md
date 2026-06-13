@@ -249,39 +249,66 @@ decision.
   defaults?
 - Should business/research goals have a stronger source gate than code goals?
 
+## Asset Provenance
+
+**Status:** First vertical slice implemented. Goals can record generated,
+external, stock, derived, user-provided, or other assets as append-only goal
+events, include asset summaries in Mode A handoffs, check provenance with
+`goals asset provenance`, add asset findings to `goals issues`, and render
+recorded assets in the dashboard.
+
+### Direction
+
+- Keep creative and publishing workflows safe without making every taste choice
+  a user decision.
+- Treat missing asset metadata as agent repair work: stable locator, generation
+  tool, sanitized prompt, source ids, license, and usage-rights status.
+- Surface restricted or blocked usage rights as plain-language user questions.
+- Keep provenance portable by rejecting local machine paths in asset locators.
+- Later, add creative variant comparison, richer source-to-asset lineage, and
+  optional external rights verification adapters.
+
+### Open Questions
+
+- Should Goals provide project-specific asset type presets for design, video,
+  research data, and document workflows?
+- Should generated prompts be stored verbatim, summarized, or policy-sanitized
+  by default?
+- When should asset provenance become a blocking gate instead of an issue report?
+
 <!-- goals:self-check-roadmap:start -->
 ## Goals Self-Check Suggestions
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Asset Provenance Checks** (`p1`)
-  - Source: self-check
-  - Capability: `asset_provenance_checks`
-  - Why: Self-check recommends asset provenance checks as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible asset provenance checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Citation Quality Review** (`p2`)
+- **Citation Quality Review** (`p1`)
   - Source: self-check
   - Capability: `citation_quality_review`
   - Why: Self-check recommends citation quality review as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible citation quality review slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Code Derived Architecture Checks** (`p2`)
   - Source: self-check
   - Capability: `code_derived_architecture_checks`
   - Why: Self-check recommends code-derived architecture checks as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible code-derived architecture checks slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Creative Variant Comparison** (`p2`)
   - Source: self-check
   - Capability: `creative_variant_comparison`
   - Why: Self-check recommends creative variant comparison as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible creative variant comparison slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Handoff Owner Registry** (`p2`)
   - Source: self-check
   - Capability: `handoff_owner_registry`
   - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Mandatory External Review Gate** (`p2`)
+  - Source: self-check
+  - Capability: `mandatory_external_review_gate`
+  - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

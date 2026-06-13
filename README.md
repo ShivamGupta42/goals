@@ -47,6 +47,8 @@ uv run goals ecosystem sync
 uv run goals permission check github --kind plugin --action "inspect a remote issue"
 uv run goals source freshness
 uv run goals source list
+uv run goals asset provenance
+uv run goals asset list
 uv run goals memory suggest
 uv run goals memory sync ../similar-goals-project
 uv run goals eval scenarios --adapter claude
@@ -147,6 +149,27 @@ claims that rely on them. Stale sources are normally agent repair work: refresh,
 replace, or mark them stale. For high-stakes goals such as medical, legal,
 financial, production, privacy, or safety work, stale high-confidence evidence
 can become a simple user-facing decision before the agent relies on it.
+
+Agents can record asset provenance for creative, product, document, data, or
+publishing work:
+
+```bash
+uv run goals asset add "Hero image" \
+  --locator "assets/hero.png" \
+  --asset-type image \
+  --origin generated \
+  --creator-tool image-model \
+  --usage-rights allowed \
+  --prompt "Simple product hero"
+uv run goals asset provenance
+uv run goals asset list
+```
+
+`asset provenance` checks whether recorded assets have enough information to be
+used safely: a stable locator, rights or license details when needed, source
+links for derived assets, generated-asset prompts, and no local machine paths.
+Most gaps stay as agent repair work. Restricted or blocked rights become simple
+user-facing questions because they can change whether the asset may be used.
 
 Agents can also ask Goals which skills or plugins fit the current phase:
 
