@@ -10,7 +10,13 @@ from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
-from goals.evaluations import dogfood_goal_scenarios, evaluate_goal_scenarios, render_dogfood_report
+from goals.evaluations import (
+    dogfood_goal_scenarios,
+    evaluate_goal_scenarios,
+    evaluate_use_case_coverage,
+    render_coverage_report,
+    render_dogfood_report,
+)
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
     absorb_goal_memory,
@@ -586,6 +592,22 @@ def eval_dogfood(
         typer.echo(report.model_dump_json(indent=2))
     else:
         typer.echo(render_dogfood_report(report))
+    if not report.passed:
+        raise typer.Exit(1)
+
+
+@eval_app.command("coverage")
+def eval_coverage(
+    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Evaluate representative goal use-case coverage beyond coding tasks."""
+
+    report = evaluate_use_case_coverage(Path.cwd(), adapter=adapter)
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_coverage_report(report))
     if not report.passed:
         raise typer.Exit(1)
 

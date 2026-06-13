@@ -241,6 +241,12 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "What the user sees" in dogfood.stdout
     assert "Proof required" in dogfood.stdout
     assert "ecosystem-skill-plugin-routing: pass" in dogfood.stdout
+    coverage = run(
+        ["python", "-m", "goals.cli", "eval", "coverage", "--adapter", "claude"], worktree
+    )
+    assert "Goal Use-Case Coverage Report" in coverage.stdout
+    assert "technical-repo-change: covered" in coverage.stdout
+    assert "high-stakes-boundary: covered" in coverage.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )

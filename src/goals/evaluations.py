@@ -6,6 +6,9 @@ from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     GoalScenario,
     GoalSnapshot,
+    GoalUseCase,
+    GoalUseCaseCoverage,
+    GoalUseCaseCoverageReport,
     ScenarioDecision,
     ScenarioDogfoodCase,
     ScenarioDogfoodReport,
@@ -23,6 +26,7 @@ CURRENT_CAPABILITIES = {
     "end_user_visualization",
     "evidence_contract",
     "important_decision_filter",
+    "issue_discovery",
     "local_safety_check",
     "local_ecosystem_discovery",
     "mode_a_handoff",
@@ -38,6 +42,18 @@ CURRENT_CAPABILITIES = {
     "worktree_isolation",
 }
 
+CORE_GOAL_CAPABILITIES = [
+    "durable_state",
+    "phase_plan",
+    "mode_a_handoff",
+    "evidence_contract",
+    "review_gate",
+    "issue_discovery",
+    "important_decision_filter",
+    "end_user_decision_experience",
+    "end_user_visualization",
+]
+
 DEFAULT_GOAL_SCENARIOS = [
     GoalScenario(
         scenario_id="personal-fitness-reset",
@@ -52,6 +68,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_decision_experience",
             "end_user_visualization",
             "review_gate",
+            "issue_discovery",
             "important_decision_filter",
             "simple_decision_format",
             "project_history_decision_context",
@@ -94,6 +111,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_visualization",
             "architecture_map",
             "review_gate",
+            "issue_discovery",
             "local_safety_check",
             "important_decision_filter",
         ],
@@ -130,6 +148,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_decision_experience",
             "end_user_visualization",
             "review_gate",
+            "issue_discovery",
             "important_decision_filter",
             "simple_decision_format",
             "project_history_decision_context",
@@ -173,6 +192,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_visualization",
             "architecture_map",
             "review_gate",
+            "issue_discovery",
             "local_safety_check",
             "important_decision_filter",
             "self_evolution_memory",
@@ -206,6 +226,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "end_user_decision_experience",
             "end_user_visualization",
             "review_gate",
+            "issue_discovery",
             "important_decision_filter",
             "automatic_skill_selection",
             "local_ecosystem_discovery",
@@ -234,6 +255,161 @@ DEFAULT_GOAL_SCENARIOS = [
     ),
 ]
 
+DEFAULT_GOAL_USE_CASES = [
+    GoalUseCase(
+        use_case_id="personal-life-planning",
+        category="personal",
+        objective="Plan a private life change with preferences, constraints, and reversible weekly steps.",
+        why="Personal goals need privacy, gentle progress, and only meaningful preference or safety questions.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "simple_decision_format",
+            "project_history_decision_context",
+        ],
+        planned_capabilities=["optional_calendar_context", "private_memory_boundary"],
+        important_user_decisions=["Safety constraints", "Non-negotiable preferences"],
+        agent_can_decide=["Phase order", "Reversible defaults", "Progress summary wording"],
+        proof_required=["Accepted plan", "Known assumptions", "User-facing decision summary"],
+    ),
+    GoalUseCase(
+        use_case_id="technical-repo-change",
+        category="technical",
+        objective="Change a repository safely while preserving tests, migrations, and architecture intent.",
+        why="Technical goals need isolated work, repo-specific checks, and early detection of merge or migration risk.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "worktree_isolation",
+            "architecture_map",
+            "local_safety_check",
+        ],
+        planned_capabilities=["parallel_worktree_merge_gates", "code_derived_architecture_checks"],
+        important_user_decisions=["Data migration risk", "Breaking API behavior"],
+        agent_can_decide=["Implementation route", "Test commands", "Reversible refactors"],
+        proof_required=["Changed files", "Passing checks", "Accepted review gate"],
+    ),
+    GoalUseCase(
+        use_case_id="business-research",
+        category="business",
+        objective="Create a customer, market, or product brief with sources and follow-up actions.",
+        why="Business goals need source-backed claims, clear audience decisions, and simple progress reporting.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "source_registry",
+            "simple_decision_format",
+            "project_history_decision_context",
+        ],
+        planned_capabilities=["source_freshness_gate", "citation_quality_review"],
+        important_user_decisions=["Audience focus", "External source permission"],
+        agent_can_decide=["Brief outline", "Follow-up task list", "Reversible formatting choice"],
+        proof_required=["Recorded sources", "Source-backed claims", "Decision summary"],
+    ),
+    GoalUseCase(
+        use_case_id="research-learning",
+        category="research",
+        objective="Learn or research a topic with questions, sources, uncertainty, and a final synthesis.",
+        why="Research and learning goals need provenance, uncertainty, and a clear line between fact and judgment.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "source_registry",
+            "simple_decision_format",
+        ],
+        planned_capabilities=["source_freshness_gate", "spaced_recall_outputs"],
+        important_user_decisions=["Research depth", "Trusted source boundaries"],
+        agent_can_decide=["Reading order", "Summary structure", "Open question list"],
+        proof_required=["Sources", "Uncertainty list", "Synthesis or learning artifact"],
+    ),
+    GoalUseCase(
+        use_case_id="creative-production",
+        category="creative",
+        objective="Produce creative directions, drafts, or visual concepts while keeping approvals clear.",
+        why="Creative goals need room for exploration without making every taste choice a blocker.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "automatic_skill_selection",
+            "plugin_capability_discovery",
+            "registry_awareness",
+        ],
+        planned_capabilities=["asset_provenance_checks", "creative_variant_comparison"],
+        important_user_decisions=[
+            "Brand direction",
+            "External generation or publishing permission",
+        ],
+        agent_can_decide=["Variant exploration", "Draft ordering", "Low-risk copy edits"],
+        proof_required=["Selected direction", "Rejected alternatives", "Approval notes"],
+    ),
+    GoalUseCase(
+        use_case_id="operations-process",
+        category="operations",
+        objective="Improve a recurring workflow, checklist, or operations process.",
+        why="Operations goals need durable state, clear handoffs, and proof that the new process can be repeated.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "self_evolution_memory",
+            "project_history_decision_context",
+        ],
+        planned_capabilities=["recurring_goal_templates", "handoff_owner_registry"],
+        important_user_decisions=["Owner or accountability change", "Process policy change"],
+        agent_can_decide=["Checklist wording", "Documentation placement", "Trial run plan"],
+        proof_required=["Updated process", "Trial evidence", "Known gaps"],
+    ),
+    GoalUseCase(
+        use_case_id="high-stakes-boundary",
+        category="high_stakes",
+        objective="Support medical, legal, financial, or safety-adjacent goals without pretending to be a professional.",
+        why="High-stakes goals need conservative escalation, source evidence, uncertainty, and plain limits.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "source_registry",
+            "important_decision_filter",
+            "simple_decision_format",
+        ],
+        planned_capabilities=["professional_boundary_templates", "mandatory_external_review_gate"],
+        important_user_decisions=["Whether to consult a professional", "Risk tolerance"],
+        agent_can_decide=["Question list", "Information organization", "Source summary"],
+        proof_required=["Sources", "Uncertainty list", "Boundary statement"],
+    ),
+    GoalUseCase(
+        use_case_id="ecosystem-orchestration",
+        category="ecosystem",
+        objective="Choose Claude/Codex skills, plugins, and adapters without making the user route every step.",
+        why="Goals should add unique value by routing through existing agent ecosystems while keeping durable state.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "automatic_skill_selection",
+            "local_ecosystem_discovery",
+            "plugin_capability_discovery",
+            "registry_sync_workflow",
+        ],
+        planned_capabilities=["cross_agent_recommendation_merge", "permission_policy_registry"],
+        important_user_decisions=[
+            "External plugin permission",
+            "Cost or remote side-effect approval",
+        ],
+        agent_can_decide=[
+            "Registry hint selection",
+            "Repo-local fallback",
+            "Missing capability memory",
+        ],
+        proof_required=["Adapter prompt", "Registry validation", "Escalation record"],
+    ),
+    GoalUseCase(
+        use_case_id="self-evolution",
+        category="self_evolution",
+        objective="Improve Goals after dogfooding real and synthetic goal runs.",
+        why="The product should turn repeated friction into small tested improvements.",
+        required_capabilities=[
+            *CORE_GOAL_CAPABILITIES,
+            "self_evolution_memory",
+            "local_safety_check",
+            "architecture_map",
+        ],
+        planned_capabilities=["automatic_gap_to_roadmap_patch", "cross_project_memory_sync"],
+        important_user_decisions=["Build now or roadmap", "Public product promise change"],
+        agent_can_decide=["Small implementation slice", "Test scope", "Docs update"],
+        proof_required=["Scenario eval", "Dogfood eval", "Committed improvement"],
+    ),
+]
+
 
 def evaluate_goal_scenarios(
     worktree: Path,
@@ -242,6 +418,79 @@ def evaluate_goal_scenarios(
 ) -> list[ScenarioEvaluation]:
     selected = scenarios or DEFAULT_GOAL_SCENARIOS
     return [_evaluate_one(worktree.resolve(), adapter, scenario) for scenario in selected]
+
+
+def evaluate_use_case_coverage(
+    worktree: Path,
+    adapter: ModeAAdapter = "claude",
+    use_cases: list[GoalUseCase] | None = None,
+) -> GoalUseCaseCoverageReport:
+    selected = use_cases or DEFAULT_GOAL_USE_CASES
+    snapshot = _scenario_snapshot(worktree.resolve(), DEFAULT_GOAL_SCENARIOS[0])
+    plan = build_mode_a_plan(snapshot, adapter)
+    supported = _supported_capabilities(
+        worktree.resolve(),
+        snapshot,
+        plan.prompt,
+        plan.recommended_checks,
+    )
+    cases = [_coverage_case(use_case, supported) for use_case in selected]
+    partial = [case for case in cases if case.status == "partial"]
+    planned = sorted({capability for case in cases for capability in case.planned_capabilities})
+    return GoalUseCaseCoverageReport(
+        adapter=adapter,
+        passed=not partial,
+        summary=(
+            f"Checked {len(cases)} representative goal use case(s): "
+            f"{len(cases) - len(partial)} covered, {len(partial)} partial, "
+            f"{len(planned)} planned future capability area(s)."
+        ),
+        cases=cases,
+        recommendations=_coverage_recommendations(cases),
+    )
+
+
+def render_coverage_report(report: GoalUseCaseCoverageReport) -> str:
+    lines = [
+        "# Goal Use-Case Coverage Report",
+        "",
+        f"Adapter shape: {report.adapter}",
+        f"Overall: {'pass' if report.passed else 'partial'}",
+        "",
+        report.summary,
+        "",
+        "This report checks representative goal families so Goals can evolve beyond a narrow coding workflow.",
+    ]
+    for case in report.cases:
+        lines.extend(
+            [
+                "",
+                f"## {case.use_case_id}: {case.status}",
+                "",
+                f"Category: {case.category}",
+                case.summary,
+                "",
+                "### Important User Decisions",
+                _bullets(case.important_user_decisions),
+                "",
+                "### Agent Can Decide",
+                _bullets(case.agent_can_decide),
+                "",
+                "### Proof Required",
+                _bullets(case.proof_required),
+                "",
+                "### Capability Coverage",
+                _bullets(
+                    [
+                        f"Supported: {', '.join(case.supported_capabilities) or 'none'}",
+                        f"Missing: {', '.join(case.missing_capabilities) or 'none'}",
+                        f"Planned: {', '.join(case.planned_capabilities) or 'none'}",
+                    ]
+                ),
+            ]
+        )
+    lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
+    return "\n".join(lines) + "\n"
 
 
 def dogfood_goal_scenarios(
@@ -273,6 +522,42 @@ def dogfood_goal_scenarios(
         cases=cases,
         recommendations=_dogfood_recommendations(cases),
     )
+
+
+def _coverage_case(use_case: GoalUseCase, supported: set[str]) -> GoalUseCaseCoverage:
+    required = set(use_case.required_capabilities)
+    supported_required = sorted(required & supported)
+    missing = sorted(required - supported)
+    status = "partial" if missing else "covered"
+    return GoalUseCaseCoverage(
+        use_case_id=use_case.use_case_id,
+        category=use_case.category,
+        status=status,
+        supported_capabilities=supported_required,
+        missing_capabilities=missing,
+        planned_capabilities=list(use_case.planned_capabilities),
+        important_user_decisions=list(use_case.important_user_decisions),
+        agent_can_decide=list(use_case.agent_can_decide),
+        proof_required=list(use_case.proof_required),
+        summary=(
+            f"{len(supported_required)}/{len(required)} current "
+            f"capabilities covered; {len(use_case.planned_capabilities)} future improvement(s) tracked."
+        ),
+    )
+
+
+def _coverage_recommendations(cases: list[GoalUseCaseCoverage]) -> list[str]:
+    partial = [case for case in cases if case.status == "partial"]
+    if partial:
+        return [
+            f"Close current capability gaps for {case.use_case_id}: {', '.join(case.missing_capabilities)}."
+            for case in partial
+        ]
+    return [
+        "Keep adding a coverage row when a new user goal family appears.",
+        "Turn repeated planned capability mentions into roadmap entries or small implementation slices.",
+        "Pair `goals eval coverage` with `goals eval dogfood` before merging self-evolution phases.",
+    ]
 
 
 def render_dogfood_report(report: ScenarioDogfoodReport) -> str:
@@ -460,6 +745,8 @@ def _supported_capabilities(
         supported.add("plugin_capability_discovery")
     if "goals ecosystem sync" in prompt:
         supported.add("registry_sync_workflow")
+    if "goals issues" in prompt:
+        supported.add("issue_discovery")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
     if "Source evidence:" in prompt and "goals source add" in prompt:

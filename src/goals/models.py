@@ -397,6 +397,45 @@ class ScenarioDogfoodReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class GoalUseCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_case_id: str
+    category: str
+    objective: str
+    why: str
+    required_capabilities: list[str] = Field(default_factory=list)
+    planned_capabilities: list[str] = Field(default_factory=list)
+    important_user_decisions: list[str] = Field(default_factory=list)
+    agent_can_decide: list[str] = Field(default_factory=list)
+    proof_required: list[str] = Field(default_factory=list)
+
+
+class GoalUseCaseCoverage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_case_id: str
+    category: str
+    status: Literal["covered", "partial"]
+    supported_capabilities: list[str] = Field(default_factory=list)
+    missing_capabilities: list[str] = Field(default_factory=list)
+    planned_capabilities: list[str] = Field(default_factory=list)
+    important_user_decisions: list[str] = Field(default_factory=list)
+    agent_can_decide: list[str] = Field(default_factory=list)
+    proof_required: list[str] = Field(default_factory=list)
+    summary: str
+
+
+class GoalUseCaseCoverageReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    passed: bool
+    summary: str
+    cases: list[GoalUseCaseCoverage] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class GoalIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
