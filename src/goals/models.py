@@ -135,6 +135,44 @@ class Decision(BaseModel):
     technical_details: str = ""
 
 
+class ScenarioDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    plain_question: str
+    priority: Literal["blocking", "important", "later"] = "blocking"
+    options: list[str] = Field(default_factory=list)
+    why_surface: str = ""
+
+
+class GoalScenario(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    category: Literal["personal", "technical", "business", "self_evolution", "ecosystem"]
+    objective: str
+    why: str
+    required_capabilities: list[str] = Field(default_factory=list)
+    future_capabilities: list[str] = Field(default_factory=list)
+    decisions: list[ScenarioDecision] = Field(default_factory=list)
+    agent_can_decide: list[str] = Field(default_factory=list)
+    success_evidence: list[str] = Field(default_factory=list)
+
+
+class ScenarioEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    category: str
+    current_supported: bool
+    supported_capabilities: list[str] = Field(default_factory=list)
+    missing_capabilities: list[str] = Field(default_factory=list)
+    planned_capabilities: list[str] = Field(default_factory=list)
+    surfaced_decisions: list[ScenarioDecision] = Field(default_factory=list)
+    agent_decisions: list[str] = Field(default_factory=list)
+    summary: str
+
+
 class ScanResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

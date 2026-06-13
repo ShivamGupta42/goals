@@ -33,6 +33,7 @@ uv run goals create "Add tags to tasks and update tests" \
 uv run goals status
 uv run goals run --adapter codex
 uv run goals dashboard
+uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
 ```
 
@@ -78,3 +79,15 @@ uv run goals safety-check --mode publish
 The scanner checks for secrets, local paths, prompt-injection text, destructive
 operations, generated private state, license hygiene concerns, and external
 supply-chain references.
+
+## Self-Evolution
+
+Goals includes scenario evaluations for personal, technical, business,
+self-evolution, and ecosystem use cases. These evaluations focus on the end-user
+experience of decisions and visualization, not just backend state:
+
+```bash
+uv run goals eval scenarios --adapter claude
+```
+
+See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.

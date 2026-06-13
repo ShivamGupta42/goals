@@ -21,7 +21,11 @@ def init_repo(path: Path) -> None:
     run(["git", "config", "user.name", "Test User"], path)
     (path / "README.md").write_text("# Demo\n")
     (path / "LICENSE").write_text("MIT\n")
-    run(["git", "add", "README.md", "LICENSE"], path)
+    registry_root = path / "registries"
+    registry_root.mkdir()
+    for name in ("adapters.yml", "agents.yml", "gates.yml", "profiles.yml", "skills.yml"):
+        (registry_root / name).write_text("version: 1\nkind: profiles\nprofiles: {}\n")
+    run(["git", "add", "README.md", "LICENSE", "registries"], path)
     run(["git", "commit", "-m", "init"], path)
 
 
@@ -60,6 +64,11 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert Path(dash.stdout.strip()).exists()
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
+    eval_result = run(
+        ["python", "-m", "goals.cli", "eval", "scenarios", "--adapter", "claude"], worktree
+    )
+    assert "personal-fitness-reset: pass" in eval_result.stdout
+    assert "ecosystem-skill-plugin-routing: pass" in eval_result.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )

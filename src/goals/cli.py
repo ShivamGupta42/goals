@@ -7,6 +7,7 @@ from typing import Optional
 import typer
 
 from goals.adapters import adapter_check
+from goals.evaluations import evaluate_goal_scenarios
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import Event, EventType, Evidence, GateVerdict
 from goals.registry import validate_registries
@@ -24,8 +25,10 @@ from goals.storage import EventStore, GoalsError, atomic_write_text
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
+eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 app.add_typer(adapter_app, name="adapter")
+app.add_typer(eval_app, name="eval")
 app.add_typer(phase_app, name="phase")
 
 
@@ -186,6 +189,32 @@ def adapter_check_command(name: str) -> None:
     ok, detail = adapter_check(name)
     typer.echo(f"{name}: {'ok' if ok else 'not ready'} - {detail}")
     if not ok:
+        raise typer.Exit(1)
+
+
+@eval_app.command("scenarios")
+def eval_scenarios(
+    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Evaluate default personal, technical, business, self-evolution, and ecosystem scenarios."""
+
+    results = evaluate_goal_scenarios(Path.cwd(), adapter=adapter)
+    if json_output:
+        typer.echo(json.dumps([result.model_dump(mode="json") for result in results], indent=2))
+    else:
+        for result in results:
+            verdict = "pass" if result.current_supported else "missing"
+            typer.echo(f"{result.scenario_id}: {verdict} - {result.summary}")
+            if result.surfaced_decisions:
+                typer.echo("  surfaced decisions:")
+                for decision in result.surfaced_decisions:
+                    typer.echo(f"  - {decision.plain_question}")
+            if result.planned_capabilities:
+                typer.echo(f"  planned: {', '.join(result.planned_capabilities)}")
+            if result.missing_capabilities:
+                typer.echo(f"  missing: {', '.join(result.missing_capabilities)}")
+    if any(not result.current_supported for result in results):
         raise typer.Exit(1)
 
 
