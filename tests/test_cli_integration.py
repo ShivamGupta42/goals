@@ -253,6 +253,13 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Goal Lifecycle Rehearsal Report" in rehearsal.stdout
     assert "personal-fitness-reset: pass" in rehearsal.stdout
     assert "business-research-brief: pass" in rehearsal.stdout
+    issue_stress = run(
+        ["python", "-m", "goals.cli", "eval", "issue-stress", "--adapter", "claude"],
+        worktree,
+    )
+    assert "Goal Issue Stress Report" in issue_stress.stdout
+    assert "decision-filter: pass" in issue_stress.stdout
+    assert "unsafe-review-escalation: pass" in issue_stress.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )

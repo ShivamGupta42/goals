@@ -44,6 +44,7 @@ uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
+uv run goals eval issue-stress --adapter claude
 uv run goals adapter check codex
 ```
 
@@ -165,6 +166,7 @@ uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
+uv run goals eval issue-stress --adapter claude
 ```
 
 `eval dogfood` prints a plain-language report for each synthetic goal type:
@@ -180,5 +182,9 @@ capabilities.
 Goals lifecycles through evidence, issue discovery, review, acceptance, and
 dashboard rendering. It proves the workflow machinery can execute, not just
 describe, the goal loop.
+
+`eval issue-stress` injects broken goal states and checks whether Goals finds
+missing proof, failed gates, source gaps, architecture questions, unsafe reviews,
+and high-impact user decisions while keeping routine repair work with the agent.
 
 See [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md) for the current loop.

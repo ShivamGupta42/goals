@@ -462,6 +462,36 @@ class GoalRehearsalReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class GoalIssueStressCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stress_id: str
+    category: str
+    passed: bool
+    issue_report_passed: bool
+    expected_issue_areas: list[str] = Field(default_factory=list)
+    found_issue_areas: list[str] = Field(default_factory=list)
+    expected_user_questions: list[str] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_action_count: int = 0
+    minimum_agent_actions: int = 0
+    missing_issue_areas: list[str] = Field(default_factory=list)
+    missing_user_questions: list[str] = Field(default_factory=list)
+    unexpected_user_questions: list[str] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
+    summary: str
+
+
+class GoalIssueStressReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    passed: bool
+    summary: str
+    cases: list[GoalIssueStressCase] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class GoalIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

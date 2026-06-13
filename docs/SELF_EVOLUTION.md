@@ -14,6 +14,7 @@ uv run goals eval scenarios --adapter codex
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
+uv run goals eval issue-stress --adapter claude
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -47,6 +48,11 @@ family and which planned capabilities should become future product work.
 representative Goals lifecycles. It records evidence, checks issues, reviews and
 accepts phases, and renders dashboards so self-evolution work is tested against
 runtime behavior, not only static scenario descriptions.
+
+`eval issue-stress` injects broken goal states and checks whether Goals catches
+missing proof, failed gates, unresolved source claims, architecture questions,
+unsafe reviews, and high-impact user decisions. It also verifies that routine
+repair work stays with the agent instead of becoming unnecessary user prompts.
 
 ## Ecosystem Discovery
 
@@ -117,6 +123,8 @@ uv run goals issues
 The report separates important user questions from agent-side repair actions.
 It is meant to help agents discover blockers, missing proof, failed reviews,
 unresolved source claims, and state mismatches before asking the user for help.
+The issue stress evaluator keeps this promise honest by testing both sides:
+what should be surfaced to the user and what the agent should repair itself.
 
 Decision experience means:
 

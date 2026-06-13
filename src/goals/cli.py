@@ -17,7 +17,9 @@ from goals.evaluations import (
     rehearse_goal_lifecycles,
     render_coverage_report,
     render_dogfood_report,
+    render_issue_stress_report,
     render_rehearsal_report,
+    stress_goal_issue_discovery,
 )
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
@@ -628,6 +630,24 @@ def eval_rehearsal(
         typer.echo(report.model_dump_json(indent=2))
     else:
         typer.echo(render_rehearsal_report(report))
+    if not report.passed:
+        raise typer.Exit(1)
+
+
+@eval_app.command("issue-stress")
+def eval_issue_stress(
+    adapter: ModeAAdapter = typer.Option(
+        "claude", help="Native adapter shape to label the stress report."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Stress issue discovery and user-decision filtering with broken goal states."""
+
+    report = stress_goal_issue_discovery(Path.cwd(), adapter=adapter)
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_issue_stress_report(report))
     if not report.passed:
         raise typer.Exit(1)
 
