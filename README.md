@@ -20,6 +20,9 @@ This repository is an early MVP. Mode A is implemented first:
 Mode B, a standalone runner for local AI or schedulers, is represented by the
 runtime interfaces but intentionally not complete in this version.
 
+See [ROADMAP.md](ROADMAP.md) for planned directions that are intentionally not
+implemented yet.
+
 ## Quick Start
 
 ```bash
