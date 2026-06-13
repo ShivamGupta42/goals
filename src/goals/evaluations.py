@@ -65,6 +65,7 @@ CURRENT_CAPABILITIES = {
     "merge_readiness_check",
     "non_technical_goal_brief",
     "plugin_capability_discovery",
+    "parallel_worktree_merge_gates",
     "phase_plan",
     "project_history_decision_context",
     "registry_awareness",
@@ -1646,6 +1647,8 @@ def _supported_capabilities(
         "goals merge-check" in check for check in recommended_checks
     ):
         supported.add("merge_readiness_check")
+    if "parallel worktree merge gate" in prompt.lower():
+        supported.add("parallel_worktree_merge_gates")
     if "goals brief" in prompt or any("goals brief" in check for check in recommended_checks):
         supported.add("non_technical_goal_brief")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:

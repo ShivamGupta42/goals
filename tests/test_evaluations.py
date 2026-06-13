@@ -180,7 +180,7 @@ def test_self_check_summarizes_all_evaluation_suites(monkeypatch, tmp_path: Path
     assert result.user_decision_count == 5
     assert result.agent_repair_action_count >= 1
     assert report.next_slices
-    assert report.next_slices[0] == "Explore planned capability: parallel worktree merge gates"
+    assert report.next_slices[0] == "Explore planned capability: cross-agent recommendation merge"
     assert "Goals Self-Check Report" in rendered
     assert "Recommended Next Slices" in rendered
     assert "User Experience Findings" in rendered

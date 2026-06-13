@@ -38,6 +38,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals brief" in plan.prompt
     assert plan.architecture_file.endswith("architecture.md")
     assert "Architecture map:" in plan.prompt
+    assert "Parallel worktree merge gate:" in plan.prompt
     assert plan.recommended_tools
     assert "Recommended skills/plugins for this phase:" in plan.prompt
     assert "goals ecosystem discover" in plan.prompt

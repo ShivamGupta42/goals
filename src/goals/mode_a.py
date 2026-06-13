@@ -123,6 +123,9 @@ Required loop:
 10. Only after the review passes, run `goals phase accept {plan.current_phase}`.
 11. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
+Parallel worktree merge gate:
+- `goals merge-check` scans sibling worktrees when Git exposes them, then reports dirty worktrees, branch drift, file overlap, and migration-ordering risk as agent repair actions unless an explicit high-risk user approval is missing.
+
 Recommended checks for this repo:
 {checks}
 

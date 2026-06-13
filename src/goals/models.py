@@ -655,6 +655,31 @@ class RoadmapUpdatePlan(BaseModel):
     patch_preview: str = ""
 
 
+class ParallelWorktreeInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    branch: str
+    head: str = ""
+    dirty: bool = False
+    changed_files: list[str] = Field(default_factory=list)
+    migration_files: list[str] = Field(default_factory=list)
+    ahead_base: int = 0
+    behind_base: int = 0
+
+
+class ParallelMergeScan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_branch: str
+    active_branch: str
+    active_changed_files: list[str] = Field(default_factory=list)
+    active_migration_files: list[str] = Field(default_factory=list)
+    sibling_worktrees: list[ParallelWorktreeInfo] = Field(default_factory=list)
+    overlapping_files: list[str] = Field(default_factory=list)
+    overlapping_migrations: list[str] = Field(default_factory=list)
+
+
 class MergeReadinessFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -676,6 +701,7 @@ class MergeReadinessReport(BaseModel):
     findings: list[MergeReadinessFinding] = Field(default_factory=list)
     user_questions: list[str] = Field(default_factory=list)
     agent_actions: list[str] = Field(default_factory=list)
+    parallel_scan: ParallelMergeScan | None = None
 
 
 class GoalIssue(BaseModel):

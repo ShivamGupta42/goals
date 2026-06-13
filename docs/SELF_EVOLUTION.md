@@ -148,7 +148,8 @@ and what the agent should repair itself.
 
 `merge-check` is the coordinator pass before merging. It is designed for
 technical users and non-technical project owners: it explains whether migration
-ordering, branch drift, parallel worktree reconciliation, or high-risk merge
+ordering, branch drift, parallel worktree reconciliation, dirty sibling
+worktrees, overlapping files, parallel migration changes, or high-risk merge
 approval is still unresolved, and it keeps routine repair work with the agent.
 
 Decision experience means:
