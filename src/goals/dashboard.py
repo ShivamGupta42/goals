@@ -6,6 +6,7 @@ from pathlib import Path
 from goals.architecture import architecture_for_snapshot, architecture_status_counts, render_mermaid
 from goals.decisions import (
     build_decision_context,
+    evidence_refs,
     render_decision_explanation,
     should_surface_decision,
 )
@@ -77,6 +78,10 @@ def render_dashboard(
     .panel {{ border-top: 1px solid var(--line); }}
     .decision {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; }}
     .decision .ask {{ color: var(--red); font-weight: 700; }}
+    .decision-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem; margin-top: .75rem; }}
+    .decision-card {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: #fff; }}
+    .decision-card p {{ margin-bottom: .35rem; }}
+    .muted {{ color: var(--muted); }}
     .architecture-grid {{ display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 1rem; }}
     .node-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; list-style: none; padding: 0; }}
     .node-list li {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }}
@@ -214,22 +219,91 @@ def _decision_html(snapshot: GoalSnapshot, surfaced_decisions: list) -> str:
     context = build_decision_context(snapshot)
     items = []
     for decision in surfaced_decisions:
-        explanation = render_decision_explanation(decision, context, level="basic")
-        first_lines = [line for line in explanation.markdown.splitlines() if line.strip()]
+        explanation = render_decision_explanation(decision, context, level="detailed")
         summary = escape(decision.plain_summary)
         ask = escape(explanation.reason_for_surface)
         reply = escape(decision.suggested_reply or f"I choose: {decision.recommendation}")
+        uncertainty = decision.uncertainty or context.known_gaps or []
         items.append(
             '<article class="decision">'
             f"<h3>{escape(decision.title)}</h3>"
             f"<p>{summary}</p>"
-            f'<p class="ask">Why ask: {ask}</p>'
-            f"<p><strong>Recommendation:</strong> {escape(decision.recommendation)}</p>"
+            f'<p class="ask">Why this needs you: {ask}</p>'
+            f"<p><strong>Recommended option:</strong> {escape(decision.recommendation)}</p>"
             f"<p><strong>Suggested reply:</strong> <code>{reply}</code></p>"
-            f"<details><summary>Plain explanation</summary><pre>{escape(chr(10).join(first_lines))}</pre></details>"
+            f"<p><strong>Confidence:</strong> {decision.confidence:.0%}</p>"
+            f"{_decision_options_html(decision.options)}"
+            f"{_decision_context_html(context)}"
+            f"{_decision_uncertainty_html(uncertainty)}"
+            f"{_decision_technical_html(decision.technical_details, evidence_refs(context))}"
             "</article>"
         )
     return "\n".join(items)
+
+
+def _decision_options_html(options) -> str:
+    if not options:
+        return "<p>No alternatives recorded.</p>"
+    cards = []
+    for option in options:
+        tradeoffs = _bullets_html(option.tradeoffs or ["No tradeoffs recorded."])
+        reversible = "yes" if option.reversible else "not clearly"
+        reversal = (
+            f"<p><strong>How to reverse:</strong> {escape(option.reversal_plan)}</p>"
+            if option.reversal_plan
+            else ""
+        )
+        cards.append(
+            '<div class="decision-card">'
+            f"<h4>{escape(option.label)}</h4>"
+            f"<p>{escape(option.explanation)}</p>"
+            f'<p><span class="pill">Risk: {escape(option.risk)}</span> '
+            f'<span class="pill">Reversible: {reversible}</span></p>'
+            f"<p><strong>Tradeoffs:</strong></p>{tradeoffs}"
+            f"{reversal}"
+            "</div>"
+        )
+    cards_html = "".join(cards)
+    return f'<div class="decision-grid">{cards_html}</div>'
+
+
+def _decision_context_html(context) -> str:
+    points = []
+    if context.accepted_phases:
+        points.append(f"Accepted phases: {', '.join(context.accepted_phases[:4])}")
+    if context.checks_run:
+        points.append(f"Checks run: {', '.join(context.checks_run[:4])}")
+    if context.changed_files:
+        points.append(f"Changed files: {', '.join(context.changed_files[:4])}")
+    if context.source_claims:
+        points.append(f"Source-backed claims: {', '.join(context.source_claims[:3])}")
+    if context.learnings:
+        points.append(f"Learnings: {', '.join(context.learnings[:3])}")
+    if not points:
+        points.append("No prior goal context recorded yet.")
+    return "<h4>What we know so far</h4>" + _bullets_html(points)
+
+
+def _decision_uncertainty_html(items: list[str]) -> str:
+    if not items:
+        return '<p class="muted">No major uncertainty recorded.</p>'
+    return "<h4>Uncertainty</h4>" + _bullets_html(items)
+
+
+def _decision_technical_html(details: str, refs: list[str]) -> str:
+    technical = escape(details or "No technical details recorded.")
+    ref_html = _bullets_html(refs or ["No evidence references recorded."])
+    return (
+        "<details>"
+        "<summary>Technical details and evidence</summary>"
+        f"<p>{technical}</p>"
+        f"{ref_html}"
+        "</details>"
+    )
+
+
+def _bullets_html(items: list[str]) -> str:
+    return "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
 
 
 def _recommendations_html(snapshot: GoalSnapshot) -> str:
