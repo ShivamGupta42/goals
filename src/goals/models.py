@@ -44,6 +44,7 @@ class EventType(StrEnum):
     PHASE_EVIDENCE = "phase_evidence"
     PHASE_REVIEWED = "phase_reviewed"
     PHASE_ACCEPTED = "phase_accepted"
+    PHASE_CHECKPOINT_RECORDED = "phase_checkpoint_recorded"
     DECISION_REQUESTED = "decision_requested"
     ARCHITECTURE_UPDATED = "architecture_updated"
     ASSET_RECORDED = "asset_recorded"
@@ -66,6 +67,41 @@ class Event(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class CheckpointKind(StrEnum):
+    EVIDENCE = "evidence"
+    HUMAN_VALIDATION = "human_validation"
+    APPROVAL = "approval"
+    EXTERNAL_REVIEW = "external_review"
+    UNDERSTANDING = "understanding"
+    HANDOFF = "handoff"
+    CUSTOM = "custom"
+
+
+class CheckpointStatus(StrEnum):
+    PENDING = "pending"
+    PASSED = "passed"
+    BLOCKED = "blocked"
+    NEEDS_USER = "needs_user"
+    WAIVED = "waived"
+
+
+class PhaseCheckpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: str
+    kind: CheckpointKind = CheckpointKind.CUSTOM
+    title: str
+    status: CheckpointStatus = CheckpointStatus.PENDING
+    required: bool = True
+    needs_user: bool = False
+    summary: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    decision_refs: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+    notes: str = ""
+
+
 class Phase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,6 +112,7 @@ class Phase(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     evidence: "Evidence | None" = None
     reviews: list["GateResult"] = Field(default_factory=list)
+    checkpoints: list[PhaseCheckpoint] = Field(default_factory=list)
 
 
 class WorktreeLease(BaseModel):
@@ -228,8 +265,27 @@ class GoalBriefAction(BaseModel):
     suggested_reply: str = ""
     what_happens_next: str = ""
     priority: Literal["blocking", "important", "later"] = "important"
-    source: Literal["decision", "issue", "merge", "proof", "state"] = "issue"
+    source: Literal["checkpoint", "decision", "issue", "merge", "proof", "state"] = "issue"
     evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CurrentCheckpointBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    phase_id: str
+    phase_title: str
+    checkpoint_id: str = ""
+    checkpoint_title: str = ""
+    status: str
+    waiting_on: Literal["you", "agent", "no one"]
+    why_it_matters: str
+    what_changed: str
+    proof: list[str] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    next_safe_step: str
+    evidence_refs: list[str] = Field(default_factory=list)
+    decision_refs: list[str] = Field(default_factory=list)
 
 
 class GoalBrief(BaseModel):
@@ -243,6 +299,7 @@ class GoalBrief(BaseModel):
     summary: str
     progress: str
     proof: str
+    current_checkpoint: CurrentCheckpointBrief | None = None
     user_actions: list[GoalBriefAction] = Field(default_factory=list)
     agent_actions: list[GoalBriefAction] = Field(default_factory=list)
     technical_details: list[str] = Field(default_factory=list)
@@ -1152,6 +1209,7 @@ class GoalIssue(BaseModel):
         "citation",
         "creative",
         "decision",
+        "checkpoint",
         "evidence",
         "external_review",
         "gate",

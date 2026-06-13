@@ -4,6 +4,7 @@ import pytest
 
 from goals.dashboard import render_dashboard
 from goals.models import (
+    CheckpointStatus,
     Decision,
     DecisionOption,
     Evidence,
@@ -11,6 +12,7 @@ from goals.models import (
     GateVerdict,
     GoalSnapshot,
     Phase,
+    PhaseCheckpoint,
     PhaseStatus,
     WorktreeLease,
 )
@@ -69,6 +71,7 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "<script>alert(1)</script>" not in text
     assert "&lt;script&gt;" in text
     assert "Goal Brief" in text
+    assert "Current Checkpoint" in text
     assert "What Needs Your Answer" in text
     assert "What the Agent Can Do Next" in text
     assert "Progress" in text
@@ -98,6 +101,47 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Goal ID:" in text
     assert "Event offset:" in text
     assert "Source commit:" in text
+
+
+def test_dashboard_renders_current_checkpoint_safely(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Plan launch",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Confirm launch",
+                goal="Confirm launch risk.",
+                checkpoints=[
+                    PhaseCheckpoint(
+                        checkpoint_id="CP-launch",
+                        title="<b>Approve launch</b>",
+                        status=CheckpointStatus.NEEDS_USER,
+                        needs_user=True,
+                        summary="Owner approval is needed.",
+                        evidence_refs=["brief:P1"],
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    assert "Current Checkpoint" in text
+    assert "<b>Approve launch</b>" not in text
+    assert "&lt;b&gt;Approve launch&lt;/b&gt;" in text
+    assert "Waiting on: you" in text
+    assert "brief:P1" in text
 
 
 def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:

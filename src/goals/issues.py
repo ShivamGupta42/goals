@@ -13,6 +13,7 @@ from goals.gates import review_phase
 from goals.handoffs import analyze_handoff_owners
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
+    CheckpointStatus,
     GateVerdict,
     GoalIssue,
     GoalIssueReport,
@@ -138,6 +139,7 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     current_phase = snapshot.current_phase
     for phase in snapshot.phases:
         refs = [f"phase:{phase.phase_id}"]
+        issues.extend(_checkpoint_issues(phase.phase_id, phase.checkpoints, refs))
         if phase.status == PhaseStatus.ACCEPTED:
             if not phase.reviews or phase.reviews[-1].verdict != GateVerdict.PASS:
                 issues.append(
@@ -209,6 +211,34 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         evidence_refs=refs,
                     )
                 )
+    return issues
+
+
+def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[GoalIssue]:
+    issues: list[GoalIssue] = []
+    for checkpoint in checkpoints:
+        if not checkpoint.required:
+            continue
+        if checkpoint.status in {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}:
+            continue
+        needs_user = checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
+        label = checkpoint.title or checkpoint.checkpoint_id
+        issues.append(
+            GoalIssue(
+                severity="p0",
+                area="checkpoint",
+                summary=f"{phase_id} checkpoint is not complete: {label}.",
+                detail=checkpoint.summary
+                or "A required checkpoint must pass or be waived before this phase can be accepted.",
+                suggested_action=(
+                    f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+                    if needs_user
+                    else f"Complete or waive checkpoint {checkpoint.checkpoint_id} before review."
+                ),
+                needs_user=needs_user,
+                evidence_refs=[*refs, *checkpoint.evidence_refs],
+            )
+        )
     return issues
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from goals.checkpoints import build_current_checkpoint_brief, render_current_checkpoint_brief
 from goals.decisions import build_decision_brief
 from goals.issues import analyze_goal_issues
 from goals.models import (
@@ -16,6 +17,7 @@ def build_goal_brief(snapshot: GoalSnapshot) -> GoalBrief:
 
     decision_brief = build_decision_brief(snapshot)
     issue_report = analyze_goal_issues(snapshot)
+    current_checkpoint = build_current_checkpoint_brief(snapshot)
     decision_summaries = {item.plain_summary for item in decision_brief.user_decisions}
     user_actions = [
         GoalBriefAction(
@@ -62,6 +64,7 @@ def build_goal_brief(snapshot: GoalSnapshot) -> GoalBrief:
         summary=summary,
         progress=progress,
         proof=proof,
+        current_checkpoint=current_checkpoint,
         user_actions=user_actions,
         agent_actions=agent_actions,
         technical_details=technical_details,
@@ -78,6 +81,10 @@ def render_goal_brief(brief: GoalBrief) -> str:
         f"Waiting on: {brief.waiting_on}",
         "",
         brief.summary,
+        "",
+        render_current_checkpoint_brief(brief.current_checkpoint)
+        if brief.current_checkpoint
+        else "## Current Checkpoint\n\nNo current checkpoint.",
         "",
         "## What Needs Your Answer",
         _render_actions(brief.user_actions, empty="Nothing important is waiting on you."),
@@ -107,7 +114,7 @@ def _issue_user_action(issue: GoalIssue) -> GoalBriefAction:
         suggested_reply=_plain_suggested_reply(issue),
         what_happens_next="After you answer, the agent should record the decision and continue with proof.",
         priority="blocking" if issue.severity == "p0" else "important",
-        source="merge" if issue.area == "merge" else "issue",
+        source=_action_source(issue),
         evidence_refs=issue.evidence_refs,
     )
 
@@ -121,7 +128,7 @@ def _agent_actions(snapshot: GoalSnapshot, issues: list[GoalIssue]) -> list[Goal
             suggested_reply=issue.suggested_action,
             what_happens_next="The agent can do this without interrupting you and record the result.",
             priority="important" if issue.severity in {"p0", "p1"} else "later",
-            source="merge" if issue.area == "merge" else "issue",
+            source=_action_source(issue),
             evidence_refs=issue.evidence_refs,
         )
         for issue in issues
@@ -200,6 +207,8 @@ def _plain_issue_reason(issue: GoalIssue) -> str:
 def _plain_suggested_reply(issue: GoalIssue) -> str:
     if issue.suggested_action:
         return issue.suggested_action
+    if issue.area == "checkpoint":
+        return "Answer the checkpoint question, or ask the agent to explain why it is needed."
     if issue.area == "gate":
         return "Pause and explain the unsafe part before continuing."
     return "Please explain the choice and recommended next step."
@@ -214,6 +223,8 @@ def _plain_agent_summary(issue: GoalIssue) -> str:
         return "The agent should add missing proof for the current step."
     if issue.area == "gate":
         return "The agent should fix review findings and run the gate again."
+    if issue.area == "checkpoint":
+        return "The agent should complete or waive the checkpoint before review."
     return issue.summary
 
 
@@ -230,6 +241,7 @@ def _plain_agent_reason(issue: GoalIssue) -> str:
 def _issue_title(issue: GoalIssue) -> str:
     labels = {
         "decision": "Decision needed",
+        "checkpoint": "Checkpoint needs you",
         "gate": "Review needs you",
         "merge": "Merge choice",
         "state": "Goal blocker",
@@ -240,6 +252,7 @@ def _issue_title(issue: GoalIssue) -> str:
 def _agent_title(issue: GoalIssue) -> str:
     labels = {
         "architecture": "Answer architecture gap",
+        "checkpoint": "Complete checkpoint",
         "evidence": "Add missing proof",
         "gate": "Fix review issue",
         "merge": "Check merge readiness",
@@ -256,6 +269,14 @@ def _checks_run(snapshot: GoalSnapshot) -> list[str]:
         if phase.evidence is not None:
             checks.extend(phase.evidence.checks_run)
     return _dedupe(checks)
+
+
+def _action_source(issue: GoalIssue) -> str:
+    if issue.area == "checkpoint":
+        return "checkpoint"
+    if issue.area == "merge":
+        return "merge"
+    return "issue"
 
 
 def _dedupe_actions(actions: list[GoalBriefAction]) -> list[GoalBriefAction]:

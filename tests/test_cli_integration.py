@@ -232,6 +232,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Applied" in sync_apply.stdout
     assert "migration-helper" in (worktree / "registries" / "skills.yml").read_text()
     assert "customer-research" in (worktree / "registries" / "plugins.yml").read_text()
+
     source = run(
         [
             "python",
@@ -563,6 +564,145 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert publish_safety.returncode == 1
     assert "public_repo_hygiene: fail" in publish_safety.stdout
+
+
+def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    result = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "create",
+            "Add tags to tasks and update tests",
+            "--adapter",
+            "claude",
+        ],
+        repo,
+    )
+    worktree_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("Worktree:")
+    )
+    worktree = Path(worktree_line.split(":", 1)[1].strip())
+
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "checkpoint",
+            "record",
+            "P1",
+            "CP-plan",
+            "--title",
+            "Confirm the plan",
+            "--kind",
+            "human_validation",
+            "--status",
+            "needs_user",
+            "--needs-user",
+            "--summary",
+            "The user needs to confirm the plan before review.",
+        ],
+        worktree,
+    )
+
+    current = run(["python", "-m", "goals.cli", "checkpoint", "current"], worktree)
+    assert "Current Checkpoint" in current.stdout
+    assert "Confirm the plan" in current.stdout
+    assert "Waiting on: you" in current.stdout
+    issues = run(["python", "-m", "goals.cli", "issues"], worktree)
+    assert "Needs The User" in issues.stdout
+    assert "Confirm the plan" in issues.stdout
+    brief = run(["python", "-m", "goals.cli", "brief"], worktree)
+    assert "Current Checkpoint" in brief.stdout
+    assert "Waiting on: you" in brief.stdout
+
+    blocked_review = run_unchecked(
+        ["python", "-m", "goals.cli", "phase", "review", "P1"], worktree
+    )
+    assert blocked_review.returncode == 1
+    assert "needs_human" in blocked_review.stdout
+
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "checkpoint",
+            "waive",
+            "P1",
+            "CP-plan",
+            "--reason",
+            "User confirmed the plan in chat.",
+        ],
+        worktree,
+    )
+    evidence_file = worktree / "evidence.json"
+    evidence_file.write_text(
+        json.dumps(
+            {
+                "checks_run": ["pytest"],
+                "acceptance_met": ["Plan confirmed."],
+                "confidence": 0.9,
+            }
+        )
+    )
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "phase",
+            "evidence",
+            "P1",
+            "--file",
+            str(evidence_file),
+        ],
+        worktree,
+    )
+    review = run(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
+    assert "pass" in review.stdout
+
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "checkpoint",
+            "record",
+            "P1",
+            "CP-late",
+            "--title",
+            "Late required checkpoint",
+            "--status",
+            "pending",
+        ],
+        worktree,
+    )
+    blocked_accept = run_unchecked(
+        ["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree
+    )
+    assert blocked_accept.returncode == 1
+    assert "Required checkpoint must pass or be waived" in blocked_accept.stdout
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "checkpoint",
+            "waive",
+            "P1",
+            "CP-late",
+            "--reason",
+            "Covered by the passing phase review.",
+        ],
+        worktree,
+    )
+    accepted = run(["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree)
+    assert "Accepted phase P1" in accepted.stdout
 
 
 def test_architecture_update_records_project_specific_map(tmp_path: Path) -> None:

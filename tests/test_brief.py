@@ -1,12 +1,14 @@
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.decisions import explain_decision
 from goals.models import (
+    CheckpointStatus,
     DecisionOption,
     Evidence,
     GateResult,
     GateVerdict,
     GoalSnapshot,
     Phase,
+    PhaseCheckpoint,
     PhaseStatus,
     WorktreeLease,
 )
@@ -143,3 +145,44 @@ def test_goal_brief_keeps_repair_work_with_agent(tmp_path) -> None:
     assert brief.user_actions == []
     assert brief.agent_actions
     assert "Nothing important needs your answer" in brief.summary
+
+
+def test_goal_brief_shows_current_checkpoint_when_user_needed(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Plan a launch",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Confirm launch risk",
+                goal="Decide whether launch approval is needed.",
+                checkpoints=[
+                    PhaseCheckpoint(
+                        checkpoint_id="CP-approval",
+                        title="Approve launch path",
+                        status=CheckpointStatus.NEEDS_USER,
+                        needs_user=True,
+                        summary="Launch risk needs owner approval.",
+                        decision_refs=["D-launch"],
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+    )
+
+    brief = build_goal_brief(snapshot)
+    rendered = render_goal_brief(brief)
+
+    assert brief.waiting_on == "you"
+    assert brief.current_checkpoint is not None
+    assert brief.current_checkpoint.checkpoint_title == "Approve launch path"
+    assert "Current Checkpoint" in rendered
+    assert "Approve launch path" in rendered
+    assert "Waiting on: you" in rendered

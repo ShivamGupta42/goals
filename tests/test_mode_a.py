@@ -36,6 +36,10 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals phase evidence P1 --file" in plan.prompt
     assert "goals issues" in plan.prompt
     assert "goals brief" in plan.prompt
+    assert "Waiting on: you" in plan.prompt
+    assert "ask exactly one plain-language question" in plan.prompt
+    assert "Do not run review or accept until the user answers" in plan.prompt
+    assert "goals checkpoint current" in plan.prompt
     assert plan.architecture_file.endswith("architecture.md")
     assert "Architecture map:" in plan.prompt
     assert "goals architecture check" in plan.prompt
@@ -81,6 +85,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "uv run goals boundary explain --domain auto" in plan.recommended_checks
     assert "uv run pytest -q" in plan.recommended_checks
     assert "uv run goals brief" in plan.recommended_checks
+    assert "uv run goals checkpoint current" in plan.recommended_checks
     assert "source_ids" in plan.evidence_template.model_dump()
     assert "uv run goals safety-check --mode local ." in plan.recommended_checks
 

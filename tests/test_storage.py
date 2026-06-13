@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from goals.models import (
+    CheckpointStatus,
     CreativeVariant,
     CreativeVariantScore,
     Event,
@@ -77,6 +78,69 @@ def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:
     assert derived.phases[0].reviews[0].verdict == GateVerdict.PASS
     assert derived.status == GoalStatus.ACTIVE
     assert (tmp_path / "goal" / "goal.json").exists()
+
+
+def test_checkpoint_events_replay_and_upsert(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+            payload={
+                "phase_id": "P1",
+                "checkpoint": {
+                    "checkpoint_id": "CP-user",
+                    "kind": "human_validation",
+                    "title": "Confirm the plan",
+                    "status": "needs_user",
+                    "required": True,
+                    "needs_user": True,
+                    "summary": "The user needs to confirm the first step.",
+                    "evidence_refs": ["brief:P1"],
+                },
+            },
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+            payload={
+                "phase_id": "P1",
+                "checkpoint": {
+                    "checkpoint_id": "CP-user",
+                    "kind": "human_validation",
+                    "title": "Confirm the plan",
+                    "status": "passed",
+                    "required": True,
+                    "summary": "Confirmed.",
+                    "evidence_refs": ["brief:P1", "reply:P1"],
+                },
+            },
+        )
+    )
+
+    derived = store.snapshot()
+
+    assert len(derived.phases[0].checkpoints) == 1
+    assert derived.phases[0].checkpoints[0].status == CheckpointStatus.PASSED
+    assert derived.phases[0].checkpoints[0].evidence_refs == ["brief:P1", "reply:P1"]
 
 
 def test_architecture_update_replays_into_snapshot(tmp_path: Path) -> None:

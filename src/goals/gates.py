@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+from goals.checkpoints import phase_checkpoint_blockers
 from goals.models import Evidence, GateResult, GateVerdict, Phase
 
 
 def review_phase(phase: Phase, *, attempt: int = 1, max_attempts: int = 3) -> GateResult:
     capped_attempt = max(1, min(attempt, max_attempts))
+    checkpoint_issues = phase_checkpoint_blockers(phase)
+    if checkpoint_issues:
+        needs_user = any("needs the user" in issue for issue in checkpoint_issues)
+        return GateResult(
+            gate_id="phase-review",
+            verdict=GateVerdict.NEEDS_HUMAN
+            if needs_user
+            else _blocked_after_cap(capped_attempt, max_attempts),
+            summary=_summary(
+                "A required checkpoint is not complete.", capped_attempt, max_attempts
+            ),
+            p0=checkpoint_issues,
+            attempts=capped_attempt,
+        )
     evidence = phase.evidence
     if evidence is None:
         return GateResult(

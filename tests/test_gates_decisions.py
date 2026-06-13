@@ -7,12 +7,14 @@ from goals.decisions import (
 )
 from goals.gates import review_phase
 from goals.models import (
+    CheckpointStatus,
     DecisionOption,
     Evidence,
     GateResult,
     GateVerdict,
     GoalSnapshot,
     Phase,
+    PhaseCheckpoint,
     PhaseStatus,
     SourceClaim,
     SourceRecord,
@@ -43,6 +45,49 @@ def test_phase_review_passes_with_strong_evidence() -> None:
         evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
     )
     result = review_phase(phase)
+    assert result.verdict == GateVerdict.PASS
+
+
+def test_phase_review_needs_human_for_user_checkpoint() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        checkpoints=[
+            PhaseCheckpoint(
+                checkpoint_id="CP-approval",
+                title="Approve risky choice",
+                status=CheckpointStatus.NEEDS_USER,
+                needs_user=True,
+            )
+        ],
+    )
+
+    result = review_phase(phase)
+
+    assert result.verdict == GateVerdict.NEEDS_HUMAN
+    assert "Approve risky choice" in result.p0[0]
+
+
+def test_phase_review_allows_waived_checkpoint_with_strong_evidence() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        checkpoints=[
+            PhaseCheckpoint(
+                checkpoint_id="CP-optional-risk",
+                title="Waived with reason",
+                status=CheckpointStatus.WAIVED,
+                summary="Not relevant after scope changed.",
+            )
+        ],
+    )
+
+    result = review_phase(phase)
+
     assert result.verdict == GateVerdict.PASS
 
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from goals.architecture import architecture_for_snapshot, render_architecture_markdown
+from goals.checkpoints import phase_checkpoint_blockers
 from goals.dashboard import render_dashboard
 from goals.git_ops import (
     create_worktree,
@@ -162,6 +163,12 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
     if action == "start":
         event_type = EventType.PHASE_STARTED
     elif action == "accept":
+        checkpoint_issues = phase_checkpoint_blockers(phase)
+        if checkpoint_issues:
+            raise GoalsError(
+                "Required checkpoint must pass or be waived before acceptance: "
+                + "; ".join(checkpoint_issues)
+            )
         if not phase.reviews or phase.reviews[-1].verdict != GateVerdict.PASS:
             raise GoalsError("Latest phase review must pass before acceptance.")
         event_type = EventType.PHASE_ACCEPTED

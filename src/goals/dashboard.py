@@ -12,6 +12,7 @@ from goals.architecture import (
 )
 from goals.assets import analyze_asset_provenance
 from goals.brief import build_goal_brief
+from goals.checkpoints import build_current_checkpoint_brief
 from goals.citations import analyze_citation_quality
 from goals.creative import analyze_creative_variants
 from goals.decisions import (
@@ -51,6 +52,7 @@ def render_dashboard(
     proof_count = len([p for p in snapshot.phases if p.evidence is not None])
     decision_brief = build_decision_brief(snapshot)
     brief = _goal_brief_html(goal_brief)
+    current_checkpoint = _current_checkpoint_html(build_current_checkpoint_brief(snapshot))
     phase_rows = "\n".join(
         f'<tr><td><span class="pill">{escape(p.phase_id)}</span></td>'
         f"<td><strong>{escape(p.title)}</strong><br><span>{escape(p.goal)}</span></td>"
@@ -96,6 +98,8 @@ def render_dashboard(
     .tile span {{ display: block; font-size: 1.05rem; margin-top: .25rem; }}
     .plain {{ color: var(--muted); max-width: 760px; }}
     .panel {{ border-top: 1px solid var(--line); }}
+    .checkpoint {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; background: #fff; }}
+    .checkpoint-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; margin-top: .75rem; }}
     .decision {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; }}
     .decision-brief {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: 1rem; background: var(--soft); }}
     .decision-brief .next {{ font-weight: 700; }}
@@ -137,6 +141,7 @@ def render_dashboard(
   </header>
   <nav aria-label="Dashboard views">
     <a href="#brief">Brief</a>
+    <a href="#checkpoint">Current Checkpoint</a>
     <a href="#progress">Progress</a>
     <a href="#issues">Issues</a>
     <a href="#decisions">Decisions</a>
@@ -154,6 +159,10 @@ def render_dashboard(
   <section id="brief" class="panel">
     <h2>Goal Brief</h2>
     {brief}
+  </section>
+  <section id="checkpoint" class="panel">
+    <h2>Current Checkpoint</h2>
+    {current_checkpoint}
   </section>
   <section id="progress" class="panel">
     <h2>Progress</h2>
@@ -297,6 +306,32 @@ def _brief_actions_html(actions, *, empty: str) -> str:
         for action in actions[:5]
     )
     return f"<ul>{items}</ul>"
+
+
+def _current_checkpoint_html(brief) -> str:
+    proof = _bullets_html(brief.proof or ["No proof recorded yet."])
+    unresolved = _bullets_html(brief.unresolved or ["Nothing blocking this checkpoint."])
+    refs = (
+        _bullets_html([*brief.evidence_refs, *brief.decision_refs])
+        if brief.evidence_refs or brief.decision_refs
+        else "<p>No references recorded.</p>"
+    )
+    return (
+        '<article class="checkpoint">'
+        f"<h3>{escape(brief.checkpoint_title or 'Phase evidence and review')}</h3>"
+        f"<p>{escape(brief.phase_id)} - {escape(brief.phase_title)}</p>"
+        f'<p><span class="pill">Status: {escape(brief.status)}</span> '
+        f'<span class="pill">Waiting on: {escape(brief.waiting_on)}</span></p>'
+        f"<p><strong>Why it matters:</strong> {escape(brief.why_it_matters)}</p>"
+        f"<p><strong>What changed:</strong> {escape(brief.what_changed)}</p>"
+        '<div class="checkpoint-grid">'
+        f"<div><h3>Proof</h3>{proof}</div>"
+        f"<div><h3>Unresolved</h3>{unresolved}</div>"
+        f"<div><h3>References</h3>{refs}</div>"
+        "</div>"
+        f"<p><strong>Next safe step:</strong> {escape(brief.next_safe_step)}</p>"
+        "</article>"
+    )
 
 
 def _status_label(status: str) -> str:

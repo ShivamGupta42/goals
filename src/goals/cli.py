@@ -21,6 +21,7 @@ from goals.assets import (
 )
 from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
+from goals.checkpoints import build_current_checkpoint_brief, render_current_checkpoint_brief
 from goals.citations import analyze_citation_quality, render_citation_quality_report
 from goals.creative import (
     analyze_creative_variants,
@@ -81,6 +82,8 @@ from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     AgentRecommendationSet,
     AssetRecord,
+    CheckpointKind,
+    CheckpointStatus,
     CreativeVariant,
     CreativeVariantScore,
     Decision,
@@ -92,10 +95,13 @@ from goals.models import (
     GateVerdict,
     GoalArchitectureMap,
     HandoffOwner,
+    Phase,
     PermissionPolicyReport,
+    PhaseCheckpoint,
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
+    utc_now,
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
@@ -127,6 +133,7 @@ asset_app = typer.Typer(help="Record and inspect asset provenance.")
 boundary_app = typer.Typer(help="Explain professional boundaries for high-stakes goals.")
 creative_app = typer.Typer(help="Record and compare creative variants.")
 creative_variant_app = typer.Typer(help="Record and inspect creative directions.")
+checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
@@ -142,6 +149,7 @@ app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
 app.add_typer(asset_app, name="asset")
 app.add_typer(boundary_app, name="boundary")
+app.add_typer(checkpoint_app, name="checkpoint")
 app.add_typer(creative_app, name="creative")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
@@ -272,6 +280,153 @@ def dashboard() -> None:
 
     def run():
         typer.echo(str(emit_dashboard(Path.cwd())))
+
+    _handle(run)
+
+
+@checkpoint_app.command("current")
+def checkpoint_current(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show the current checkpoint in plain language."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        brief = build_current_checkpoint_brief(snapshot)
+        if json_output:
+            typer.echo(brief.model_dump_json(indent=2))
+        else:
+            typer.echo(render_current_checkpoint_brief(brief))
+
+    _handle(run)
+
+
+@checkpoint_app.command("list")
+def checkpoint_list() -> None:
+    """List recorded phase checkpoints."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        lines = ["# Phase Checkpoints", ""]
+        found = False
+        for phase in snapshot.phases:
+            if not phase.checkpoints:
+                continue
+            found = True
+            lines.append(f"## {phase.phase_id} - {phase.title}")
+            for checkpoint in phase.checkpoints:
+                required = "required" if checkpoint.required else "optional"
+                user = " user" if checkpoint.needs_user else ""
+                lines.append(
+                    f"- [{checkpoint.status}][{checkpoint.kind}][{required}{user}] "
+                    f"{checkpoint.checkpoint_id}: {checkpoint.title}"
+                )
+                if checkpoint.summary:
+                    lines.append(f"  Summary: {checkpoint.summary}")
+                if checkpoint.evidence_refs:
+                    lines.append(f"  Evidence: {', '.join(checkpoint.evidence_refs)}")
+        if not found:
+            lines.append("- No checkpoints recorded.")
+        typer.echo("\n".join(lines) + "\n")
+
+    _handle(run)
+
+
+@checkpoint_app.command("record")
+def checkpoint_record(
+    phase_id: str,
+    checkpoint_id: str,
+    title: str = typer.Option("", "--title", help="Plain-language checkpoint title."),
+    kind: CheckpointKind = typer.Option(CheckpointKind.CUSTOM, "--kind", help="Checkpoint kind."),
+    status: CheckpointStatus = typer.Option(
+        CheckpointStatus.PASSED, "--status", help="pending, passed, blocked, needs_user, or waived."
+    ),
+    required: bool = typer.Option(
+        True, "--required/--optional", help="Whether this checkpoint blocks acceptance."
+    ),
+    needs_user: bool = typer.Option(
+        False,
+        "--needs-user/--agent-can-complete",
+        help="Whether this checkpoint needs a user answer.",
+    ),
+    summary: str = typer.Option("", "--summary", help="Plain-language checkpoint summary."),
+    evidence_refs: Optional[list[str]] = typer.Option(
+        None, "--evidence-ref", help="Evidence reference. Repeat for multiple refs."
+    ),
+    decision_refs: Optional[list[str]] = typer.Option(
+        None, "--decision-ref", help="Decision reference. Repeat for multiple refs."
+    ),
+    notes: str = typer.Option("", "--notes", help="What changed or why this checkpoint exists."),
+) -> None:
+    """Record or update a phase checkpoint."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        phase = _phase_or_error(snapshot, phase_id)
+        existing = _checkpoint_or_none(phase, checkpoint_id)
+        checkpoint = PhaseCheckpoint(
+            checkpoint_id=checkpoint_id,
+            kind=kind,
+            title=title or (existing.title if existing else checkpoint_id),
+            status=status,
+            required=required,
+            needs_user=needs_user or status == CheckpointStatus.NEEDS_USER,
+            summary=summary or (existing.summary if existing else ""),
+            evidence_refs=evidence_refs if evidence_refs is not None else (
+                existing.evidence_refs if existing else []
+            ),
+            decision_refs=decision_refs if decision_refs is not None else (
+                existing.decision_refs if existing else []
+            ),
+            created_at=existing.created_at if existing else utc_now(),
+            updated_at=utc_now(),
+            notes=notes or (existing.notes if existing else ""),
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+                payload={"phase_id": phase_id, "checkpoint": checkpoint.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id}")
+
+    _handle(run)
+
+
+@checkpoint_app.command("waive")
+def checkpoint_waive(
+    phase_id: str,
+    checkpoint_id: str,
+    reason: str = typer.Option(..., "--reason", help="Why it is safe to waive this checkpoint."),
+) -> None:
+    """Waive an existing required checkpoint with a reason."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        phase = _phase_or_error(snapshot, phase_id)
+        existing = _checkpoint_or_none(phase, checkpoint_id)
+        if existing is None:
+            raise GoalsError(f"Unknown checkpoint id for {phase_id}: {checkpoint_id}")
+        checkpoint = existing.model_copy(
+            update={
+                "status": CheckpointStatus.WAIVED,
+                "needs_user": False,
+                "summary": reason,
+                "updated_at": utc_now(),
+                "notes": reason,
+            }
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+                payload={"phase_id": phase_id, "checkpoint": checkpoint.model_dump()},
+            ),
+        )
+        typer.echo(f"Waived checkpoint {checkpoint_id} for {phase_id}")
 
     _handle(run)
 
@@ -1755,6 +1910,20 @@ def _agent_recommendation_sets_from_data(
             )
         ]
     raise GoalsError("Recommendation file must contain an agent set or recommendation list.")
+
+
+def _phase_or_error(snapshot, phase_id: str) -> Phase:
+    for phase in snapshot.phases:
+        if phase.phase_id == phase_id:
+            return phase
+    raise GoalsError(f"Unknown phase id: {phase_id}")
+
+
+def _checkpoint_or_none(phase: Phase, checkpoint_id: str) -> PhaseCheckpoint | None:
+    for checkpoint in phase.checkpoints:
+        if checkpoint.checkpoint_id == checkpoint_id:
+            return checkpoint
+    return None
 
 
 def _validate_choice(value: str, choices: set[str], label: str) -> str:

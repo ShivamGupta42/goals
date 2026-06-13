@@ -20,6 +20,7 @@ from goals.models import (
     GoalSnapshot,
     GoalStatus,
     HandoffOwner,
+    PhaseCheckpoint,
     PhaseStatus,
     SourceClaim,
     SourceRecord,
@@ -86,10 +87,10 @@ class EventStore:
             events = self.read_events()
             if any(existing.event_id == event.event_id for existing in events):
                 return
+            snapshot = derive_snapshot(events + [event])
             lines = [existing.model_dump_json() for existing in events]
             lines.append(event.model_dump_json())
             atomic_write_text(self.events_path, "\n".join(lines) + "\n")
-            snapshot = derive_snapshot(events + [event])
             atomic_write_text(self.snapshot_path, snapshot.model_dump_json(indent=2) + "\n")
 
     def snapshot(self) -> GoalSnapshot:
@@ -121,6 +122,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
             phase.reviews.append(GateResult.model_validate(payload["gate_result"]))
+        elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
+            phase = _phase(snapshot, payload["phase_id"])
+            checkpoint = PhaseCheckpoint.model_validate(payload["checkpoint"])
+            _upsert_checkpoint(phase.checkpoints, checkpoint)
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
             phase.status = PhaseStatus.ACCEPTED
@@ -172,6 +177,16 @@ def _phase(snapshot: GoalSnapshot, phase_id: str):
         if phase.phase_id == phase_id:
             return phase
     raise GoalsError(f"Unknown phase id: {phase_id}")
+
+
+def _upsert_checkpoint(
+    checkpoints: list[PhaseCheckpoint], checkpoint: PhaseCheckpoint
+) -> None:
+    for index, existing in enumerate(checkpoints):
+        if existing.checkpoint_id == checkpoint.checkpoint_id:
+            checkpoints[index] = checkpoint
+            return
+    checkpoints.append(checkpoint)
 
 
 def _next_pending_phase_id(snapshot: GoalSnapshot) -> str | None:
