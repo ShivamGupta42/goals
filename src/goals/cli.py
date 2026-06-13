@@ -55,6 +55,11 @@ from goals.evaluations import (
     stress_goal_issue_discovery,
 )
 from goals.issues import analyze_goal_issues, render_issue_report
+from goals.handoffs import (
+    analyze_handoff_owners,
+    render_handoff_owner_report,
+    render_handoff_summary,
+)
 from goals.memory import (
     absorb_goal_memory,
     append_memory_entry,
@@ -80,6 +85,7 @@ from goals.models import (
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    HandoffOwner,
     PermissionPolicyReport,
     SelfEvolutionEntry,
     SourceClaim,
@@ -118,6 +124,8 @@ creative_variant_app = typer.Typer(help="Record and inspect creative directions.
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
+handoff_app = typer.Typer(help="Record and check handoff owners.")
+handoff_owner_app = typer.Typer(help="Record and inspect handoff owners.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
@@ -131,12 +139,14 @@ app.add_typer(creative_app, name="creative")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
+app.add_typer(handoff_app, name="handoff")
 app.add_typer(memory_app, name="memory")
 app.add_typer(permission_app, name="permission")
 app.add_typer(phase_app, name="phase")
 app.add_typer(roadmap_app, name="roadmap")
 app.add_typer(source_app, name="source")
 creative_app.add_typer(creative_variant_app, name="variant")
+handoff_app.add_typer(handoff_owner_app, name="owner")
 
 
 def _handle(fn):
@@ -1068,6 +1078,134 @@ def creative_compare(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_creative_comparison_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@handoff_owner_app.command("add")
+def handoff_owner_add(
+    label: str,
+    role: str = typer.Option("", help="Plain role, such as reviewer or follow-up owner."),
+    responsibility: str = typer.Option("", help="Specific work this owner is accountable for."),
+    owner_type: str = typer.Option(
+        "unknown",
+        help="agent, user, team, external, or unknown.",
+    ),
+    phase_id: Optional[list[str]] = typer.Option(
+        None,
+        "--phase-id",
+        help="Phase id this owner applies to. Repeat for multiple phases.",
+    ),
+    decision_scope: Optional[list[str]] = typer.Option(
+        None,
+        "--decision-scope",
+        help="Decision or task scope owned by this entry. Repeat for multiple scopes.",
+    ),
+    escalation_path: str = typer.Option(
+        "",
+        help="Where the agent should route blockers before asking the user.",
+    ),
+    confirmation: str = typer.Option(
+        "not_required",
+        help="not_required, agent_confirmed, user_confirmed, or needs_user.",
+    ),
+    status: str = typer.Option(
+        "proposed",
+        help="proposed, active, inactive, or blocked.",
+    ),
+    notes: str = typer.Option("", help="Short non-sensitive handoff note."),
+) -> None:
+    """Record who owns a follow-up, review, phase handoff, or process step."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        owner = HandoffOwner(
+            label=label,
+            role=role,
+            responsibility=responsibility,
+            owner_type=_validate_choice(
+                owner_type,
+                {"agent", "user", "team", "external", "unknown"},
+                "owner_type",
+            ),  # type: ignore[arg-type]
+            phase_ids=phase_id or [],
+            decision_scope=decision_scope or [],
+            escalation_path=escalation_path,
+            confirmation=_validate_choice(
+                confirmation,
+                {"not_required", "agent_confirmed", "user_confirmed", "needs_user"},
+                "confirmation",
+            ),  # type: ignore[arg-type]
+            status=_validate_choice(
+                status,
+                {"proposed", "active", "inactive", "blocked"},
+                "status",
+            ),  # type: ignore[arg-type]
+            notes=notes,
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.HANDOFF_OWNER_RECORDED,
+                payload={"owner": owner.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded handoff owner: {owner.owner_id}")
+
+    _handle(run)
+
+
+@handoff_owner_app.command("list")
+def handoff_owner_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded handoff owners for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    [owner.model_dump(mode="json") for owner in snapshot.handoff_owners],
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo("Handoff owners:")
+            typer.echo(render_handoff_summary(snapshot))
+
+    _handle(run)
+
+
+@handoff_app.command("owners")
+def handoff_owners(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded handoff owners for the active goal."""
+    handoff_owner_list(json_output=json_output)
+
+
+@handoff_app.command("check")
+def handoff_check(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when handoff owner issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether handoff owners are clear enough for the agent to continue."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_handoff_owners(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_handoff_owner_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 

@@ -83,6 +83,8 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Evidence gaps and open questions" in text
     assert "Creative Variants" in text
     assert "No creative variants recorded yet." in text
+    assert "Handoff Owners" in text
+    assert "No handoff owners recorded yet." in text
     assert "Sources" in text
     assert "Citation Quality" in text
     assert "Freshness" in text

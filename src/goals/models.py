@@ -48,6 +48,7 @@ class EventType(StrEnum):
     ARCHITECTURE_UPDATED = "architecture_updated"
     ASSET_RECORDED = "asset_recorded"
     CREATIVE_VARIANT_RECORDED = "creative_variant_recorded"
+    HANDOFF_OWNER_RECORDED = "handoff_owner_recorded"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     SCAN_COMPLETED = "scan_completed"
@@ -598,6 +599,53 @@ class CreativeVariantComparisonReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class HandoffOwner(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    owner_id: str = Field(default_factory=lambda: f"OWN-{uuid4().hex[:8]}")
+    label: str
+    role: str = ""
+    responsibility: str = ""
+    owner_type: Literal["agent", "user", "team", "external", "unknown"] = "unknown"
+    phase_ids: list[str] = Field(default_factory=list)
+    decision_scope: list[str] = Field(default_factory=list)
+    escalation_path: str = ""
+    confirmation: Literal[
+        "not_required",
+        "agent_confirmed",
+        "user_confirmed",
+        "needs_user",
+    ] = "not_required"
+    status: Literal["proposed", "active", "inactive", "blocked"] = "proposed"
+    notes: str = ""
+    created_at: str = Field(default_factory=utc_now)
+
+
+class HandoffOwnerFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    owner_id: str
+    label: str
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class HandoffOwnerReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    owners_checked: int = 0
+    findings: list[HandoffOwnerFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1038,6 +1086,7 @@ class GoalIssue(BaseModel):
         "decision",
         "evidence",
         "gate",
+        "handoff",
         "merge",
         "phase",
         "source",
@@ -1107,6 +1156,7 @@ class GoalSnapshot(BaseModel):
     decisions: list[Decision] = Field(default_factory=list)
     assets: list[AssetRecord] = Field(default_factory=list)
     creative_variants: list[CreativeVariant] = Field(default_factory=list)
+    handoff_owners: list[HandoffOwner] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

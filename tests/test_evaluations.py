@@ -143,6 +143,9 @@ def test_use_case_coverage_reports_broad_current_and_future_fit(
     assert "asset_provenance_checks" not in creative.planned_capabilities
     assert "creative_variant_comparison" in creative.supported_capabilities
     assert "creative_variant_comparison" not in creative.planned_capabilities
+    operations = next(case for case in report.cases if case.use_case_id == "operations-process")
+    assert "handoff_owner_registry" in operations.supported_capabilities
+    assert "handoff_owner_registry" not in operations.planned_capabilities
     assert "Goal Use-Case Coverage Report" in rendered
     assert "Important User Decisions" in rendered
     assert "Capability Coverage" in rendered
@@ -213,7 +216,7 @@ def test_self_check_summarizes_all_evaluation_suites(monkeypatch, tmp_path: Path
     assert result.user_decision_count == 5
     assert result.agent_repair_action_count >= 1
     assert report.next_slices
-    assert report.next_slices[0] == "Explore planned capability: handoff owner registry"
+    assert report.next_slices[0] == "Explore planned capability: mandatory external review gate"
     assert "Goals Self-Check Report" in rendered
     assert "Recommended Next Slices" in rendered
     assert "User Experience Findings" in rendered

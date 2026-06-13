@@ -102,6 +102,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals source freshness" in run_prompt.stdout
     assert "goals asset provenance" in run_prompt.stdout
     assert "goals creative compare" in run_prompt.stdout
+    assert "goals handoff check" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
     architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
@@ -350,8 +351,45 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     creative_compare = run(["python", "-m", "goals.cli", "creative", "compare"], worktree)
     assert "Creative Variant Comparison" in creative_compare.stdout
     assert "Overall: pass" in creative_compare.stdout
+    handoff = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "handoff",
+            "owner",
+            "add",
+            "Support lead",
+            "--role",
+            "reviewer",
+            "--responsibility",
+            "Review the updated checklist before rollout.",
+            "--owner-type",
+            "team",
+            "--phase-id",
+            "P2",
+            "--decision-scope",
+            "checklist rollout",
+            "--escalation-path",
+            "Create a follow-up task for the coordinator.",
+            "--confirmation",
+            "agent_confirmed",
+            "--status",
+            "active",
+        ],
+        worktree,
+    )
+    assert "Recorded handoff owner: OWN-" in handoff.stdout
+    handoff_list = run(["python", "-m", "goals.cli", "handoff", "owners"], worktree)
+    assert "Support lead" in handoff_list.stdout
+    handoff_check = run(["python", "-m", "goals.cli", "handoff", "check"], worktree)
+    assert "Handoff Owner Report" in handoff_check.stdout
+    assert "Overall: pass" in handoff_check.stdout
     refreshed_dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
-    assert "Creative Variants" in Path(refreshed_dash.stdout.strip()).read_text()
+    dashboard_text = Path(refreshed_dash.stdout.strip()).read_text()
+    assert "Creative Variants" in dashboard_text
+    assert "Handoff Owners" in dashboard_text
+    assert "Support lead" in dashboard_text
     run(
         [
             "python",

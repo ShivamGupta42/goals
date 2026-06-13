@@ -287,39 +287,66 @@ assets and variants in the dashboard.
   by default?
 - When should asset provenance become a blocking gate instead of an issue report?
 
+## Handoff Owner Registry
+
+**Status:** First vertical slice implemented. Goals can record phase, review,
+follow-up, rollout, and process owners as append-only goal events, include
+handoff summaries in Mode A prompts, check owner clarity with `goals handoff
+check`, add handoff findings to `goals issues`, and render handoff owners in
+the dashboard.
+
+### Direction
+
+- Make ownership visible without asking users to route every routine follow-up.
+- Treat missing roles, responsibilities, phase ids, duplicate labels, and
+  escalation paths as agent repair work.
+- Surface only material accountability questions: blocked owners or owners
+  explicitly marked `confirmation: needs_user`.
+- Keep owner labels portable and non-sensitive by default.
+- Next, connect recurring goal templates and optional calendar context to
+  handoff owners without storing private schedules by default.
+
+### Open Questions
+
+- Should handoff owners be reusable templates across goals, or stay goal-local
+  unless a user imports them?
+- Should team/external owners require an escalation path before a phase can be
+  accepted?
+- How should Mode B runner handoffs differ from Mode A native-agent handoffs?
+
 <!-- goals:self-check-roadmap:start -->
 ## Goals Self-Check Suggestions
 
 This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
 
-- **Handoff Owner Registry** (`p1`)
-  - Source: self-check
-  - Capability: `handoff_owner_registry`
-  - Why: Self-check recommends handoff owner registry as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible handoff owner registry slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Mandatory External Review Gate** (`p2`)
+- **Mandatory External Review Gate** (`p1`)
   - Source: self-check
   - Capability: `mandatory_external_review_gate`
   - Why: Self-check recommends mandatory external review gate as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible mandatory external review gate slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
 - **Optional Calendar Context** (`p2`)
   - Source: self-check
   - Capability: `optional_calendar_context`
   - Why: Self-check recommends optional calendar context as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible optional calendar context slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[1]`, `self-check.summary`
 - **Private Memory Boundary** (`p2`)
   - Source: self-check
   - Capability: `private_memory_boundary`
   - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
 - **Recurring Goal Templates** (`p2`)
   - Source: self-check
   - Capability: `recurring_goal_templates`
   - Why: Self-check recommends recurring goal templates as a next product capability that would make Goals better at finishing broad goals.
   - Recommended change: Define the smallest user-visible recurring goal templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
+  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
+- **Spaced Recall Outputs** (`p2`)
+  - Source: self-check
+  - Capability: `spaced_recall_outputs`
+  - Why: Self-check recommends spaced recall outputs as a next product capability that would make Goals better at finishing broad goals.
+  - Recommended change: Define the smallest user-visible spaced recall outputs slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
   - Evidence: `self-check.next_slices[4]`, `self-check.summary`
 <!-- goals:self-check-roadmap:end -->

@@ -23,6 +23,7 @@ from goals.decisions import (
 )
 from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
+from goals.handoffs import analyze_handoff_owners
 from goals.issues import analyze_goal_issues
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
@@ -62,6 +63,7 @@ def render_dashboard(
     memory = _memory_html(snapshot)
     assets = _assets_html(snapshot)
     creative = _creative_html(snapshot)
+    handoffs = _handoffs_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
@@ -140,6 +142,7 @@ def render_dashboard(
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#creative">Creative</a>
+    <a href="#handoffs">Handoffs</a>
     <a href="#evidence">Evidence</a>
     <a href="#assets">Assets</a>
     <a href="#sources">Sources</a>
@@ -176,6 +179,10 @@ def render_dashboard(
   <section id="creative" class="panel">
     <h2>Creative Variants</h2>
     {creative}
+  </section>
+  <section id="handoffs" class="panel">
+    <h2>Handoff Owners</h2>
+    {handoffs}
   </section>
   <section id="evidence" class="panel">
     <h2>Proof and Evidence</h2>
@@ -618,6 +625,55 @@ def _creative_html(snapshot: GoalSnapshot) -> str:
         f"<h3>Comparison</h3>{findings_html}"
         f"<p><strong>Recommended variant:</strong> <code>{escape(recommended)}</code></p>"
         f'<h3>Recorded Variants</h3><ul class="node-list">{variant_items}</ul>'
+    )
+
+
+def _handoffs_html(snapshot: GoalSnapshot) -> str:
+    report = analyze_handoff_owners(snapshot)
+    if not snapshot.handoff_owners:
+        return "<h3>Owner Registry</h3><p>No handoff owners recorded yet.</p>"
+    owner_items = "\n".join(
+        "<li>"
+        f"<strong>{escape(owner.label)}</strong>"
+        f"<p>{escape(owner.responsibility or owner.notes or 'No responsibility recorded.')}</p>"
+        f'<span class="pill">{escape(owner.owner_id)}</span> '
+        f'<span class="pill">{escape(owner.owner_type)}</span> '
+        f'<span class="status-label {escape(owner.status)}">{escape(owner.status)}</span> '
+        f'<span class="pill">confirmation: {escape(owner.confirmation)}</span>'
+        + (f"<p><strong>Role:</strong> {escape(owner.role)}</p>" if owner.role else "")
+        + (
+            f"<p><strong>Phases:</strong> {escape(', '.join(owner.phase_ids))}</p>"
+            if owner.phase_ids
+            else ""
+        )
+        + (
+            f"<p><strong>Escalation:</strong> {escape(owner.escalation_path)}</p>"
+            if owner.escalation_path
+            else ""
+        )
+        + "</li>"
+        for owner in snapshot.handoff_owners
+    )
+    finding_items = "".join(
+        "<li>"
+        f"<strong>{escape(finding.summary)}</strong>"
+        f"<p>{escape(finding.detail)}</p>"
+        + (
+            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
+            if finding.suggested_action
+            else ""
+        )
+        + "</li>"
+        for finding in report.findings[:5]
+    )
+    findings_html = (
+        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
+        if report.findings
+        else f"<p>{escape(report.summary)}</p>"
+    )
+    return (
+        f"<h3>Owner Registry</h3>{findings_html}"
+        f'<h3>Recorded Owners</h3><ul class="node-list">{owner_items}</ul>'
     )
 
 
