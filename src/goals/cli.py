@@ -59,6 +59,7 @@ from goals.models import (
 )
 from goals.registry import validate_registries
 from goals.registry_sync import apply_registry_sync, plan_registry_sync, render_registry_sync_plan
+from goals.roadmap import apply_roadmap_update, plan_roadmap_update, render_roadmap_update_plan
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -81,6 +82,7 @@ ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 phase_app = typer.Typer(help="Agent phase protocol.")
+roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
@@ -89,6 +91,7 @@ app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
 app.add_typer(memory_app, name="memory")
 app.add_typer(phase_app, name="phase")
+app.add_typer(roadmap_app, name="roadmap")
 app.add_typer(source_app, name="source")
 
 
@@ -555,6 +558,44 @@ def memory_absorb() -> None:
         visible = [suggestion for suggestion in suggestions if suggestion.user_visible]
         if visible:
             typer.echo(render_memory_suggestions(visible[:5]))
+
+    _handle(run)
+
+
+@roadmap_app.command("suggest")
+def roadmap_suggest(
+    apply: bool = typer.Option(False, "--apply", help="Write the generated roadmap block."),
+    adapter: str = typer.Option("both", help="claude, codex, or both."),
+    path: Path = typer.Option(Path("ROADMAP.md"), help="Roadmap file to update."),
+    max_user_decisions: int = typer.Option(
+        2,
+        help="Maximum important user decisions allowed per synthetic goal.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Turn self-check findings into a bounded roadmap update plan."""
+
+    def run():
+        if adapter == "both":
+            adapters = ["claude", "codex"]
+        elif adapter in {"claude", "codex"}:
+            adapters = [adapter]
+        else:
+            typer.secho("Error: adapter must be claude, codex, or both", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        plan = plan_roadmap_update(
+            Path.cwd(),
+            path=path,
+            adapters=adapters,
+            max_user_decisions=max_user_decisions,
+        )
+        result = apply_roadmap_update(Path.cwd(), plan) if apply else plan
+        if json_output:
+            typer.echo(result.model_dump_json(indent=2))
+        else:
+            typer.echo(render_roadmap_update_plan(result))
+            if not apply and result.suggestions:
+                typer.echo("Run again with --apply to update the generated roadmap block.")
 
     _handle(run)
 

@@ -16,6 +16,7 @@ uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
 uv run goals eval issue-stress --adapter claude
 uv run goals eval self-check
+uv run goals roadmap suggest
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -59,6 +60,11 @@ repair work stays with the agent instead of becoming unnecessary user prompts.
 summarizes whether Goals is meeting its original promise. It is the first
 command to run during self-evolution work; the individual eval commands are
 drill-down views when the roll-up finds a gap or a promising next slice.
+
+`roadmap suggest` turns the self-check's next slices into a dry-run roadmap
+update plan. It is safe for agents to run before asking the user what to build
+next: the default output is a preview, and `--apply` only updates a bounded
+generated block in `ROADMAP.md`.
 
 ## Ecosystem Discovery
 

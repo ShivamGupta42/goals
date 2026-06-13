@@ -50,6 +50,7 @@ from goals.runtime import (
 
 CURRENT_CAPABILITIES = {
     "adapter_awareness",
+    "automatic_gap_to_roadmap_patch",
     "architecture_map",
     "automatic_skill_selection",
     "durable_state",
@@ -1417,6 +1418,9 @@ def _coverage_case(use_case: GoalUseCase, supported: set[str]) -> GoalUseCaseCov
     required = set(use_case.required_capabilities)
     supported_required = sorted(required & supported)
     missing = sorted(required - supported)
+    planned = [
+        capability for capability in use_case.planned_capabilities if capability not in supported
+    ]
     status = "partial" if missing else "covered"
     return GoalUseCaseCoverage(
         use_case_id=use_case.use_case_id,
@@ -1424,13 +1428,13 @@ def _coverage_case(use_case: GoalUseCase, supported: set[str]) -> GoalUseCaseCov
         status=status,
         supported_capabilities=supported_required,
         missing_capabilities=missing,
-        planned_capabilities=list(use_case.planned_capabilities),
+        planned_capabilities=planned,
         important_user_decisions=list(use_case.important_user_decisions),
         agent_can_decide=list(use_case.agent_can_decide),
         proof_required=list(use_case.proof_required),
         summary=(
             f"{len(supported_required)}/{len(required)} current "
-            f"capabilities covered; {len(use_case.planned_capabilities)} future improvement(s) tracked."
+            f"capabilities covered; {len(planned)} future improvement(s) tracked."
         ),
     )
 
@@ -1634,6 +1638,8 @@ def _supported_capabilities(
         supported.add("plugin_capability_discovery")
     if "goals ecosystem sync" in prompt:
         supported.add("registry_sync_workflow")
+    if "goals roadmap suggest" in prompt:
+        supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:
         supported.add("issue_discovery")
     if "goals merge-check" in prompt or any(

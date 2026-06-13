@@ -631,6 +631,30 @@ class SelfCheckReport(BaseModel):
     ecosystem_findings: list[str] = Field(default_factory=list)
 
 
+class RoadmapSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suggestion_id: str
+    title: str
+    plain_summary: str
+    source: Literal["self-check", "memory", "manual"] = "self-check"
+    capability: str = ""
+    recommended_change: str
+    priority: Literal["p0", "p1", "p2"] = "p1"
+    roadmap_section: str = "Self-Evolution Memory"
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class RoadmapUpdatePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    dry_run: bool = True
+    summary: str
+    suggestions: list[RoadmapSuggestion] = Field(default_factory=list)
+    patch_preview: str = ""
+
+
 class MergeReadinessFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
