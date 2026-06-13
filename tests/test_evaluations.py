@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from goals.evaluations import DEFAULT_GOAL_SCENARIOS, evaluate_goal_scenarios
+from goals.evaluations import (
+    DEFAULT_GOAL_SCENARIOS,
+    dogfood_goal_scenarios,
+    evaluate_goal_scenarios,
+    render_dogfood_report,
+)
 
 
 def test_default_scenarios_cover_core_goal_types() -> None:
@@ -51,3 +56,33 @@ def test_goal_scenarios_are_supported_by_current_mode_a(monkeypatch, tmp_path: P
     personal = next(result for result in results if result.scenario_id == "personal-fitness-reset")
     assert "project_history_decision_context" in personal.supported_capabilities
     assert "project_history_decision_context" not in personal.planned_capabilities
+
+
+def test_dogfood_report_checks_decision_burden_and_evidence(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    for name, kind in {
+        "adapters.yml": "adapters",
+        "agents.yml": "agents",
+        "gates.yml": "gates",
+        "plugins.yml": "plugins",
+        "profiles.yml": "profiles",
+        "skills.yml": "skills",
+    }.items():
+        (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (True, f"{name} ready"))
+
+    report = dogfood_goal_scenarios(tmp_path, adapter="claude")
+    rendered = render_dogfood_report(report)
+
+    assert report.passed is True
+    assert len(report.cases) == 5
+    assert all(case.user_decision_count == 1 for case in report.cases)
+    assert all(case.agent_decision_count >= 3 for case in report.cases)
+    assert all(case.required_evidence for case in report.cases)
+    assert "Goals Dogfood Report" in rendered
+    assert "What the user sees" in rendered
+    assert "What the agent can decide" in rendered
+    assert "Proof required" in rendered
+    assert "May the agent use an external plugin" in rendered

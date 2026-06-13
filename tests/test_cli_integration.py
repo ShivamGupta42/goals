@@ -232,6 +232,11 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert "personal-fitness-reset: pass" in eval_result.stdout
     assert "ecosystem-skill-plugin-routing: pass" in eval_result.stdout
+    dogfood = run(["python", "-m", "goals.cli", "eval", "dogfood", "--adapter", "claude"], worktree)
+    assert "Goals Dogfood Report" in dogfood.stdout
+    assert "What the user sees" in dogfood.stdout
+    assert "Proof required" in dogfood.stdout
+    assert "ecosystem-skill-plugin-routing: pass" in dogfood.stdout
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )

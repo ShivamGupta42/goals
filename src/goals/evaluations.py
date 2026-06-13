@@ -7,6 +7,8 @@ from goals.models import (
     GoalScenario,
     GoalSnapshot,
     ScenarioDecision,
+    ScenarioDogfoodCase,
+    ScenarioDogfoodReport,
     ScenarioEvaluation,
     WorktreeLease,
 )
@@ -242,6 +244,77 @@ def evaluate_goal_scenarios(
     return [_evaluate_one(worktree.resolve(), adapter, scenario) for scenario in selected]
 
 
+def dogfood_goal_scenarios(
+    worktree: Path,
+    adapter: ModeAAdapter = "claude",
+    scenarios: list[GoalScenario] | None = None,
+    *,
+    max_user_decisions: int = 2,
+) -> ScenarioDogfoodReport:
+    selected = scenarios or DEFAULT_GOAL_SCENARIOS
+    evaluations = evaluate_goal_scenarios(worktree, adapter=adapter, scenarios=selected)
+    cases = [
+        _dogfood_case(scenario, evaluation, max_user_decisions=max_user_decisions)
+        for scenario, evaluation in zip(selected, evaluations, strict=True)
+    ]
+    passed = all(case.status == "pass" for case in cases)
+    total_user_decisions = sum(case.user_decision_count for case in cases)
+    total_agent_decisions = sum(case.agent_decision_count for case in cases)
+    failing = [case.scenario_id for case in cases if case.status == "fail"]
+    return ScenarioDogfoodReport(
+        adapter=adapter,
+        passed=passed,
+        summary=(
+            f"Dogfooded {len(cases)} synthetic goal type(s): "
+            f"{len(cases) - len(failing)} pass, {len(failing)} fail, "
+            f"{total_user_decisions} user-facing decision(s), "
+            f"{total_agent_decisions} agent-handled decision(s)."
+        ),
+        cases=cases,
+        recommendations=_dogfood_recommendations(cases),
+    )
+
+
+def render_dogfood_report(report: ScenarioDogfoodReport) -> str:
+    lines = [
+        "# Goals Dogfood Report",
+        "",
+        f"Adapter shape: {report.adapter}",
+        f"Overall: {'pass' if report.passed else 'fail'}",
+        "",
+        report.summary,
+        "",
+        "This report uses synthetic scenarios to check whether Goals keeps the agent moving, "
+        "surfaces only important user decisions, and records the proof needed for review.",
+    ]
+    for case in report.cases:
+        lines.extend(
+            [
+                "",
+                f"## {case.scenario_id}: {case.status}",
+                "",
+                f"Category: {case.category}",
+                f"Objective: {case.objective}",
+                "",
+                case.plain_summary,
+                "",
+                "### What the user sees",
+                _bullets(case.surfaced_questions or ["No user decision is required."]),
+                "",
+                "### What the agent can decide",
+                _bullets(case.agent_handled_decisions or ["No agent-handled choices recorded."]),
+                "",
+                "### Proof required",
+                _bullets(case.required_evidence or ["No proof items recorded."]),
+                "",
+                "### Findings",
+                _bullets(case.findings or ["No findings."]),
+            ]
+        )
+    lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
+    return "\n".join(lines) + "\n"
+
+
 def _evaluate_one(
     worktree: Path, adapter: ModeAAdapter, scenario: GoalScenario
 ) -> ScenarioEvaluation:
@@ -269,6 +342,85 @@ def _evaluate_one(
             f"current capabilities and surfaces {len(surfaced)} blocking decision(s)."
         ),
     )
+
+
+def _dogfood_case(
+    scenario: GoalScenario,
+    evaluation: ScenarioEvaluation,
+    *,
+    max_user_decisions: int,
+) -> ScenarioDogfoodCase:
+    surfaced_questions = [decision.plain_question for decision in evaluation.surfaced_decisions]
+    agent_handled = list(evaluation.agent_decisions)
+    findings: list[str] = []
+    blocking_expected = [
+        decision for decision in scenario.decisions if decision.priority == "blocking"
+    ]
+    later_or_reversible = [
+        decision for decision in scenario.decisions if decision.priority != "blocking"
+    ]
+
+    if evaluation.missing_capabilities:
+        findings.append(f"Missing capabilities: {', '.join(evaluation.missing_capabilities)}.")
+    if len(surfaced_questions) > max_user_decisions:
+        findings.append(
+            f"Surfaces {len(surfaced_questions)} user decisions; target is {max_user_decisions} or fewer."
+        )
+    if blocking_expected and len(surfaced_questions) != len(blocking_expected):
+        findings.append(
+            "Blocking decision coverage is incomplete; every blocking decision should be visible."
+        )
+    leaked_later = [
+        decision.plain_question
+        for decision in later_or_reversible
+        if decision.plain_question in surfaced_questions
+    ]
+    if leaked_later:
+        findings.append(
+            "Reversible or later decisions leaked to the user: " + ", ".join(leaked_later) + "."
+        )
+    if not agent_handled:
+        findings.append("No agent-handled decisions are documented.")
+    if not scenario.success_evidence:
+        findings.append("No success evidence is defined.")
+
+    status = "fail" if findings else "pass"
+    return ScenarioDogfoodCase(
+        scenario_id=scenario.scenario_id,
+        category=scenario.category,
+        objective=scenario.objective,
+        status=status,
+        plain_summary=(
+            f"This {scenario.category} goal surfaces {len(surfaced_questions)} important "
+            f"user decision(s), leaves {len(agent_handled)} reversible or execution "
+            f"choice(s) to the agent, and requires {len(scenario.success_evidence)} proof item(s)."
+        ),
+        user_decision_count=len(surfaced_questions),
+        agent_decision_count=len(agent_handled),
+        surfaced_questions=surfaced_questions,
+        agent_handled_decisions=agent_handled,
+        required_evidence=list(scenario.success_evidence),
+        missing_capabilities=list(evaluation.missing_capabilities),
+        findings=findings,
+    )
+
+
+def _dogfood_recommendations(cases: list[ScenarioDogfoodCase]) -> list[str]:
+    failing = [case for case in cases if case.status == "fail"]
+    if not failing:
+        return [
+            "Continue running real personal, technical, and business goals through Mode A.",
+            "Record repeated friction with `goals memory record` so self-evolution suggestions become evidence-backed.",
+            "Add a scenario when a new user type or agent ecosystem behavior appears.",
+        ]
+    recommendations = []
+    for case in failing:
+        recommendations.append(f"Fix {case.scenario_id}: " + " ".join(case.findings[:2]))
+    return recommendations
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items)
 
 
 def _scenario_snapshot(worktree: Path, scenario: GoalScenario) -> GoalSnapshot:

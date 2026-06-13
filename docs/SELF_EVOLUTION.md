@@ -11,6 +11,7 @@ Run the built-in scenario evaluator:
 ```bash
 uv run goals eval scenarios --adapter claude
 uv run goals eval scenarios --adapter codex
+uv run goals eval dogfood --adapter claude
 ```
 
 The evaluator dry-runs Goals against five scenario families:
@@ -28,6 +29,12 @@ The evaluator dry-runs Goals against five scenario families:
 Each scenario has required current capabilities and planned future capabilities.
 The command fails when current capabilities are missing, but planned
 capabilities remain visible as the next frontier.
+
+`eval dogfood` uses the same scenarios to produce a plain-language report. It
+checks whether each synthetic goal keeps user decisions small, documents what
+the agent can decide without interrupting the user, and names the proof required
+to accept the goal. This is the quick self-evolution check before and after
+larger product changes.
 
 ## Ecosystem Discovery
 

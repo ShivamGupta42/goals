@@ -131,7 +131,9 @@ conservative portable entries that require review.
 **Status:** Partially implemented. Goals now stores local self-evolution memory
 under `.agent-workflow/self-evolution/memory.json`, derives suggestions from
 repeated friction or high-severity gaps, includes those suggestions in Mode A
-handoffs, and shows visible suggestions in the dashboard.
+handoffs, shows visible suggestions in the dashboard, and can run a synthetic
+dogfood report across personal, technical, business, self-evolution, and
+ecosystem goal types.
 
 ### Direction
 

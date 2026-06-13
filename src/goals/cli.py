@@ -10,7 +10,7 @@ from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
 from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
-from goals.evaluations import evaluate_goal_scenarios
+from goals.evaluations import dogfood_goal_scenarios, evaluate_goal_scenarios, render_dogfood_report
 from goals.memory import (
     absorb_goal_memory,
     append_memory_entry,
@@ -540,6 +540,30 @@ def eval_scenarios(
             if result.missing_capabilities:
                 typer.echo(f"  missing: {', '.join(result.missing_capabilities)}")
     if any(not result.current_supported for result in results):
+        raise typer.Exit(1)
+
+
+@eval_app.command("dogfood")
+def eval_dogfood(
+    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
+    max_user_decisions: int = typer.Option(
+        2,
+        help="Maximum important user decisions allowed per synthetic goal.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Dogfood Goals across synthetic personal, technical, business, self-evolution, and ecosystem goals."""
+
+    report = dogfood_goal_scenarios(
+        Path.cwd(),
+        adapter=adapter,
+        max_user_decisions=max_user_decisions,
+    )
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_dogfood_report(report))
+    if not report.passed:
         raise typer.Exit(1)
 
 
