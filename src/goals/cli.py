@@ -31,6 +31,8 @@ from goals.evaluations import (
     render_dogfood_report,
     render_issue_stress_report,
     render_rehearsal_report,
+    render_self_check_report,
+    run_self_check,
     stress_goal_issue_discovery,
 )
 from goals.issues import analyze_goal_issues, render_issue_report
@@ -736,6 +738,37 @@ def eval_issue_stress(
         typer.echo(report.model_dump_json(indent=2))
     else:
         typer.echo(render_issue_stress_report(report))
+    if not report.passed:
+        raise typer.Exit(1)
+
+
+@eval_app.command("self-check")
+def eval_self_check(
+    adapter: str = typer.Option("both", help="claude, codex, or both."),
+    max_user_decisions: int = typer.Option(
+        2,
+        help="Maximum important user decisions allowed per synthetic goal.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Run the full self-evolution evaluation matrix and summarize next slices."""
+
+    if adapter == "both":
+        adapters = ["claude", "codex"]
+    elif adapter in {"claude", "codex"}:
+        adapters = [adapter]
+    else:
+        typer.secho("Error: adapter must be claude, codex, or both", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    report = run_self_check(
+        Path.cwd(),
+        adapters=adapters,
+        max_user_decisions=max_user_decisions,
+    )
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_self_check_report(report))
     if not report.passed:
         raise typer.Exit(1)
 

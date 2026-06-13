@@ -49,6 +49,7 @@ uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
 uv run goals eval rehearsal --adapter claude
 uv run goals eval issue-stress --adapter claude
+uv run goals eval self-check
 uv run goals adapter check codex
 ```
 
@@ -152,6 +153,17 @@ uv run goals memory suggest
 
 Self-evolution memory is local generated state under `.agent-workflow/` and is
 ignored by default.
+
+Agents can also run the full self-evolution matrix in one command:
+
+```bash
+uv run goals eval self-check
+```
+
+`self-check` runs the scenario, dogfood, coverage, lifecycle rehearsal, and
+issue-stress suites for Claude and Codex adapter shapes, then summarizes current
+coverage, user-decision burden, agent repair actions, ecosystem signals, and the
+next product slices worth exploring.
 
 Agents and technical reviewers can inspect a goal-level architecture map:
 
