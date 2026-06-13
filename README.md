@@ -79,6 +79,10 @@ Agents can explain only important decisions with active goal history:
 uv run goals decision explain --file decision.json --level basic
 ```
 
+The dashboard also turns important decisions into plain-language cards with the
+recommendation, options, risk, reversibility, confidence, known context, and a
+suggested reply. Routine reversible choices stay with the agent.
+
 Agents can ask Goals what could block the current goal before interrupting the
 user:
 

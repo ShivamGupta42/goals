@@ -7,9 +7,10 @@ questions to resolve before implementation.
 ## Decision Explainer V2
 
 **Status:** Partially implemented. Basic/Detailed/Technical rendering and active
-goal history context exist; richer memory limits and dashboard integration are
-still planned. The dashboard now filters routine decisions and shows only
-important user-facing decisions by default.
+goal history context exist; richer memory limits are still planned. The
+dashboard now filters routine decisions and shows important user-facing decision
+cards with recommendation, options, risk, reversibility, confidence, known
+context, uncertainty, and technical evidence.
 
 Goals should help agents explain technical decisions in a way non-technical users
 can understand, while still giving technical users enough detail to challenge the

@@ -145,6 +145,10 @@ uv run goals decision explain --file decision.json --level technical
 The explainer should include what Goals already knows from accepted phases,
 evidence, checks, changed files, blockers, learnings, and prior decisions. It
 should be clear about whether the user really needs to be interrupted.
+The dashboard shows the same principle as readable decision cards: important
+choices include recommendation, options, risk, reversibility, confidence, known
+context, uncertainty, and a suggested reply, while routine reversible choices
+stay with the agent.
 
 Visualization experience means:
 

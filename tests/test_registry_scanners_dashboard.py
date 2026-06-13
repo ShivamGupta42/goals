@@ -3,7 +3,17 @@ from pathlib import Path
 import pytest
 
 from goals.dashboard import render_dashboard
-from goals.models import GoalSnapshot, WorktreeLease
+from goals.models import (
+    Decision,
+    DecisionOption,
+    Evidence,
+    GateResult,
+    GateVerdict,
+    GoalSnapshot,
+    Phase,
+    PhaseStatus,
+    WorktreeLease,
+)
 from goals.registry import validate_registry_file
 from goals.runtime import default_phases
 from goals.scanners import run_safety_scanners
@@ -70,3 +80,106 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Goal ID:" in text
     assert "Event offset:" in text
     assert "Source commit:" in text
+
+
+def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add tags to tasks",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Inspect storage",
+                goal="Find the storage shape",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["src/db.py"],
+                    checks_run=["pytest"],
+                    known_gaps=["Migration order is unclear."],
+                    acceptance_met=["Storage inspected."],
+                    confidence=0.8,
+                    notes="Storage is file-backed today.",
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.PASS,
+                        summary="ok",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+        decisions=[
+            Decision(
+                title="Choose tag storage",
+                plain_summary="Pick where task tags should live.",
+                why_it_matters="This affects migration risk.",
+                recommendation="Store tags in the existing task file",
+                options=[
+                    DecisionOption(
+                        label="Existing file",
+                        explanation="No migration needed.",
+                        tradeoffs=["Less scalable."],
+                        reversible=True,
+                        reversal_plan="Move tags later with a storage adapter.",
+                        risk="low",
+                    ),
+                    DecisionOption(
+                        label="New migration",
+                        explanation="<script>structured storage</script>",
+                        tradeoffs=["Migration ordering risk."],
+                        reversible=False,
+                        risk="high",
+                    ),
+                ],
+                confidence=0.74,
+                priority="blocking",
+                suggested_reply="Use the existing task file.",
+                technical_details="Migration order has to be coordinated.",
+            ),
+            Decision(
+                title="Dashboard label wording",
+                plain_summary="Choose label wording for the dashboard.",
+                why_it_matters="It affects presentation only.",
+                recommendation="Use the shorter label.",
+                options=[
+                    DecisionOption(
+                        label="Short label",
+                        explanation="Easy to scan.",
+                        reversible=True,
+                        risk="low",
+                    )
+                ],
+                confidence=0.9,
+                priority="later",
+            ),
+        ],
+    )
+    output = tmp_path / "dashboard.html"
+
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    assert "Choose tag storage" in text
+    assert "Why this needs you" in text
+    assert "Recommended option" in text
+    assert "Store tags in the existing task file" in text
+    assert "Risk: low" in text
+    assert "Risk: high" in text
+    assert "Reversible: yes" in text
+    assert "Reversible: not clearly" in text
+    assert "Changed files: src/db.py" in text
+    assert "Checks run: pytest" in text
+    assert "Migration order is unclear." in text
+    assert "Migration order has to be coordinated." in text
+    assert "Use the existing task file." in text
+    assert "<script>structured storage</script>" not in text
+    assert "&lt;script&gt;structured storage&lt;/script&gt;" in text
+    assert "Choose label wording for the dashboard." not in text
