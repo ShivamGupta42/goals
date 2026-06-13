@@ -125,6 +125,15 @@ from goals.sources import (
     render_source_summary,
 )
 from goals.storage import EventStore, GoalsError, atomic_write_text
+from goals.workflows import (
+    check_workflow,
+    next_workflow,
+    render_check_workflow,
+    render_start_workflow,
+    render_view_workflow,
+    start_workflow,
+    view_workflow,
+)
 
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
@@ -145,22 +154,6 @@ permission_app = typer.Typer(help="Explain whether a tool or action should ask t
 phase_app = typer.Typer(help="Agent phase protocol.")
 roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
-app.add_typer(adapter_app, name="adapter")
-app.add_typer(architecture_app, name="architecture")
-app.add_typer(asset_app, name="asset")
-app.add_typer(boundary_app, name="boundary")
-app.add_typer(checkpoint_app, name="checkpoint")
-app.add_typer(creative_app, name="creative")
-app.add_typer(decision_app, name="decision")
-app.add_typer(ecosystem_app, name="ecosystem")
-app.add_typer(eval_app, name="eval")
-app.add_typer(external_review_app, name="external-review")
-app.add_typer(handoff_app, name="handoff")
-app.add_typer(memory_app, name="memory")
-app.add_typer(permission_app, name="permission")
-app.add_typer(phase_app, name="phase")
-app.add_typer(roadmap_app, name="roadmap")
-app.add_typer(source_app, name="source")
 creative_app.add_typer(creative_variant_app, name="variant")
 handoff_app.add_typer(handoff_owner_app, name="owner")
 
@@ -173,7 +166,114 @@ def _handle(fn):
         raise typer.Exit(1) from exc
 
 
-@app.command()
+@app.command(rich_help_panel="Simple workflow")
+def start(
+    objective: str,
+    agent: ModeAAdapter = typer.Option(
+        "auto",
+        "--agent",
+        "--adapter",
+        help="Native agent to prepare instructions for.",
+    ),
+    autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
+    why: str = typer.Option("", help="Plain-language reason this goal matters."),
+    new: Optional[Path] = typer.Option(None, help="Create a new minimal project first."),
+) -> None:
+    """Start a goal and show the shortest next steps."""
+
+    def run():
+        report = start_workflow(
+            objective,
+            Path.cwd(),
+            agent=agent,
+            autonomy=autonomy,
+            why=why,
+            new_project=new,
+        )
+        typer.echo(render_start_workflow(report))
+
+    _handle(run)
+
+
+@app.command("next", rich_help_panel="Simple workflow")
+def next_command(
+    agent: ModeAAdapter = typer.Option(
+        "auto",
+        "--agent",
+        "--adapter",
+        help="Native agent to prepare instructions for.",
+    ),
+) -> None:
+    """Refresh goal files and print the next paste-ready agent handoff."""
+
+    def run():
+        report = next_workflow(Path.cwd(), agent=agent)
+        typer.echo(report.plan.prompt)
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def check(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when the combined check needs attention.",
+    ),
+) -> None:
+    """Run the main read-only goal health checks in one command."""
+
+    def run():
+        report = check_workflow(Path.cwd())
+        typer.echo(render_check_workflow(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def view(
+    open_browser: bool = typer.Option(
+        False,
+        "--open",
+        help="Open the dashboard in the default browser.",
+    ),
+) -> None:
+    """Refresh and show the dashboard and architecture file paths."""
+
+    def run():
+        report = view_workflow(Path.cwd())
+        if open_browser:
+            import webbrowser
+
+            webbrowser.open(report.dashboard_path.resolve().as_uri())
+        typer.echo(render_view_workflow(report))
+
+    _handle(run)
+
+
+app.add_typer(adapter_app, name="adapter", rich_help_panel="Advanced building blocks")
+app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced building blocks")
+app.add_typer(asset_app, name="asset", rich_help_panel="Advanced building blocks")
+app.add_typer(boundary_app, name="boundary", rich_help_panel="Advanced building blocks")
+app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
+app.add_typer(creative_app, name="creative", rich_help_panel="Advanced building blocks")
+app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
+app.add_typer(ecosystem_app, name="ecosystem", rich_help_panel="Advanced building blocks")
+app.add_typer(eval_app, name="eval", rich_help_panel="Advanced building blocks")
+app.add_typer(
+    external_review_app, name="external-review", rich_help_panel="Advanced building blocks"
+)
+app.add_typer(handoff_app, name="handoff", rich_help_panel="Advanced building blocks")
+app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
+app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
+app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
+app.add_typer(roadmap_app, name="roadmap", rich_help_panel="Advanced building blocks")
+app.add_typer(source_app, name="source", rich_help_panel="Advanced building blocks")
+
+
+@app.command(rich_help_panel="Advanced building blocks")
 def create(
     objective: str,
     autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
@@ -199,7 +299,7 @@ def create(
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def status() -> None:
     """Show the active goal status."""
 
@@ -213,7 +313,7 @@ def status() -> None:
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def issues(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
     strict: bool = typer.Option(
@@ -235,7 +335,7 @@ def issues(
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def brief(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
@@ -252,7 +352,7 @@ def brief(
     _handle(run)
 
 
-@app.command("merge-check")
+@app.command("merge-check", rich_help_panel="Advanced building blocks")
 def merge_check(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
     strict: bool = typer.Option(
@@ -274,7 +374,7 @@ def merge_check(
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def dashboard() -> None:
     """Regenerate the active goal dashboard."""
 
@@ -431,7 +531,7 @@ def checkpoint_waive(
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def run(
     adapter: ModeAAdapter = typer.Option(
         "auto", help="Native agent adapter to generate instructions for."
@@ -446,7 +546,7 @@ def run(
     _handle(inner)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def validate() -> None:
     """Validate active goal state and registry files."""
 
@@ -468,7 +568,7 @@ def validate() -> None:
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def doctor() -> None:
     """Inspect the active goal for common state/worktree problems."""
 
@@ -479,7 +579,7 @@ def doctor() -> None:
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def repair() -> None:
     """Rebuild the derived goal snapshot from events."""
 
@@ -496,13 +596,13 @@ def repair() -> None:
     _handle(run)
 
 
-@app.command()
+@app.command(rich_help_panel="Advanced building blocks")
 def cleanup() -> None:
     """Report cleanup candidates. V1 is conservative and does not delete worktrees."""
     typer.echo("Cleanup is report-only in v1. Remove goal worktrees manually after review.")
 
 
-@app.command("safety-check")
+@app.command("safety-check", rich_help_panel="Advanced building blocks")
 def safety_check(
     path: Path = typer.Argument(Path.cwd()),
     mode: str = typer.Option(

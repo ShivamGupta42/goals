@@ -415,6 +415,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
         worktree,
     )
     assert "Recorded handoff owner: OWN-" in handoff.stdout
+
     handoff_list = run(["python", "-m", "goals.cli", "handoff", "owners"], worktree)
     assert "Support lead" in handoff_list.stdout
     handoff_check = run(["python", "-m", "goals.cli", "handoff", "check"], worktree)
@@ -564,6 +565,56 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert publish_safety.returncode == 1
     assert "public_repo_hygiene: fail" in publish_safety.stdout
+
+
+def test_simple_workflow_commands(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+
+    started = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "start",
+            "Improve onboarding docs",
+            "--why",
+            "Make the happy path easy to follow.",
+            "--agent",
+            "codex",
+        ],
+        repo,
+    )
+    assert "# Goal Started" in started.stdout
+    assert "goals next --agent codex" in started.stdout
+    assert "Paste the output into Codex" in started.stdout
+    assert "Required loop" not in started.stdout
+
+    worktree_line = next(
+        line for line in started.stdout.splitlines() if line.startswith("Worktree:")
+    )
+    worktree = Path(worktree_line.split("`", 2)[1])
+
+    next_prompt = run(["python", "-m", "goals.cli", "next", "--agent", "claude"], worktree)
+    assert "/goal Finish this Goals-managed task: Improve onboarding docs" in next_prompt.stdout
+    assert "Claude Mode A notes" in next_prompt.stdout
+    assert "goals brief" in next_prompt.stdout
+    assert "uv run goals brief" not in next_prompt.stdout
+
+    checked = run(["python", "-m", "goals.cli", "check"], worktree)
+    assert "# Goal Check" in checked.stdout
+    assert "Overall: needs attention" in checked.stdout
+    assert "P1 has no evidence yet." in checked.stdout
+    assert "Useful next commands:" in checked.stdout
+
+    strict = run_unchecked(["python", "-m", "goals.cli", "check", "--strict"], worktree)
+    assert strict.returncode == 1
+
+    viewed = run(["python", "-m", "goals.cli", "view"], worktree)
+    assert "# Goal View" in viewed.stdout
+    assert "Dashboard:" in viewed.stdout
+    assert "Architecture map:" in viewed.stdout
 
 
 def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
