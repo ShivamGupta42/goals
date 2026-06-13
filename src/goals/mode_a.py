@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from goals.adapters import adapter_check
+from goals.assets import render_asset_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
@@ -77,6 +78,7 @@ def recommended_checks(worktree: Path) -> list[str]:
         [
             "uv run goals brief",
             "uv run goals boundary explain --domain auto",
+            "uv run goals asset provenance --strict",
             "uv run goals merge-check",
             "uv run goals source freshness --strict",
             "uv run goals validate",
@@ -94,6 +96,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     memory = render_memory_suggestions(plan.memory_suggestions)
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
+    assets = render_asset_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -146,6 +149,11 @@ Permission policy:
 Professional boundaries:
 - If the work touches medical, legal, financial, safety, compliance, or other professional judgment, run `goals boundary explain --domain auto` before giving guidance or asking the user.
 - Use the boundary report's suggested wording, evidence expectations, and safe next steps. Do not turn a professional judgment into an agent-only decision.
+
+Asset provenance:
+{assets}
+- If this phase creates, imports, selects, edits, or publishes images, videos, audio, documents, designs, datasets, or other assets, record them with `goals asset add "Asset title" --locator "path-or-url" --asset-type image --origin generated --usage-rights allowed`.
+- Run `goals asset provenance --strict` before review; fix missing locators, licenses, source references, generation prompts, local paths, or unclear rights before asking the user unless rights are blocked or restricted.
 
 Self-evolution memory:
 {memory}

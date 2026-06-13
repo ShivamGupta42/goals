@@ -50,6 +50,7 @@ from goals.runtime import (
 
 CURRENT_CAPABILITIES = {
     "adapter_awareness",
+    "asset_provenance_checks",
     "automatic_gap_to_roadmap_patch",
     "architecture_map",
     "automatic_skill_selection",
@@ -375,11 +376,12 @@ DEFAULT_GOAL_USE_CASES = [
         required_capabilities=[
             *CORE_GOAL_CAPABILITIES,
             "automatic_skill_selection",
+            "asset_provenance_checks",
             "plugin_capability_discovery",
             "permission_policy_registry",
             "registry_awareness",
         ],
-        planned_capabilities=["asset_provenance_checks", "creative_variant_comparison"],
+        planned_capabilities=["creative_variant_comparison"],
         important_user_decisions=[
             "Brand direction",
             "External generation or publishing permission",
@@ -1660,6 +1662,8 @@ def _supported_capabilities(
         supported.add("permission_policy_registry")
     if "goals boundary explain" in prompt:
         supported.add("professional_boundary_templates")
+    if "goals asset provenance" in prompt:
+        supported.add("asset_provenance_checks")
     if "goals roadmap suggest" in prompt:
         supported.add("automatic_gap_to_roadmap_patch")
     if "goals issues" in prompt:

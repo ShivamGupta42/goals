@@ -82,6 +82,8 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Evidence gaps and open questions" in text
     assert "Sources" in text
     assert "Freshness" in text
+    assert "Assets" in text
+    assert "No assets recorded yet." in text
     assert "No decisions are waiting on you." in text
     assert "P1 has no evidence yet." in text
     assert "Goal ID:" in text

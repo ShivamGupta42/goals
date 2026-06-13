@@ -98,6 +98,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Architecture map:" in run_prompt.stdout
     assert "goals boundary explain --domain auto" in run_prompt.stdout
     assert "goals source freshness" in run_prompt.stdout
+    assert "goals asset provenance" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
     architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
@@ -253,6 +254,35 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     source_freshness = run(["python", "-m", "goals.cli", "source", "freshness"], worktree)
     assert "Source Freshness Report" in source_freshness.stdout
     assert "Overall: pass" in source_freshness.stdout
+    asset = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "asset",
+            "add",
+            "Hero image",
+            "--locator",
+            "assets/hero.png",
+            "--asset-type",
+            "image",
+            "--origin",
+            "generated",
+            "--creator-tool",
+            "image-model",
+            "--usage-rights",
+            "allowed",
+            "--prompt",
+            "Simple product hero",
+        ],
+        worktree,
+    )
+    assert "Recorded asset: AST-" in asset.stdout
+    asset_list = run(["python", "-m", "goals.cli", "asset", "list"], worktree)
+    assert "Hero image" in asset_list.stdout
+    asset_provenance = run(["python", "-m", "goals.cli", "asset", "provenance"], worktree)
+    assert "Asset Provenance Report" in asset_provenance.stdout
+    assert "Overall: pass" in asset_provenance.stdout
     run(
         [
             "python",

@@ -124,6 +124,9 @@ def test_use_case_coverage_reports_broad_current_and_future_fit(
     high_stakes = next(case for case in report.cases if case.use_case_id == "high-stakes-boundary")
     assert "professional_boundary_templates" in high_stakes.supported_capabilities
     assert "professional_boundary_templates" not in high_stakes.planned_capabilities
+    creative = next(case for case in report.cases if case.use_case_id == "creative-production")
+    assert "asset_provenance_checks" in creative.supported_capabilities
+    assert "asset_provenance_checks" not in creative.planned_capabilities
     assert "Goal Use-Case Coverage Report" in rendered
     assert "Important User Decisions" in rendered
     assert "Capability Coverage" in rendered
@@ -194,7 +197,7 @@ def test_self_check_summarizes_all_evaluation_suites(monkeypatch, tmp_path: Path
     assert result.user_decision_count == 5
     assert result.agent_repair_action_count >= 1
     assert report.next_slices
-    assert report.next_slices[0] == "Explore planned capability: asset provenance checks"
+    assert report.next_slices[0] == "Explore planned capability: citation quality review"
     assert "Goals Self-Check Report" in rendered
     assert "Recommended Next Slices" in rendered
     assert "User Experience Findings" in rendered

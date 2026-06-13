@@ -12,6 +12,11 @@ from goals.architecture import (
     build_architecture_brief,
     render_architecture_brief,
 )
+from goals.assets import (
+    analyze_asset_provenance,
+    render_asset_provenance_report,
+    render_asset_summary,
+)
 from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.decisions import (
@@ -57,6 +62,7 @@ from goals.merge_readiness import analyze_merge_readiness, render_merge_readines
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     AgentRecommendationSet,
+    AssetRecord,
     Decision,
     EcosystemRecommendation,
     Event,
@@ -95,6 +101,7 @@ from goals.storage import EventStore, GoalsError, atomic_write_text
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
+asset_app = typer.Typer(help="Record and inspect asset provenance.")
 boundary_app = typer.Typer(help="Explain professional boundaries for high-stakes goals.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
@@ -106,6 +113,7 @@ roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 app.add_typer(adapter_app, name="adapter")
 app.add_typer(architecture_app, name="architecture")
+app.add_typer(asset_app, name="asset")
 app.add_typer(boundary_app, name="boundary")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
@@ -787,6 +795,116 @@ def roadmap_suggest(
             typer.echo(render_roadmap_update_plan(result))
             if not apply and result.suggestions:
                 typer.echo("Run again with --apply to update the generated roadmap block.")
+
+    _handle(run)
+
+
+@asset_app.command("add")
+def asset_add(
+    title: str,
+    locator: str = typer.Option("", help="Repo-relative path, URL, or stable asset id."),
+    asset_type: str = typer.Option(
+        "other",
+        help="image, video, audio, document, design, code, dataset, or other.",
+    ),
+    origin: str = typer.Option(
+        "other",
+        help="generated, user_provided, stock, external, derived, or other.",
+    ),
+    creator_tool: str = typer.Option("", help="Generator, plugin, model, or tool used."),
+    license: str = typer.Option("", help="License or rights statement."),
+    usage_rights: str = typer.Option(
+        "unknown",
+        help="unknown, allowed, restricted, or blocked.",
+    ),
+    source_id: Optional[list[str]] = typer.Option(
+        None,
+        "--source-id",
+        help="Source id supporting this asset's provenance. Repeat for multiple sources.",
+    ),
+    prompt: str = typer.Option("", help="Sanitized generation prompt or prompt summary."),
+    notes: str = typer.Option("", help="Short provenance note."),
+) -> None:
+    """Record an asset with provenance, rights, and source evidence."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        asset = AssetRecord(
+            title=title,
+            locator=locator,
+            asset_type=_validate_choice(
+                asset_type,
+                {"image", "video", "audio", "document", "design", "code", "dataset", "other"},
+                "asset_type",
+            ),  # type: ignore[arg-type]
+            origin=_validate_choice(
+                origin,
+                {"generated", "user_provided", "stock", "external", "derived", "other"},
+                "origin",
+            ),  # type: ignore[arg-type]
+            creator_tool=creator_tool,
+            license=license,
+            usage_rights=_validate_choice(
+                usage_rights,
+                {"unknown", "allowed", "restricted", "blocked"},
+                "usage_rights",
+            ),  # type: ignore[arg-type]
+            source_ids=source_id or [],
+            prompt=prompt,
+            notes=notes,
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.ASSET_RECORDED,
+                payload={"asset": asset.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded asset: {asset.asset_id}")
+
+    _handle(run)
+
+
+@asset_app.command("list")
+def asset_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded assets for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps([asset.model_dump(mode="json") for asset in snapshot.assets], indent=2)
+            )
+        else:
+            typer.echo("Assets:")
+            typer.echo(render_asset_summary(snapshot))
+
+    _handle(run)
+
+
+@asset_app.command("provenance")
+def asset_provenance(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when asset provenance issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether recorded assets have enough provenance to use."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_asset_provenance(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_asset_provenance_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
 
     _handle(run)
 

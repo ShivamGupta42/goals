@@ -46,6 +46,7 @@ class EventType(StrEnum):
     PHASE_ACCEPTED = "phase_accepted"
     DECISION_REQUESTED = "decision_requested"
     ARCHITECTURE_UPDATED = "architecture_updated"
+    ASSET_RECORDED = "asset_recorded"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     SCAN_COMPLETED = "scan_completed"
@@ -464,6 +465,63 @@ class SourceFreshnessReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class AssetRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str = Field(default_factory=lambda: f"AST-{uuid4().hex[:8]}")
+    title: str
+    locator: str = ""
+    asset_type: Literal[
+        "image",
+        "video",
+        "audio",
+        "document",
+        "design",
+        "code",
+        "dataset",
+        "other",
+    ] = "other"
+    origin: Literal[
+        "generated",
+        "user_provided",
+        "stock",
+        "external",
+        "derived",
+        "other",
+    ] = "other"
+    creator_tool: str = ""
+    license: str = ""
+    usage_rights: Literal["unknown", "allowed", "restricted", "blocked"] = "unknown"
+    source_ids: list[str] = Field(default_factory=list)
+    prompt: str = ""
+    notes: str = ""
+    created_at: str = Field(default_factory=utc_now)
+
+
+class AssetProvenanceFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["p0", "p1", "p2"]
+    asset_id: str
+    title: str
+    summary: str
+    detail: str = ""
+    suggested_action: str = ""
+    needs_user: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class AssetProvenanceReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    passed: bool
+    summary: str
+    findings: list[AssetProvenanceFinding] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -874,6 +932,7 @@ class GoalIssue(BaseModel):
     severity: Literal["p0", "p1", "p2"]
     area: Literal[
         "architecture",
+        "asset",
         "boundary",
         "decision",
         "evidence",
@@ -945,6 +1004,7 @@ class GoalSnapshot(BaseModel):
     phases: list[Phase]
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
+    assets: list[AssetRecord] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None
