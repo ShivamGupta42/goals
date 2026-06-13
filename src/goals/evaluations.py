@@ -7,10 +7,17 @@ from tempfile import TemporaryDirectory
 from goals.issues import analyze_goal_issues
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
+    Decision,
+    DecisionOption,
     Event,
     EventType,
     Evidence,
     GateVerdict,
+    GateResult,
+    GoalArchitectureMap,
+    GoalIssueStressCase,
+    GoalIssueStressReport,
+    GoalStatus,
     GoalRehearsalCase,
     GoalRehearsalReport,
     GoalScenario,
@@ -18,6 +25,7 @@ from goals.models import (
     GoalUseCase,
     GoalUseCaseCoverage,
     GoalUseCaseCoverageReport,
+    Phase,
     PhaseStatus,
     ScenarioDecision,
     ScenarioDogfoodCase,
@@ -523,6 +531,103 @@ def render_rehearsal_report(report: GoalRehearsalReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def stress_goal_issue_discovery(
+    worktree: Path,
+    adapter: ModeAAdapter = "claude",
+) -> GoalIssueStressReport:
+    """Run adversarial issue-discovery fixtures against the Goals issue model."""
+
+    base = worktree.resolve()
+    cases = [
+        _issue_stress_case(
+            stress_id="agent-repair-no-user",
+            category="agent_repair",
+            snapshot=_agent_repair_snapshot(base),
+            expected_issue_areas=["evidence", "gate"],
+            expected_user_questions=[],
+            minimum_agent_actions=3,
+        ),
+        _issue_stress_case(
+            stress_id="decision-filter",
+            category="decision",
+            snapshot=_decision_filter_snapshot(base),
+            expected_issue_areas=["decision"],
+            expected_user_questions=["Choose whether a data migration is allowed."],
+            forbidden_user_questions=["Choose label wording for the dashboard."],
+        ),
+        _issue_stress_case(
+            stress_id="source-risk-architecture",
+            category="context_integrity",
+            snapshot=_source_risk_architecture_snapshot(base),
+            expected_issue_areas=["architecture", "risk", "source"],
+            expected_user_questions=[],
+            minimum_agent_actions=3,
+        ),
+        _issue_stress_case(
+            stress_id="unsafe-review-escalation",
+            category="safety",
+            snapshot=_unsafe_review_snapshot(base),
+            expected_issue_areas=["gate"],
+            expected_user_questions=["P1 latest review is unsafe."],
+            minimum_agent_actions=0,
+        ),
+    ]
+    failed = [case for case in cases if not case.passed]
+    total_questions = sum(len(case.user_questions) for case in cases)
+    total_actions = sum(case.agent_action_count for case in cases)
+    return GoalIssueStressReport(
+        adapter=adapter,
+        passed=not failed,
+        summary=(
+            f"Stressed {len(cases)} issue-discovery scenario(s): "
+            f"{len(cases) - len(failed)} pass, {len(failed)} fail, "
+            f"{total_questions} user-facing question(s), {total_actions} agent repair action(s)."
+        ),
+        cases=cases,
+        recommendations=_issue_stress_recommendations(cases),
+    )
+
+
+def render_issue_stress_report(report: GoalIssueStressReport) -> str:
+    lines = [
+        "# Goal Issue Stress Report",
+        "",
+        f"Adapter shape: {report.adapter}",
+        f"Overall: {'pass' if report.passed else 'fail'}",
+        "",
+        report.summary,
+        "",
+        "This report injects broken goal states and verifies that Goals finds blockers, missing proof, unsafe gates, source gaps, and only user-worthy questions.",
+    ]
+    for case in report.cases:
+        verdict = "pass" if case.passed else "fail"
+        lines.extend(
+            [
+                "",
+                f"## {case.stress_id}: {verdict}",
+                "",
+                f"Category: {case.category}",
+                case.summary,
+                "",
+                "### Issue Areas",
+                _bullets(
+                    [
+                        f"Expected: {', '.join(case.expected_issue_areas) or 'none'}",
+                        f"Found: {', '.join(case.found_issue_areas) or 'none'}",
+                    ]
+                ),
+                "",
+                "### Needs The User",
+                _bullets(case.user_questions or ["No important user question surfaced."]),
+                "",
+                "### Findings",
+                _bullets(case.findings or ["No findings."]),
+            ]
+        )
+    lines.extend(["", "## Recommendations", "", _bullets(report.recommendations)])
+    return "\n".join(lines) + "\n"
+
+
 def render_coverage_report(report: GoalUseCaseCoverageReport) -> str:
     lines = [
         "# Goal Use-Case Coverage Report",
@@ -695,6 +800,282 @@ def _rehearsal_recommendations(cases: list[GoalRehearsalCase]) -> list[str]:
         "Keep lifecycle rehearsal in the merge checklist for self-evolution phases.",
         "Add new rehearsal scenarios when a new goal family needs real runtime proof.",
         "Use failures here to improve phases, gates, issue discovery, or public docs.",
+    ]
+
+
+def _issue_stress_case(
+    *,
+    stress_id: str,
+    category: str,
+    snapshot: GoalSnapshot,
+    expected_issue_areas: list[str],
+    expected_user_questions: list[str],
+    forbidden_user_questions: list[str] | None = None,
+    minimum_agent_actions: int = 0,
+) -> GoalIssueStressCase:
+    report = analyze_goal_issues(snapshot)
+    found_issue_areas = sorted({str(issue.area) for issue in report.issues})
+    forbidden = forbidden_user_questions or []
+    missing_issue_areas = [area for area in expected_issue_areas if area not in found_issue_areas]
+    missing_user_questions = [
+        question for question in expected_user_questions if question not in report.user_questions
+    ]
+    unexpected_user_questions = [
+        question
+        for question in report.user_questions
+        if question not in expected_user_questions or question in forbidden
+    ]
+    findings: list[str] = []
+    if missing_issue_areas:
+        findings.append(f"Missing issue areas: {', '.join(missing_issue_areas)}.")
+    if missing_user_questions:
+        findings.append(f"Missing user questions: {', '.join(missing_user_questions)}.")
+    if unexpected_user_questions:
+        findings.append(f"Unexpected user questions: {', '.join(unexpected_user_questions)}.")
+    if len(report.agent_actions) < minimum_agent_actions:
+        findings.append(
+            f"Expected at least {minimum_agent_actions} agent repair action(s), "
+            f"found {len(report.agent_actions)}."
+        )
+    passed = not findings
+    return GoalIssueStressCase(
+        stress_id=stress_id,
+        category=category,
+        passed=passed,
+        issue_report_passed=report.passed,
+        expected_issue_areas=expected_issue_areas,
+        found_issue_areas=found_issue_areas,
+        expected_user_questions=expected_user_questions,
+        user_questions=report.user_questions,
+        agent_action_count=len(report.agent_actions),
+        minimum_agent_actions=minimum_agent_actions,
+        missing_issue_areas=missing_issue_areas,
+        missing_user_questions=missing_user_questions,
+        unexpected_user_questions=unexpected_user_questions,
+        findings=findings,
+        summary=(
+            f"Found {len(report.issues)} issue(s), "
+            f"{len(report.user_questions)} user question(s), "
+            f"and {len(report.agent_actions)} agent action(s)."
+        ),
+    )
+
+
+def _agent_repair_snapshot(base: Path) -> GoalSnapshot:
+    return _stress_snapshot(
+        base,
+        "agent-repair-no-user",
+        "Recover a technical goal with incomplete proof without bothering the user.",
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Implementation proof",
+                goal="Prove the work is ready for review.",
+                status=PhaseStatus.NEEDS_REVIEW,
+                evidence=Evidence(
+                    changed_files=["src/app.py"],
+                    acceptance_not_met=["Tests have not run."],
+                    ambiguous=["Migration numbering has not been checked."],
+                    confidence=0.4,
+                    notes="Partial evidence deliberately missing checks.",
+                ),
+            )
+        ],
+        current_phase="P1",
+    )
+
+
+def _decision_filter_snapshot(base: Path) -> GoalSnapshot:
+    return _stress_snapshot(
+        base,
+        "decision-filter",
+        "Verify only consequential decisions are surfaced to the user.",
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Decision triage",
+                goal="Separate user decisions from reversible agent choices.",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["dashboard.html"],
+                    checks_run=["pytest tests/test_decisions.py"],
+                    acceptance_met=["Decision rules exercised."],
+                    confidence=0.9,
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.PASS,
+                        summary="Decision filtering proof is complete.",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+        decisions=[
+            Decision(
+                title="Migration approval",
+                plain_summary="Choose whether a data migration is allowed.",
+                why_it_matters="A migration can change production data and may be hard to undo.",
+                recommendation="Avoid migration until the user approves it.",
+                options=[
+                    DecisionOption(
+                        label="Add migration",
+                        explanation="Change stored data shape.",
+                        risk="high",
+                        reversible=False,
+                    ),
+                    DecisionOption(
+                        label="Avoid migration",
+                        explanation="Use an existing compatible storage shape.",
+                        risk="low",
+                        reversible=True,
+                    ),
+                ],
+                priority="blocking",
+                suggested_reply="Avoid migration for now.",
+            ),
+            Decision(
+                title="Dashboard label wording",
+                plain_summary="Choose label wording for the dashboard.",
+                why_it_matters="This affects wording, not the goal outcome.",
+                recommendation="Use the shorter label.",
+                options=[
+                    DecisionOption(
+                        label="Use shorter label",
+                        explanation="Keep the dashboard easier to scan.",
+                        risk="low",
+                        reversible=True,
+                    )
+                ],
+                priority="later",
+                suggested_reply="Use the shorter label.",
+            ),
+        ],
+    )
+
+
+def _source_risk_architecture_snapshot(base: Path) -> GoalSnapshot:
+    return _stress_snapshot(
+        base,
+        "source-risk-architecture",
+        "Find context integrity issues without escalating routine repairs.",
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Research synthesis",
+                goal="Connect claims, risks, and architecture questions.",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["docs/research.md"],
+                    checks_run=["manual source review"],
+                    acceptance_met=["Synthesis drafted."],
+                    confidence=0.8,
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.PASS,
+                        summary="Research synthesis has enough local proof.",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+        source_claims=[
+            SourceClaim(
+                claim="Customers need progress that non-technical users can understand.",
+                source_ids=["SRC-missing"],
+                confidence=0.8,
+            ),
+            SourceClaim(
+                claim="Architecture diagrams reduce review friction.",
+                source_ids=[],
+                confidence=0.3,
+            ),
+        ],
+        risks=["Source freshness has not been checked."],
+        architecture=GoalArchitectureMap(
+            title="Issue stress architecture",
+            overview="Synthetic architecture map with an unresolved ownership question.",
+            questions=["Which component owns source freshness review?"],
+        ),
+    )
+
+
+def _unsafe_review_snapshot(base: Path) -> GoalSnapshot:
+    return _stress_snapshot(
+        base,
+        "unsafe-review-escalation",
+        "Escalate unsafe review results instead of letting the agent continue alone.",
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Destructive operation",
+                goal="Avoid irreversible actions unless clearly approved.",
+                status=PhaseStatus.NEEDS_REVIEW,
+                evidence=Evidence(
+                    changed_files=["scripts/cleanup.sh"],
+                    checks_run=["shellcheck scripts/cleanup.sh"],
+                    acceptance_met=["Cleanup script drafted."],
+                    confidence=0.9,
+                ),
+                reviews=[
+                    GateResult(
+                        gate_id="phase-review",
+                        verdict=GateVerdict.UNSAFE,
+                        summary="Proposed cleanup can delete user data.",
+                    )
+                ],
+            )
+        ],
+        current_phase="P1",
+    )
+
+
+def _stress_snapshot(
+    base: Path,
+    stress_id: str,
+    objective: str,
+    *,
+    phases: list[Phase],
+    current_phase: str | None,
+    decisions: list[Decision] | None = None,
+    source_claims: list[SourceClaim] | None = None,
+    risks: list[str] | None = None,
+    architecture: GoalArchitectureMap | None = None,
+) -> GoalSnapshot:
+    return GoalSnapshot(
+        goal_id=f"stress-{stress_id}",
+        objective=objective,
+        why="Synthetic issue-discovery stress case.",
+        definition_of_done=["Expected issues are classified correctly."],
+        status=GoalStatus.ACTIVE,
+        topology=WorktreeLease(
+            base_repo=str(base),
+            base_branch="main",
+            worktree_path=str(base),
+            branch=f"stress/{stress_id}",
+        ),
+        phases=phases,
+        current_phase=current_phase,
+        decisions=decisions or [],
+        source_claims=source_claims or [],
+        risks=risks or [],
+        architecture=architecture,
+    )
+
+
+def _issue_stress_recommendations(cases: list[GoalIssueStressCase]) -> list[str]:
+    failed = [case for case in cases if not case.passed]
+    if failed:
+        return [
+            f"Fix issue stress case {case.stress_id}: {', '.join(case.findings)}" for case in failed
+        ]
+    return [
+        "Keep issue stress evaluation in the merge checklist with lifecycle rehearsal.",
+        "Add a stress case whenever a new issue area or decision rule is added.",
+        "Treat unexpected user questions as product friction, not just test failures.",
     ]
 
 

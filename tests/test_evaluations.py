@@ -9,7 +9,9 @@ from goals.evaluations import (
     rehearse_goal_lifecycles,
     render_coverage_report,
     render_dogfood_report,
+    render_issue_stress_report,
     render_rehearsal_report,
+    stress_goal_issue_discovery,
 )
 
 
@@ -124,6 +126,23 @@ def test_rehearsal_runs_real_temporary_goal_lifecycles() -> None:
     assert all(case.issue_count == 0 for case in report.cases)
     assert "Goal Lifecycle Rehearsal Report" in rendered
     assert "business-research-brief: pass" in rendered
+
+
+def test_issue_stress_checks_repair_actions_and_user_decision_filter(tmp_path: Path) -> None:
+    report = stress_goal_issue_discovery(tmp_path)
+    rendered = render_issue_stress_report(report)
+
+    assert report.passed is True
+    assert len(report.cases) == 4
+    assert all(case.passed for case in report.cases)
+    agent_repair = next(case for case in report.cases if case.stress_id == "agent-repair-no-user")
+    assert agent_repair.user_questions == []
+    assert agent_repair.agent_action_count >= 3
+    decision_filter = next(case for case in report.cases if case.stress_id == "decision-filter")
+    assert decision_filter.user_questions == ["Choose whether a data migration is allowed."]
+    assert decision_filter.unexpected_user_questions == []
+    assert "Goal Issue Stress Report" in rendered
+    assert "unsafe-review-escalation: pass" in rendered
 
 
 def test_dogfood_report_checks_decision_burden_and_evidence(monkeypatch, tmp_path: Path) -> None:

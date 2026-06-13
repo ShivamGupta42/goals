@@ -139,7 +139,9 @@ ecosystem goal types. It also has a broader use-case coverage matrix for
 personal, technical, business, research, creative, operations, high-stakes,
 ecosystem, and self-evolution goals. Lifecycle rehearsal now creates temporary
 Git repositories and drives representative goals through evidence, issue
-discovery, review, acceptance, and dashboard rendering.
+discovery, review, acceptance, and dashboard rendering. Issue stress evaluation
+now injects broken goal states to verify missing proof, failed gates, source
+gaps, unsafe reviews, and user-decision filtering.
 
 ### Direction
 
@@ -154,6 +156,8 @@ discovery, review, acceptance, and dashboard rendering.
   public product boundaries.
 - Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
   is tested, not only described.
+- Keep issue stress evaluation in the merge checklist so Goals proves it can
+  find bad states and avoid unnecessary user interruptions.
 
 ### Open Questions
 
