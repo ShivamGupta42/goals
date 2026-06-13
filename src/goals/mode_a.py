@@ -136,6 +136,10 @@ Local ecosystem discovery:
 Self-evolution memory:
 {memory}
 
+Self-evolution roadmap:
+- After self-check or repeated friction, run `goals roadmap suggest` for a dry-run ROADMAP.md update plan.
+- Use `goals roadmap suggest --apply` only after reviewing the generated roadmap block.
+
 Source evidence:
 {sources}
 

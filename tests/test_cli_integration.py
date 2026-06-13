@@ -278,6 +278,19 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     )
     assert "Goals Self-Check Report" in self_check.stdout
     assert "Recommended Next Slices" in self_check.stdout
+    roadmap = run(
+        ["python", "-m", "goals.cli", "roadmap", "suggest", "--adapter", "claude"],
+        worktree,
+    )
+    assert "Roadmap Update Plan" in roadmap.stdout
+    assert "Patch Preview" in roadmap.stdout
+    roadmap_apply = run(
+        ["python", "-m", "goals.cli", "roadmap", "suggest", "--adapter", "claude", "--apply"],
+        worktree,
+    )
+    assert "Mode: applied" in roadmap_apply.stdout
+    roadmap_file = worktree / "ROADMAP.md"
+    assert "<!-- goals:self-check-roadmap:start -->" in roadmap_file.read_text()
     local_safety = run(
         ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
     )
