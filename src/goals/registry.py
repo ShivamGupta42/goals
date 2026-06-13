@@ -10,9 +10,36 @@ from goals.storage import GoalsError
 ALLOWED_KEYS = {
     "profiles": {"version", "kind", "profiles"},
     "skills": {"version", "kind", "skills"},
+    "plugins": {"version", "kind", "plugins"},
     "gates": {"version", "kind", "gates"},
     "agents": {"version", "kind", "agents"},
     "adapters": {"version", "kind", "adapters"},
+}
+
+ENTRY_KEYS = {
+    "skills": {
+        "label",
+        "description",
+        "use_when",
+        "phases",
+        "profiles",
+        "command_hint",
+        "risk",
+        "requires_user_approval",
+    },
+    "plugins": {
+        "label",
+        "description",
+        "use_when",
+        "phases",
+        "profiles",
+        "command_hint",
+        "risk",
+        "requires_user_approval",
+    },
+    "adapters": {
+        "label",
+    },
 }
 
 
@@ -28,6 +55,8 @@ def validate_registry_file(path: Path) -> dict[str, Any]:
         raise GoalsError(f"{path} has unknown critical fields: {sorted(extra)}")
     if "version" not in data:
         raise GoalsError(f"{path} must include version.")
+    if kind in ENTRY_KEYS:
+        _validate_entries(path, data, kind)
     return data
 
 
@@ -40,3 +69,18 @@ def validate_registries(root: Path) -> list[Path]:
         validate_registry_file(path)
         validated.append(path)
     return validated
+
+
+def _validate_entries(path: Path, data: dict[str, Any], kind: str) -> None:
+    entries = data.get(kind, {})
+    if not isinstance(entries, dict):
+        raise GoalsError(f"{path} field {kind} must contain a mapping.")
+    allowed = ENTRY_KEYS[kind]
+    for name, entry in entries.items():
+        if not isinstance(entry, dict):
+            raise GoalsError(f"{path} entry {name} must contain a mapping.")
+        extra = set(entry) - allowed
+        if extra:
+            raise GoalsError(f"{path} entry {name} has unknown critical fields: {sorted(extra)}")
+        if "label" not in entry:
+            raise GoalsError(f"{path} entry {name} must include label.")

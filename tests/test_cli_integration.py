@@ -20,7 +20,20 @@ def init_repo(path: Path) -> None:
     run(["git", "config", "user.email", "test@example.com"], path)
     run(["git", "config", "user.name", "Test User"], path)
     (path / "README.md").write_text("# Demo\n")
-    run(["git", "add", "README.md"], path)
+    (path / "LICENSE").write_text("MIT\n")
+    registry_root = path / "registries"
+    registry_root.mkdir()
+    registry_kinds = {
+        "adapters.yml": "adapters",
+        "agents.yml": "agents",
+        "gates.yml": "gates",
+        "plugins.yml": "plugins",
+        "profiles.yml": "profiles",
+        "skills.yml": "skills",
+    }
+    for name, kind in registry_kinds.items():
+        (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
+    run(["git", "add", "README.md", "LICENSE", "registries"], path)
     run(["git", "commit", "-m", "init"], path)
 
 
@@ -29,19 +42,269 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     repo.mkdir()
     init_repo(repo)
     result = run(
-        ["python", "-m", "goals.cli", "create", "Add tags to tasks and update tests"], repo
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "create",
+            "Add tags to tasks and update tests",
+            "--why",
+            "Make tasks easier to organize.",
+            "--adapter",
+            "claude",
+        ],
+        repo,
     )
     assert "Created goal" in result.stdout
+    assert "Adapter: claude" in result.stdout
+    assert "Claude Mode A notes" in result.stdout
     worktree_line = next(
         line for line in result.stdout.splitlines() if line.startswith("Worktree:")
     )
     worktree = Path(worktree_line.split(":", 1)[1].strip())
+    goal_file = next((worktree / ".agent-workflow" / "goals").glob("*/goal.json"))
+    assert json.loads(goal_file.read_text())["why"] == "Make tasks easier to organize."
+    exclude_path = Path(
+        run(["git", "rev-parse", "--git-path", "info/exclude"], worktree).stdout.strip()
+    )
+    if not exclude_path.is_absolute():
+        exclude_path = worktree / exclude_path
+    exclude = exclude_path.read_text()
+    assert ".agent-workflow/self-evolution/" in exclude
+    base_exclude_path = Path(
+        run(["git", "rev-parse", "--git-path", "info/exclude"], repo).stdout.strip()
+    )
+    if not base_exclude_path.is_absolute():
+        base_exclude_path = repo / base_exclude_path
+    assert ".agent-workflow/self-evolution/" in base_exclude_path.read_text()
     status = run(["python", "-m", "goals.cli", "status"], worktree)
     assert "Add tags" in status.stdout
+    run_prompt = run(["python", "-m", "goals.cli", "run", "--adapter", "codex"], worktree)
+    assert "Codex Mode A notes" in run_prompt.stdout
+    assert "Architecture map:" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
+    architecture = run(["python", "-m", "goals.cli", "architecture", "show"], worktree)
+    architecture_path = Path(architecture.stdout.strip())
+    assert architecture_path.exists()
+    assert "```mermaid" in architecture_path.read_text()
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
+    assert "registries=6" in validate.stdout
+    ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
+    assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
+    skill_root = tmp_path / "skills"
+    local_skill = skill_root / "migration-helper"
+    local_skill.mkdir(parents=True)
+    (local_skill / "SKILL.md").write_text(
+        "---\nname: Migration Helper\n"
+        "description: Helps coordinate database migrations safely.\n---\n"
+    )
+    plugin_root = tmp_path / "plugins"
+    local_plugin = plugin_root / "customer-research" / ".codex-plugin"
+    local_plugin.mkdir(parents=True)
+    (local_plugin / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "@acme/customer-research",
+                "displayName": "Customer Research",
+                "description": "Finds and summarizes customer research sources.",
+                "keywords": ["research", "sources"],
+            }
+        )
+    )
+    discovered = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "discover",
+            "--skill-root",
+            str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
+        ],
+        worktree,
+    )
+    assert "migration-helper" in discovered.stdout
+    assert "customer-research" in discovered.stdout
+    assert str(tmp_path) not in discovered.stdout
+    sync = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "sync",
+            "--skill-root",
+            str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
+        ],
+        worktree,
+    )
+    assert "dry run" in sync.stdout
+    assert "migration-helper" in sync.stdout
+    assert "customer-research" in sync.stdout
+    assert "migration-helper" not in (worktree / "registries" / "skills.yml").read_text()
+    assert "customer-research" not in (worktree / "registries" / "plugins.yml").read_text()
+    sync_apply = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "sync",
+            "--skill-root",
+            str(skill_root),
+            "--plugin-root",
+            str(plugin_root),
+            "--apply",
+        ],
+        worktree,
+    )
+    assert "Applied" in sync_apply.stdout
+    assert "migration-helper" in (worktree / "registries" / "skills.yml").read_text()
+    assert "customer-research" in (worktree / "registries" / "plugins.yml").read_text()
+    source = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "source",
+            "add",
+            "Customer interview",
+            "--locator",
+            "interview-001",
+            "--source-type",
+            "interview",
+            "--summary",
+            "Customer wants simple progress.",
+            "--credibility",
+            "high",
+            "--claim",
+            "Users need plain-language progress.",
+            "--confidence",
+            "0.8",
+        ],
+        worktree,
+    )
+    assert "Recorded source: SRC-" in source.stdout
+    source_list = run(["python", "-m", "goals.cli", "source", "list"], worktree)
+    assert "Customer interview" in source_list.stdout
+    assert "Users need plain-language progress." in source_list.stdout
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Repeated friction choosing the right skill.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        worktree,
+    )
+    memory = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Repeated friction choosing the right skill again.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        worktree,
+    )
+    assert "Improve or add a skill" in memory.stdout
+    suggestions = run(["python", "-m", "goals.cli", "memory", "suggest"], worktree)
+    assert "Improve or add a skill" in suggestions.stdout
+    eval_result = run(
+        ["python", "-m", "goals.cli", "eval", "scenarios", "--adapter", "claude"], worktree
+    )
+    assert "personal-fitness-reset: pass" in eval_result.stdout
+    assert "ecosystem-skill-plugin-routing: pass" in eval_result.stdout
+    local_safety = run(
+        ["python", "-m", "goals.cli", "safety-check", "--mode", "local", "."], worktree
+    )
+    assert "public_repo_hygiene: pass" in local_safety.stdout
+    publish_safety = run_unchecked(
+        ["python", "-m", "goals.cli", "safety-check", "--mode", "publish", "."], worktree
+    )
+    assert publish_safety.returncode == 1
+    assert "public_repo_hygiene: fail" in publish_safety.stdout
+
+
+def test_architecture_update_records_project_specific_map(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    result = run(["python", "-m", "goals.cli", "create", "Ship demo"], repo)
+    worktree = Path(
+        next(line for line in result.stdout.splitlines() if line.startswith("Worktree:"))
+        .split(":", 1)[1]
+        .strip()
+    )
+    architecture_file = worktree / "architecture.json"
+    architecture_file.write_text(
+        json.dumps(
+            {
+                "title": "Demo architecture",
+                "overview": "A user-facing dashboard backed by event state.",
+                "nodes": [
+                    {
+                        "node_id": "state",
+                        "label": "Goal state",
+                        "plain_summary": "Stores events and derived snapshots.",
+                        "status": "built",
+                        "user_value": "Keeps work resumable.",
+                    },
+                    {
+                        "node_id": "dashboard",
+                        "label": "Dashboard",
+                        "plain_summary": "Shows progress and decisions.",
+                        "status": "in_progress",
+                        "user_value": "Makes the goal understandable.",
+                    },
+                ],
+                "edges": [
+                    {
+                        "from_node": "state",
+                        "to_node": "dashboard",
+                        "relation": "renders",
+                        "plain_summary": "State renders into the dashboard.",
+                    }
+                ],
+            }
+        )
+    )
+
+    update = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "architecture",
+            "update",
+            "--file",
+            str(architecture_file),
+        ],
+        worktree,
+    )
+    output_path = Path(update.stdout.split(":", 1)[1].strip())
+    text = output_path.read_text()
+
+    assert "Updated architecture map" in update.stdout
+    assert "Demo architecture" in text
+    assert "State renders into the dashboard" in text
 
 
 def test_create_refuses_dirty_repo(tmp_path: Path) -> None:
@@ -102,8 +365,60 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
     evidence = json.dumps(
         {"checks_run": ["pytest"], "acceptance_met": ["done"], "confidence": 0.9, "notes": "done"}
     )
+    evidence_file = worktree / "evidence.json"
+    evidence_file.write_text(evidence)
     run(["python", "-m", "goals.cli", "phase", "start", "P1"], worktree)
-    run(["python", "-m", "goals.cli", "phase", "evidence", "P1", evidence], worktree)
+    run(
+        ["python", "-m", "goals.cli", "phase", "evidence", "P1", "--file", str(evidence_file)],
+        worktree,
+    )
     run(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
     accept = run(["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree)
     assert "Accepted phase P1" in accept.stdout
+    decision_file = worktree / "decision.json"
+    decision_file.write_text(
+        json.dumps(
+            {
+                "title": "Choose storage",
+                "plain_summary": "Pick where data should be stored.",
+                "why_it_matters": "This can affect migrations.",
+                "recommendation": "Use the existing file",
+                "options": [
+                    {
+                        "label": "Existing file",
+                        "explanation": "No migration needed.",
+                        "tradeoffs": ["Less flexible."],
+                        "reversible": True,
+                        "risk": "low",
+                    },
+                    {
+                        "label": "New migration",
+                        "explanation": "More structured.",
+                        "tradeoffs": ["Migration risk."],
+                        "reversible": False,
+                        "risk": "high",
+                    },
+                ],
+                "confidence": 0.8,
+                "priority": "blocking",
+                "technical_details": "Migration order has to be coordinated.",
+            }
+        )
+    )
+    explanation = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "decision",
+            "explain",
+            "--file",
+            str(decision_file),
+            "--level",
+            "detailed",
+        ],
+        worktree,
+    )
+    assert "Choose storage" in explanation.stdout
+    assert "What we know so far" in explanation.stdout
+    assert "Suggested reply" in explanation.stdout

@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from goals.architecture import architecture_for_snapshot, render_architecture_markdown
 from goals.dashboard import render_dashboard
 from goals.git_ops import (
     create_worktree,
     current_branch,
+    git_path,
     git_root,
     has_commits,
     require_clean_repo,
@@ -80,6 +82,7 @@ def create_goal(
     cwd: Path,
     *,
     autonomy: str = "standard",
+    why: str = "",
     new_project: Path | None = None,
 ) -> GoalSnapshot:
     repo = _ensure_repo(cwd, new_project)
@@ -100,7 +103,7 @@ def create_goal(
     snapshot = GoalSnapshot(
         goal_id=goal_id,
         objective=objective,
-        why="Keep a long-running agent task understandable, reviewable, and resumable.",
+        why=why or "Keep a long-running agent task understandable, reviewable, and resumable.",
         definition_of_done=[
             "All phases are accepted.",
             "The dashboard shows no blocking decisions.",
@@ -121,6 +124,7 @@ def create_goal(
             payload={"snapshot": snapshot.model_dump()},
         )
     )
+    write_workflow_gitignore(repo)
     write_workflow_gitignore(worktree)
     return store.snapshot()
 
@@ -198,21 +202,33 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int = 3) -> GateResult:
 
 def emit_dashboard(cwd: Path) -> Path:
     snapshot = load_active_snapshot(cwd)
-    output_path = (
-        Path(snapshot.topology.worktree_path)
-        / ".agent-workflow"
-        / "goals"
-        / snapshot.goal_id
-        / "dashboard.html"
+    goal_dir = (
+        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
     )
-    render_dashboard(snapshot, output_path)
+    output_path = goal_dir / "dashboard.html"
+    architecture_path = emit_architecture(cwd)
+    render_dashboard(snapshot, output_path, architecture_path=architecture_path)
     return output_path
 
 
+def emit_architecture(cwd: Path) -> Path:
+    snapshot = load_active_snapshot(cwd)
+    goal_dir = (
+        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
+    )
+    architecture_path = goal_dir / "architecture.md"
+    render_architecture_markdown(architecture_for_snapshot(snapshot), architecture_path)
+    return architecture_path
+
+
 def write_workflow_gitignore(repo: Path) -> None:
-    path = repo / ".agent-workflow" / ".gitignore"
-    if not path.exists():
-        atomic_write_text(path, "goals/\n")
+    path = git_path(repo, "info/exclude")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    rules = [".agent-workflow/goals/", ".agent-workflow/self-evolution/", ".goals-worktrees/"]
+    missing = [rule for rule in rules if rule not in existing.splitlines()]
+    if missing:
+        suffix = "\n".join(["", "# Goals local state", *missing, ""])
+        atomic_write_text(path, existing.rstrip() + suffix)
 
 
 def _ensure_repo(cwd: Path, new_project: Path | None) -> Path:

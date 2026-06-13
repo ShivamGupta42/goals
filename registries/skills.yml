@@ -3,5 +3,49 @@ kind: skills
 skills:
   decision-explainer:
     label: Decision Explainer
-    use_when: [technical decision, non-technical user, high-risk tradeoff]
-
+    description: Explain important technical decisions in simple language.
+    use_when: [technical decision, non-technical user, high-risk tradeoff, migration, risk]
+    phases: [P2, P4]
+    command_hint: goals decision explain --file decision.json --level basic
+    risk: low
+    requires_user_approval: false
+  architecture-map:
+    label: Goal Architecture Map
+    description: Show what is built, planned, blocked, deferred, or missing.
+    use_when: [architecture, diagram, system design, technical user, project shape]
+    phases: [P2, P3, P4]
+    command_hint: goals architecture show
+    risk: low
+    requires_user_approval: false
+  code-review:
+    label: Code Review
+    description: Review source changes for bugs, regressions, and missing tests.
+    use_when: [review, bugs, tests, regression, quality, source code]
+    phases: [P4]
+    command_hint: Run the local code-review skill if available.
+    risk: low
+    requires_user_approval: false
+  comprehensive-testing:
+    label: Comprehensive Testing
+    description: Plan and run the checks that prove the phase is actually done.
+    use_when: [tests, pytest, validation, acceptance, quality, proof]
+    phases: [P3, P4]
+    command_hint: Run project tests and record evidence.
+    risk: low
+    requires_user_approval: false
+  security-review:
+    label: Security Review
+    description: Check risky changes for secrets, injection, unsafe operations, and exposure.
+    use_when: [security, secrets, prompt injection, destructive ops, public safety, privacy]
+    phases: [P2, P4]
+    command_hint: goals safety-check --mode local .
+    risk: medium
+    requires_user_approval: false
+  docs-update:
+    label: Documentation Update
+    description: Update user-facing docs after behavior changes.
+    use_when: [docs, documentation, readme, roadmap, explanation]
+    phases: [P3, P4]
+    command_hint: Update README, roadmap, or docs and record changed files.
+    risk: low
+    requires_user_approval: false
