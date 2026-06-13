@@ -268,6 +268,53 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Improve or add a skill" in memory.stdout
     suggestions = run(["python", "-m", "goals.cli", "memory", "suggest"], worktree)
     assert "Improve or add a skill" in suggestions.stdout
+    source_repo = tmp_path / "source-repo"
+    source_repo.mkdir()
+    init_repo(source_repo)
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Private client Alpha repeatedly missed setup evidence.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        source_repo,
+    )
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "memory",
+            "record",
+            "Private client Alpha missed setup evidence again.",
+            "--area",
+            "skill",
+            "--kind",
+            "friction",
+        ],
+        source_repo,
+    )
+    memory_sync = run(
+        ["python", "-m", "goals.cli", "memory", "sync", str(source_repo)],
+        worktree,
+    )
+    assert "Cross-Project Memory Sync" in memory_sync.stdout
+    assert "dry run" in memory_sync.stdout
+    assert "Private client Alpha" not in memory_sync.stdout
+    memory_sync_apply = run(
+        ["python", "-m", "goals.cli", "memory", "sync", str(source_repo), "--apply"],
+        worktree,
+    )
+    assert "Imported 1 cross-project memory suggestion" in memory_sync_apply.stdout
+    synced_suggestions = run(["python", "-m", "goals.cli", "memory", "suggest"], worktree)
+    assert "Cross-project learning from external-project" in synced_suggestions.stdout
     eval_result = run(
         ["python", "-m", "goals.cli", "eval", "scenarios", "--adapter", "claude"], worktree
     )

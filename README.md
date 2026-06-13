@@ -47,6 +47,7 @@ uv run goals permission check github --kind plugin --action "inspect a remote is
 uv run goals source freshness
 uv run goals source list
 uv run goals memory suggest
+uv run goals memory sync ../similar-goals-project
 uv run goals eval scenarios --adapter claude
 uv run goals eval dogfood --adapter claude
 uv run goals eval coverage --adapter claude
@@ -178,10 +179,15 @@ Agents can record repeated friction so future goals improve:
 ```bash
 uv run goals memory record "Repeated setup confusion" --area skill --kind friction
 uv run goals memory suggest
+uv run goals memory sync ../similar-goals-project
 ```
 
 Self-evolution memory is local generated state under `.agent-workflow/` and is
-ignored by default.
+ignored by default. `memory sync` is a dry run by default: it reads another
+Goals project or memory file, turns actionable lessons into sanitized
+suggestions, and imports them only when rerun with `--apply`. Use
+`--include-private` only when you explicitly want source summaries and evidence
+references copied into the current project's local memory.
 
 Agents can also run the full self-evolution matrix in one command:
 

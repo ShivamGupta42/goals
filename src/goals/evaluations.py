@@ -66,6 +66,7 @@ CURRENT_CAPABILITIES = {
     "non_technical_goal_brief",
     "plugin_capability_discovery",
     "cross_agent_recommendation_merge",
+    "cross_project_memory_sync",
     "parallel_worktree_merge_gates",
     "phase_plan",
     "permission_policy_registry",
@@ -237,6 +238,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "local_safety_check",
             "important_decision_filter",
             "self_evolution_memory",
+            "cross_project_memory_sync",
         ],
         future_capabilities=[],
         decisions=[
@@ -447,10 +449,11 @@ DEFAULT_GOAL_USE_CASES = [
         required_capabilities=[
             *CORE_GOAL_CAPABILITIES,
             "self_evolution_memory",
+            "cross_project_memory_sync",
             "local_safety_check",
             "architecture_map",
         ],
-        planned_capabilities=["automatic_gap_to_roadmap_patch", "cross_project_memory_sync"],
+        planned_capabilities=[],
         important_user_decisions=["Build now or roadmap", "Public product promise change"],
         agent_can_decide=["Small implementation slice", "Test scope", "Docs update"],
         proof_required=["Scenario eval", "Dogfood eval", "Committed improvement"],
@@ -1666,6 +1669,8 @@ def _supported_capabilities(
         supported.add("non_technical_goal_brief")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
+    if "goals memory sync" in prompt:
+        supported.add("cross_project_memory_sync")
     if "Source evidence:" in prompt and "goals source add" in prompt:
         supported.add("source_registry")
     if "goals source freshness" in prompt or any(

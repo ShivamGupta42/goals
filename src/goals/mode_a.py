@@ -144,6 +144,7 @@ Permission policy:
 
 Self-evolution memory:
 {memory}
+- To reuse lessons from a similar Goals project, run `goals memory sync PATH` first. It is a dry run by default and imports sanitized suggestions only with `--apply`.
 
 Self-evolution roadmap:
 - After self-check or repeated friction, run `goals roadmap suggest` for a dry-run ROADMAP.md update plan.
