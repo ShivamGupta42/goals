@@ -74,6 +74,9 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Suggested Skills and Plugins" in text
     assert "Self-Evolution Memory" in text
     assert "Architecture Map" in text
+    assert "Architecture Brief" in text
+    assert "Review focus" in text
+    assert "Evidence gaps and open questions" in text
     assert "Sources" in text
     assert "No decisions are waiting on you." in text
     assert "P1 has no evidence yet." in text

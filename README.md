@@ -35,6 +35,7 @@ uv run goals issues
 uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
+uv run goals architecture brief
 uv run goals decision brief
 uv run goals ecosystem recommend
 uv run goals ecosystem discover
@@ -141,12 +142,14 @@ Agents and technical reviewers can inspect a goal-level architecture map:
 
 ```bash
 uv run goals architecture show
+uv run goals architecture brief
 uv run goals architecture update --file architecture.json
 ```
 
-The dashboard is the simple status view for end users. `architecture.md` is the
-deeper Markdown/Mermaid view for people who want to question what is built,
-planned, blocked, or deferred.
+The dashboard is the simple status view for end users. `architecture brief`
+summarizes what is built, what lacks evidence, what is blocked, and what to
+review next. `architecture.md` is the deeper Markdown/Mermaid view for people
+who want to question what is built, planned, blocked, or deferred.
 
 ## Public Safety
 
