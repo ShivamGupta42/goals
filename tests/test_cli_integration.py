@@ -102,6 +102,7 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "goals source freshness" in run_prompt.stdout
     assert "goals asset provenance" in run_prompt.stdout
     assert "goals creative compare" in run_prompt.stdout
+    assert "goals external-review check" in run_prompt.stdout
     assert "goals handoff check" in run_prompt.stdout
     dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     assert Path(dash.stdout.strip()).exists()
@@ -351,6 +352,39 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     creative_compare = run(["python", "-m", "goals.cli", "creative", "compare"], worktree)
     assert "Creative Variant Comparison" in creative_compare.stdout
     assert "Overall: pass" in creative_compare.stdout
+    external_review = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "external-review",
+            "add",
+            "Security review",
+            "--reviewer",
+            "Security lead",
+            "--reviewer-type",
+            "security",
+            "--risk-domain",
+            "security",
+            "--status",
+            "passed",
+            "--phase-id",
+            "P2",
+            "--scope",
+            "Prompt injection checks",
+            "--summary",
+            "Security lead approved the prompt injection mitigation.",
+            "--evidence",
+            "evidence:P2",
+        ],
+        worktree,
+    )
+    assert "Recorded external review: REV-" in external_review.stdout
+    external_review_list = run(["python", "-m", "goals.cli", "external-review", "list"], worktree)
+    assert "Security review" in external_review_list.stdout
+    external_review_check = run(["python", "-m", "goals.cli", "external-review", "check"], worktree)
+    assert "External Review Report" in external_review_check.stdout
+    assert "Overall: pass" in external_review_check.stdout
     handoff = run(
         [
             "python",
@@ -388,6 +422,8 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     refreshed_dash = run(["python", "-m", "goals.cli", "dashboard"], worktree)
     dashboard_text = Path(refreshed_dash.stdout.strip()).read_text()
     assert "Creative Variants" in dashboard_text
+    assert "External Reviews" in dashboard_text
+    assert "Security review" in dashboard_text
     assert "Handoff Owners" in dashboard_text
     assert "Support lead" in dashboard_text
     run(

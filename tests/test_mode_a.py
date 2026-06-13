@@ -50,6 +50,9 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "goals permission check" in plan.prompt
     assert "Professional boundaries:" in plan.prompt
     assert "goals boundary explain --domain auto" in plan.prompt
+    assert "External review gate:" in plan.prompt
+    assert "goals external-review add" in plan.prompt
+    assert "goals external-review check" in plan.prompt
     assert "Self-evolution memory:" in plan.prompt
     assert "goals memory sync" in plan.prompt
     assert "goals roadmap suggest" in plan.prompt
@@ -71,6 +74,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "uv run goals asset provenance --strict" in plan.recommended_checks
     assert "uv run goals creative compare --strict" in plan.recommended_checks
     assert "uv run goals handoff check --strict" in plan.recommended_checks
+    assert "uv run goals external-review check --strict" in plan.recommended_checks
     assert "uv run goals architecture check --strict" in plan.recommended_checks
     assert "uv run goals source citations --strict" in plan.recommended_checks
     assert "uv run goals source freshness --strict" in plan.recommended_checks

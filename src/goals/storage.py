@@ -14,6 +14,7 @@ from goals.models import (
     Evidence,
     Event,
     EventType,
+    ExternalReview,
     GateResult,
     GoalArchitectureMap,
     GoalSnapshot,
@@ -143,6 +144,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 existing.variant_id == variant.variant_id for existing in snapshot.creative_variants
             ):
                 snapshot.creative_variants.append(variant)
+        elif event.event_type == EventType.EXTERNAL_REVIEW_RECORDED:
+            review = ExternalReview.model_validate(payload["review"])
+            if not any(
+                existing.review_id == review.review_id for existing in snapshot.external_reviews
+            ):
+                snapshot.external_reviews.append(review)
         elif event.event_type == EventType.HANDOFF_OWNER_RECORDED:
             owner = HandoffOwner.model_validate(payload["owner"])
             if not any(existing.owner_id == owner.owner_id for existing in snapshot.handoff_owners):

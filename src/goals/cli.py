@@ -54,6 +54,11 @@ from goals.evaluations import (
     run_self_check,
     stress_goal_issue_discovery,
 )
+from goals.external_reviews import (
+    analyze_external_reviews,
+    render_external_review_report,
+    render_external_review_summary,
+)
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.handoffs import (
     analyze_handoff_owners,
@@ -83,6 +88,7 @@ from goals.models import (
     Event,
     EventType,
     Evidence,
+    ExternalReview,
     GateVerdict,
     GoalArchitectureMap,
     HandoffOwner,
@@ -124,6 +130,7 @@ creative_variant_app = typer.Typer(help="Record and inspect creative directions.
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
+external_review_app = typer.Typer(help="Record and check external reviews.")
 handoff_app = typer.Typer(help="Record and check handoff owners.")
 handoff_owner_app = typer.Typer(help="Record and inspect handoff owners.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
@@ -139,6 +146,7 @@ app.add_typer(creative_app, name="creative")
 app.add_typer(decision_app, name="decision")
 app.add_typer(ecosystem_app, name="ecosystem")
 app.add_typer(eval_app, name="eval")
+app.add_typer(external_review_app, name="external-review")
 app.add_typer(handoff_app, name="handoff")
 app.add_typer(memory_app, name="memory")
 app.add_typer(permission_app, name="permission")
@@ -1078,6 +1086,157 @@ def creative_compare(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_creative_comparison_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@external_review_app.command("add")
+def external_review_add(
+    title: str,
+    reviewer: str = typer.Option("", help="Reviewer label or professional role."),
+    reviewer_type: str = typer.Option(
+        "other",
+        help="user, professional, security, legal, financial, medical, compliance, team, external, or other.",
+    ),
+    risk_domain: str = typer.Option(
+        "general",
+        help="general, medical, legal, financial, safety, security, compliance, privacy, production, or other.",
+    ),
+    status: str = typer.Option(
+        "required",
+        help="required, requested, passed, failed, waived, or blocked.",
+    ),
+    phase_id: Optional[list[str]] = typer.Option(
+        None,
+        "--phase-id",
+        help="Phase id this review applies to. Repeat for multiple phases.",
+    ),
+    scope: Optional[list[str]] = typer.Option(
+        None,
+        "--scope",
+        help="What the reviewer is checking. Repeat for multiple scope items.",
+    ),
+    summary: str = typer.Option("", help="Plain-language review request or outcome."),
+    evidence: Optional[list[str]] = typer.Option(
+        None,
+        "--evidence",
+        help="Evidence id, approval link, note id, or checklist reference. Repeat for multiple refs.",
+    ),
+    completed_at: Optional[str] = typer.Option(
+        None,
+        "--completed-at",
+        help="Optional ISO-8601 timestamp for a completed review.",
+    ),
+    waiver_reason: str = typer.Option("", help="Reason when status is waived."),
+    review_notes: str = typer.Option("", help="Short non-sensitive review notes."),
+) -> None:
+    """Record required, requested, passed, failed, blocked, or waived external review."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        review = ExternalReview(
+            title=title,
+            reviewer=reviewer,
+            reviewer_type=_validate_choice(
+                reviewer_type,
+                {
+                    "user",
+                    "professional",
+                    "security",
+                    "legal",
+                    "financial",
+                    "medical",
+                    "compliance",
+                    "team",
+                    "external",
+                    "other",
+                },
+                "reviewer_type",
+            ),  # type: ignore[arg-type]
+            risk_domain=_validate_choice(
+                risk_domain,
+                {
+                    "general",
+                    "medical",
+                    "legal",
+                    "financial",
+                    "safety",
+                    "security",
+                    "compliance",
+                    "privacy",
+                    "production",
+                    "other",
+                },
+                "risk_domain",
+            ),  # type: ignore[arg-type]
+            status=_validate_choice(
+                status,
+                {"required", "requested", "passed", "failed", "waived", "blocked"},
+                "status",
+            ),  # type: ignore[arg-type]
+            phase_ids=phase_id or [],
+            scope=scope or [],
+            summary=summary,
+            evidence_refs=evidence or [],
+            **({"completed_at": completed_at} if completed_at else {}),
+            waiver_reason=waiver_reason,
+            review_notes=review_notes,
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.EXTERNAL_REVIEW_RECORDED,
+                payload={"review": review.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded external review: {review.review_id}")
+
+    _handle(run)
+
+
+@external_review_app.command("list")
+def external_review_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List recorded external reviews for the active goal."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    [review.model_dump(mode="json") for review in snapshot.external_reviews],
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo("External reviews:")
+            typer.echo(render_external_review_summary(snapshot))
+
+    _handle(run)
+
+
+@external_review_app.command("check")
+def external_review_check(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when external review issues are found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether high-risk or explicit review work has review proof."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = analyze_external_reviews(snapshot)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_external_review_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
