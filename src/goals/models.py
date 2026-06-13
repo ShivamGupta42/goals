@@ -178,6 +178,28 @@ class EcosystemRecommendation(BaseModel):
     user_approval_required: bool = False
 
 
+class DiscoveredTool(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["skill", "plugin", "adapter"]
+    name: str
+    label: str
+    description: str = ""
+    source: str = ""
+    registered: bool = False
+    available: bool = True
+    registry: str = ""
+    suggested_registry_entry: dict[str, Any] = Field(default_factory=dict)
+
+
+class EcosystemDiscoveryReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tools: list[DiscoveredTool] = Field(default_factory=list)
+    missing_from_registry: list[DiscoveredTool] = Field(default_factory=list)
+    summary: str
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

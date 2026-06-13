@@ -115,6 +115,9 @@ Recommended checks for this repo:
 Recommended skills/plugins for this phase:
 {tools}
 
+Local ecosystem discovery:
+- If recommendations seem incomplete, run `goals ecosystem discover` to inspect installed local skills/adapters and suggest portable registry additions.
+
 Self-evolution memory:
 {memory}
 

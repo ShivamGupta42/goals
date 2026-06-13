@@ -35,6 +35,7 @@ uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
 uv run goals ecosystem recommend
+uv run goals ecosystem discover
 uv run goals memory suggest
 uv run goals eval scenarios --adapter claude
 uv run goals adapter check codex
@@ -75,11 +76,13 @@ Agents can also ask Goals which skills or plugins fit the current phase:
 
 ```bash
 uv run goals ecosystem recommend
+uv run goals ecosystem discover
 ```
 
 Mode A handoffs include these recommendations automatically. Goals does not run
 external tools for the agent; it explains what looks relevant and whether user
-approval is needed.
+approval is needed. Discovery inspects local skills/adapters and suggests
+portable registry additions without printing local filesystem paths by default.
 
 Agents can record repeated friction so future goals improve:
 

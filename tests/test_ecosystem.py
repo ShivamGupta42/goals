@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.models import GoalSnapshot, WorktreeLease
 from goals.registry import validate_registry_file
@@ -82,3 +83,57 @@ skills:
 
     with pytest.raises(GoalsError):
         validate_registry_file(path)
+
+
+def test_discovery_finds_local_skills_without_leaking_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    registry_root = tmp_path / "registries"
+    registry_root.mkdir()
+    (registry_root / "skills.yml").write_text(
+        "version: 1\nkind: skills\nskills:\n  decision-explainer:\n    label: Decision Explainer\n"
+    )
+    (registry_root / "adapters.yml").write_text(
+        "version: 1\nkind: adapters\nadapters:\n  claude:\n    label: Claude\n"
+    )
+    skill_root = tmp_path / "local-skills"
+    skill = skill_root / "migration-helper"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        """---
+name: Migration Helper
+description: Helps coordinate database migrations safely.
+---
+
+# Migration Helper
+"""
+    )
+    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr("goals.discovery.adapter_check", lambda name: (name == "claude", "ok"))
+
+    report = discover_local_ecosystem(tmp_path, skill_roots=[skill_root])
+    rendered = render_discovery_report(report)
+
+    discovered = {tool.name: tool for tool in report.tools}
+    assert discovered["migration-helper"].registered is False
+    assert discovered["migration-helper"].suggested_registry_entry["migration-helper"]["label"] == (
+        "Migration Helper"
+    )
+    assert discovered["claude"].registered is True
+    assert "migration-helper" in rendered
+    assert str(tmp_path) not in rendered
+
+
+def test_discovery_json_is_sanitized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    skill_root = tmp_path / "skills"
+    skill = skill_root / "review"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: Review\ndescription: Reviews source changes.\n---\n"
+    )
+    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
+
+    report = discover_local_ecosystem(tmp_path, skill_roots=[skill_root])
+
+    assert str(tmp_path) not in report.model_dump_json()
+    assert report.missing_from_registry

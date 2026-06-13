@@ -8,6 +8,7 @@ import typer
 
 from goals.adapters import adapter_check
 from goals.decisions import build_decision_context, render_decision_explanation
+from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.evaluations import evaluate_goal_scenarios
 from goals.memory import (
@@ -269,6 +270,28 @@ def ecosystem_recommend(
             )
         else:
             typer.echo(render_recommendations(recommendations))
+
+    _handle(run)
+
+
+@ecosystem_app.command("discover")
+def ecosystem_discover(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+    skill_root: Optional[list[Path]] = typer.Option(
+        None,
+        "--skill-root",
+        help="Skill root to inspect. Repeat for multiple roots.",
+    ),
+    max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
+) -> None:
+    """Discover local skills/adapters and suggest portable registry additions."""
+
+    def run():
+        report = discover_local_ecosystem(Path.cwd(), skill_roots=skill_root, max_skills=max_skills)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_discovery_report(report))
 
     _handle(run)
 

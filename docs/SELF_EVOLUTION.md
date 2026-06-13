@@ -29,6 +29,21 @@ Each scenario has required current capabilities and planned future capabilities.
 The command fails when current capabilities are missing, but planned
 capabilities remain visible as the next frontier.
 
+## Ecosystem Discovery
+
+Goals can inspect local skill roots and adapter executables:
+
+```bash
+uv run goals ecosystem recommend
+uv run goals ecosystem discover
+```
+
+`recommend` uses portable registries to route the current phase. `discover`
+looks at local `SKILL.md` files and Claude/Codex adapter availability, then
+suggests registry additions for tools that are present locally but missing from
+the repo. Discovery output is sanitized by default; it labels sources without
+printing local filesystem paths.
+
 ## Memory Loop
 
 Goals can record repeated friction and derive improvement suggestions:
@@ -115,7 +130,9 @@ permissions. Goals should not replace them. Its unique value is to provide:
 
 Future work should connect scenario results to automatic skill/plugin selection,
 and the first registry-backed version now recommends skills/plugins in Mode A
-handoffs and the dashboard. Self-evolution memory records repeated friction and
-turns it into improvement suggestions. Goals must still always know what phase
-it is in, what evidence exists, what remains uncertain, whether a decision
-really needs the user, and whether an external tool needs approval before use.
+handoffs and the dashboard. Local discovery can compare installed skills and
+adapters with portable registries. Self-evolution memory records repeated
+friction and turns it into improvement suggestions. Goals must still always know
+what phase it is in, what evidence exists, what remains uncertain, whether a
+decision really needs the user, and whether an external tool needs approval
+before use.

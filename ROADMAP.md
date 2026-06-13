@@ -97,9 +97,10 @@ Likely views:
 ## Ecosystem Routing
 
 **Status:** Partially implemented. Goals can recommend skills and plugins from
-portable YAML registries and includes those recommendations in Mode A handoffs
-and the dashboard. It does not yet inspect the live Claude/Codex installation to
-discover every installed skill or plugin automatically.
+portable YAML registries, includes those recommendations in Mode A handoffs and
+the dashboard, and can discover local skills/adapters with
+`goals ecosystem discover`. It does not yet inspect every plugin bundle's native
+metadata automatically.
 
 ### Direction
 
@@ -110,12 +111,16 @@ discover every installed skill or plugin automatically.
 - Mark tools that need user approval because they may change remote state, cost
   money, or touch private data.
 - Later, add local discovery adapters for Claude/Codex skills and plugins.
+- Suggest portable registry additions for local tools that are missing from the
+  repo registries.
 
 ### Open Questions
 
 - Should local discovery update the registry, or stay as a transient suggestion?
 - How should conflicting skill recommendations from different agents be merged?
 - How much should Goals learn from repeated recommendation misses across goals?
+- Which plugin metadata files should Goals trust across Claude, Codex, and local
+  AI toolchains?
 
 ## Self-Evolution Memory
 

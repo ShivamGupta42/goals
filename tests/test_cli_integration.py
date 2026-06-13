@@ -92,6 +92,27 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "registries=6" in validate.stdout
     ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
     assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
+    skill_root = tmp_path / "skills"
+    local_skill = skill_root / "migration-helper"
+    local_skill.mkdir(parents=True)
+    (local_skill / "SKILL.md").write_text(
+        "---\nname: Migration Helper\n"
+        "description: Helps coordinate database migrations safely.\n---\n"
+    )
+    discovered = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "ecosystem",
+            "discover",
+            "--skill-root",
+            str(skill_root),
+        ],
+        worktree,
+    )
+    assert "migration-helper" in discovered.stdout
+    assert str(tmp_path) not in discovered.stdout
     run(
         [
             "python",

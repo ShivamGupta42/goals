@@ -22,6 +22,7 @@ CURRENT_CAPABILITIES = {
     "evidence_contract",
     "important_decision_filter",
     "local_safety_check",
+    "local_ecosystem_discovery",
     "mode_a_handoff",
     "phase_plan",
     "project_history_decision_context",
@@ -201,6 +202,7 @@ DEFAULT_GOAL_SCENARIOS = [
             "review_gate",
             "important_decision_filter",
             "automatic_skill_selection",
+            "local_ecosystem_discovery",
         ],
         future_capabilities=["plugin_capability_discovery"],
         decisions=[
@@ -294,6 +296,8 @@ def _supported_capabilities(
         supported.add("architecture_map")
     if "Recommended skills/plugins for this phase:" in prompt:
         supported.add("automatic_skill_selection")
+    if "goals ecosystem discover" in prompt:
+        supported.add("local_ecosystem_discovery")
     if "Self-evolution memory:" in prompt and "goals memory record" in prompt:
         supported.add("self_evolution_memory")
     if snapshot.topology.branch.startswith("goal/") and snapshot.topology.worktree_path:
