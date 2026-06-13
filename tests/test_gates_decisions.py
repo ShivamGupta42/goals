@@ -1,4 +1,10 @@
-from goals.decisions import build_decision_context, explain_decision, render_decision_explanation
+from goals.decisions import (
+    build_decision_brief,
+    build_decision_context,
+    explain_decision,
+    render_decision_brief,
+    render_decision_explanation,
+)
 from goals.gates import review_phase
 from goals.models import (
     DecisionOption,
@@ -178,3 +184,92 @@ def test_low_risk_reversible_decision_can_stay_with_agent(tmp_path) -> None:
     assert explanation.surfaced_to_user is False
     assert "does not need to interrupt" not in explanation.markdown
     assert "agent can choose" in explanation.reason_for_surface
+
+
+def test_decision_brief_summarizes_only_user_worthy_decisions(tmp_path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add tags to tasks",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Inspect storage",
+                goal="Find the storage shape",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    changed_files=["src/db.py"],
+                    checks_run=["pytest"],
+                    known_gaps=["Migration order is unclear."],
+                    acceptance_met=["Storage inspected."],
+                    confidence=0.8,
+                    notes="Storage is file-backed today.",
+                ),
+                reviews=[
+                    GateResult(gate_id="phase-review", verdict=GateVerdict.PASS, summary="ok")
+                ],
+            )
+        ],
+        current_phase="P2",
+        decisions=[
+            explain_decision(
+                title="Choose tag storage",
+                plain_summary="Pick where task tags should live.",
+                why_it_matters="This affects migration risk.",
+                recommendation="Store tags in the existing task file",
+                options=[
+                    DecisionOption(
+                        label="Existing file",
+                        explanation="No migration needed.",
+                        reversible=True,
+                        risk="low",
+                    ),
+                    DecisionOption(
+                        label="New migration",
+                        explanation="More structured.",
+                        tradeoffs=["Migration ordering risk."],
+                        reversible=False,
+                        risk="high",
+                    ),
+                ],
+                confidence=0.74,
+                priority="blocking",
+                technical_details="Migration order has to be coordinated.",
+            ),
+            explain_decision(
+                title="Dashboard label wording",
+                plain_summary="Choose label wording for the dashboard.",
+                why_it_matters="It affects presentation only.",
+                recommendation="Use the shorter label.",
+                options=[
+                    DecisionOption(
+                        label="Short label",
+                        explanation="Easy to scan.",
+                        reversible=True,
+                        risk="low",
+                    )
+                ],
+                confidence=0.9,
+                priority="later",
+            ),
+        ],
+    )
+
+    brief = build_decision_brief(snapshot)
+    rendered = render_decision_brief(brief)
+
+    assert brief.waiting_on_user is True
+    assert len(brief.user_decisions) == 1
+    assert brief.agent_handled_count == 1
+    assert brief.user_decisions[0].highest_risk == "high"
+    assert brief.user_decisions[0].all_options_reversible is False
+    assert "continue P2" in brief.user_decisions[0].what_happens_next
+    assert "What Needs Your Answer" in rendered
+    assert "Suggested reply: `I choose: Store tags in the existing task file`" in rendered
+    assert "1 routine/reversible choice(s) can stay with the agent." in rendered
+    assert "Dashboard label wording" not in rendered

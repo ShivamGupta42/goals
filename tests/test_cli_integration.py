@@ -2,6 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from goals.models import Event, EventType
+
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -452,3 +454,19 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
     assert "Choose storage" in explanation.stdout
     assert "What we know so far" in explanation.stdout
     assert "Suggested reply" in explanation.stdout
+    goal_id = json.loads(
+        next((worktree / ".agent-workflow" / "goals").glob("*/goal.json")).read_text()
+    )["goal_id"]
+    append_event = Event(
+        goal_id=goal_id,
+        event_type=EventType.DECISION_REQUESTED,
+        payload={"decision": json.loads(decision_file.read_text())},
+    )
+    event_log = next((worktree / ".agent-workflow" / "goals").glob("*/events.jsonl"))
+    event_log.write_text(event_log.read_text() + append_event.model_dump_json() + "\n")
+    run(["python", "-m", "goals.cli", "repair"], worktree)
+    brief = run(["python", "-m", "goals.cli", "decision", "brief"], worktree)
+    assert "Decision Brief" in brief.stdout
+    assert "What Needs Your Answer" in brief.stdout
+    assert "What happens next" in brief.stdout
+    assert "Suggested reply" in brief.stdout

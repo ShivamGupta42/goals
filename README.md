@@ -35,6 +35,7 @@ uv run goals issues
 uv run goals run --adapter codex
 uv run goals dashboard
 uv run goals architecture show
+uv run goals decision brief
 uv run goals ecosystem recommend
 uv run goals ecosystem discover
 uv run goals ecosystem sync
@@ -76,12 +77,16 @@ uv run goals phase accept P1
 Agents can explain only important decisions with active goal history:
 
 ```bash
+uv run goals decision brief
 uv run goals decision explain --file decision.json --level basic
 ```
 
-The dashboard also turns important decisions into plain-language cards with the
-recommendation, options, risk, reversibility, confidence, known context, and a
-suggested reply. Routine reversible choices stay with the agent.
+`decision brief` answers the simple end-user question: what needs my answer,
+what does Goals recommend, what should I reply, what happens next, and how many
+routine choices can stay with the agent. The dashboard shows the same brief,
+then turns important decisions into plain-language cards with the recommendation,
+options, risk, reversibility, confidence, known context, and a suggested reply.
+Routine reversible choices stay with the agent.
 
 Agents can ask Goals what could block the current goal before interrupting the
 user:

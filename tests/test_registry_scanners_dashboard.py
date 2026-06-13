@@ -168,6 +168,11 @@ def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:
     text = output.read_text()
 
     assert "Choose tag storage" in text
+    assert "Decision Brief" in text
+    assert "What Needs Your Answer" in text
+    assert "What the Agent Can Handle" in text
+    assert "What happens next" in text
+    assert "1 routine/reversible choice(s) can stay with the agent." in text
     assert "Why this needs you" in text
     assert "Recommended option" in text
     assert "Store tags in the existing task file" in text
@@ -183,3 +188,4 @@ def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:
     assert "<script>structured storage</script>" not in text
     assert "&lt;script&gt;structured storage&lt;/script&gt;" in text
     assert "Choose label wording for the dashboard." not in text
+    assert "Dashboard label wording" not in text

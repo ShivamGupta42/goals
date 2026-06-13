@@ -4,6 +4,8 @@ from typing import Literal
 
 from goals.models import (
     Decision,
+    DecisionBrief,
+    DecisionBriefItem,
     DecisionContext,
     DecisionExplanation,
     DecisionOption,
@@ -97,6 +99,90 @@ def render_decision_explanation(
     )
 
 
+def build_decision_brief(snapshot: GoalSnapshot) -> DecisionBrief:
+    context = build_decision_context(snapshot)
+    user_decisions: list[DecisionBriefItem] = []
+    agent_handled_count = 0
+    for decision in snapshot.decisions:
+        surfaced, reason = should_surface_decision(decision)
+        if surfaced:
+            user_decisions.append(_brief_item(snapshot, decision, context, reason))
+        else:
+            agent_handled_count += 1
+
+    if user_decisions:
+        summary = (
+            f"{len(user_decisions)} decision(s) need your answer before the goal can continue "
+            f"cleanly. {agent_handled_count} routine choice(s) can stay with the agent."
+        )
+    elif snapshot.decisions:
+        summary = (
+            "No important decisions are waiting on you. "
+            f"The agent can handle {agent_handled_count} routine/reversible choice(s) and record the assumption."
+        )
+    else:
+        summary = "No decisions are waiting on you."
+
+    return DecisionBrief(
+        goal_id=snapshot.goal_id,
+        waiting_on_user=bool(user_decisions),
+        summary=summary,
+        user_decisions=user_decisions,
+        agent_handled_count=agent_handled_count,
+        agent_handled_summary=(
+            f"{agent_handled_count} routine/reversible choice(s) can stay with the agent."
+            if agent_handled_count
+            else "No agent-handled routine choices are recorded."
+        ),
+    )
+
+
+def render_decision_brief(brief: DecisionBrief) -> str:
+    lines = [
+        "# Decision Brief",
+        "",
+        f"Goal: {brief.goal_id}",
+        f"Waiting on user: {'yes' if brief.waiting_on_user else 'no'}",
+        "",
+        brief.summary,
+        "",
+        "## What Needs Your Answer",
+    ]
+    if not brief.user_decisions:
+        lines.append("- Nothing important is waiting on you.")
+    for item in brief.user_decisions:
+        lines.extend(
+            [
+                f"### {item.title}",
+                "",
+                item.plain_summary,
+                "",
+                f"Why this needs you: {item.why_user_needed}",
+                f"Recommendation: {item.recommendation}",
+                f"Suggested reply: `{item.suggested_reply}`",
+                f"What happens next: {item.what_happens_next}",
+                f"Confidence: {item.confidence:.0%}",
+                "",
+                "Options:",
+                _bullets(item.option_summaries or ["No alternatives recorded."]),
+                "",
+                "What Goals knows so far:",
+                _bullets(item.known_context or ["No prior goal context recorded yet."]),
+                "",
+                "Uncertainty:",
+                _bullets(item.uncertainty or ["No major uncertainty recorded."]),
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## What the Agent Can Handle",
+            f"- {brief.agent_handled_summary}",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def should_surface_decision(decision: Decision) -> tuple[bool, str]:
     if decision.priority == "blocking":
         return True, "This blocks the goal or changes its direction."
@@ -129,6 +215,52 @@ def evidence_refs(context: DecisionContext) -> list[str]:
     refs.extend([f"file:{path}" for path in context.changed_files])
     refs.extend([f"source:{claim}" for claim in context.source_claims])
     return refs
+
+
+def _brief_item(
+    snapshot: GoalSnapshot,
+    decision: Decision,
+    context: DecisionContext,
+    reason: str,
+) -> DecisionBriefItem:
+    suggested_reply = decision.suggested_reply or f"I choose: {decision.recommendation}"
+    return DecisionBriefItem(
+        decision_id=decision.decision_id,
+        title=decision.title,
+        plain_summary=decision.plain_summary,
+        why_user_needed=reason,
+        recommendation=decision.recommendation,
+        suggested_reply=suggested_reply,
+        confidence=decision.confidence,
+        highest_risk=_highest_risk(decision.options),
+        all_options_reversible=bool(decision.options)
+        and all(option.reversible for option in decision.options),
+        option_summaries=[_option_summary(option) for option in decision.options],
+        what_happens_next=_what_happens_next(snapshot, suggested_reply),
+        known_context=decision.what_we_know or context_summary(context),
+        uncertainty=decision.uncertainty or context.known_gaps + context.blockers,
+        evidence_refs=decision.evidence_refs or evidence_refs(context),
+    )
+
+
+def _highest_risk(options: list[DecisionOption]) -> Literal["low", "medium", "high"]:
+    order = {"low": 0, "medium": 1, "high": 2}
+    if not options:
+        return "medium"
+    return max((option.risk for option in options), key=lambda risk: order[risk])
+
+
+def _option_summary(option: DecisionOption) -> str:
+    reversible = "reversible" if option.reversible else "not clearly reversible"
+    return f"{option.label}: {option.explanation} ({option.risk} risk, {reversible})"
+
+
+def _what_happens_next(snapshot: GoalSnapshot, suggested_reply: str) -> str:
+    phase = snapshot.current_phase or "the next phase"
+    return (
+        f"If you reply `{suggested_reply}`, the agent should record the choice, "
+        f"continue {phase}, and keep proof in Goals."
+    )
 
 
 def _render_basic(decision: Decision, context: DecisionContext, reason: str) -> str:

@@ -140,10 +140,15 @@ Decision experience means:
 Agents can generate a user-ready explanation from the active goal history:
 
 ```bash
+uv run goals decision brief
 uv run goals decision explain --file decision.json --level basic
 uv run goals decision explain --file decision.json --level detailed
 uv run goals decision explain --file decision.json --level technical
 ```
+
+`decision brief` is the non-technical first pass: it shows only choices that
+need the user, the recommended reply, what happens after the reply, and how many
+routine choices can stay with the agent.
 
 The explainer should include what Goals already knows from accepted phases,
 evidence, checks, changed files, blockers, learnings, and prior decisions. It
