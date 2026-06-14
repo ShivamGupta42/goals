@@ -24,11 +24,12 @@ every phase; a failed deletion never strands us without `decision-explainer`.
 - Dead/external, drop → `safety-review` (`goals safety-check` does not exist),
   `code-review`, `comprehensive-testing`, `docs` (external/generic; live-scan
   finds the real ones).
-- **Refactor, NOT untouched** → `permission_policy.py`. It currently imports
-  `EcosystemRecommendation` and `goals permission check` depends on it. The
-  *policy engine* (repo-local-safe / external / destructive, from
-  `permissions.yml`) stays; its **input type** must be decoupled from the
-  ecosystem model.
+- **Trim two orphans** → `permission_policy.py`. The generic policy engine
+  (`decide_permission`) and `goals permission check` are **already decoupled** and
+  stay as-is. Only the two ecosystem-specific wrappers go:
+  `apply_permission_to_recommendation` (used solely by `ecosystem.py`) and
+  `permission_report_for_recommendations` (used solely by one test), plus the
+  `EcosystemRecommendation` import.
 - **Keep** → `permissions.yml`, `gates.yml`, `profiles.yml`, `adapters.yml`,
   `agents.yml` (internal taxonomy/policy, not a vendor catalog).
 - **Removed with no replacement (decided)** → `plugins.yml` + plugin
@@ -39,9 +40,13 @@ every phase; a failed deletion never strands us without `decision-explainer`.
 ---
 
 ## Review findings this revision fixes (evidence)
-1. `permission_policy.py:9,100,121` couples the kept policy engine to
-   `EcosystemRecommendation`; `cli.py:863 permission_check` calls
-   `permission_report_for_recommendations`. → Phase 4 decouples first.
+1. `permission_policy.py:100,121` has two ecosystem-only wrappers
+   (`apply_permission_to_recommendation` → used only by `ecosystem.py`;
+   `permission_report_for_recommendations` → used only by
+   `test_permission_policy.py:101`). `goals permission check` (cli.py:863) uses the
+   **generic** `decide_permission`/`render_permission_report` and is NOT coupled.
+   → Phase 4 just deletes the two orphans + the `EcosystemRecommendation` import;
+   no refactor of the policy engine.
 2. `pyproject.toml:22` packages only `src/goals`; repo-root `skills/` won't ship.
    The registries wheel bug proves the failure mode. → Phase 1 fixes packaging +
    a dual-path resolver.
@@ -122,36 +127,48 @@ through goals. Most users never need it.
   availability. (This is the surface the visual builder reuses.)
 - `goals skills install --target claude|codex|both [--force]` — OPTIONAL. Copy
   `bundled_skills_root()/*` into the chosen dir(s). `--target` required (no
-  interactive default, no nudge). Idempotent (skip identical; `--force`
-  overwrites). Reports installed/skipped.
+  interactive default, no nudge). Idempotent (skip identical). Use
+  `importlib.resources.as_file` when copying so it works from a zipped wheel.
+  **Collision safety:** if a same-named dir already exists at the target and
+  differs from ours, **refuse and warn** (do not clobber a skill we did not
+  create) unless `--force` is passed — overwriting a user's own skill is data
+  loss. Reports installed / skipped / blocked.
 - Keep `cli.py` thin: commands call `skill_discovery` helpers.
 
 **Verify (tests):** `list` shows bundled skills with zero install; `install
---target` writes the chosen dir(s); second run is a no-op; `--force` overwrites;
-installed skills then appear in `list` with the new source.
+--target` writes the chosen dir(s); second run is a no-op; a pre-existing
+*differing* same-named skill is **left untouched** without `--force` (and a
+warning is reported); `--force` overwrites; installed skills then appear in
+`list` with the new source.
 
-## Phase 4 — Retire the catalog (decouple, then delete)
-Order matters — decouple the kept policy engine **before** deleting models.
+## Phase 4 — Retire the catalog (trim orphans, then delete)
 
-1. **Decouple `permission_policy.py`:** drop the `EcosystemRecommendation`
-   import. Make `goals permission check` evaluate a generic subject
-   (kind/name/label/keywords) via the existing `evaluate_permission` core. Remove
-   `apply_permission_to_recommendation` (orphan — only ecosystem used it) and
-   `permission_report_for_recommendations` (or re-express over the generic
-   subject). Keep `permissions.yml` and the policy semantics identical.
+1. **Trim `permission_policy.py` orphans:** delete
+   `apply_permission_to_recommendation` (used only by `ecosystem.py`) and
+   `permission_report_for_recommendations` (used only by one test), then drop the
+   now-unused `EcosystemRecommendation` import. **Do not touch** `decide_permission`,
+   `render_permission_report`, `permissions.yml`, or `goals permission check` —
+   they are already generic and pass arbitrary subjects (kind/name/label/reason).
 2. **`mode_a.py`:** remove `recommended_tools` construction + rendering and the
    hard-coded `goals ecosystem merge` handoff guidance. Drop `recommended_tools`
    from `ModeAPlan` (models.py:710).
 3. **`dashboard.py`:** repoint the panel to live discovery — rename it "Skills,"
    replace `_recommendations_html` with rendering of `discover_skills()` output
-   (same content as `goals skills list`: name, description, source/agent
-   availability). Keep the nav link (relabel to "Skills").
+   (name, description, source/agent availability). Keep the nav link (relabel
+   "Skills"). **Noise guard:** discovery can return 100+ user skills; cap the
+   panel (e.g. show goals' bundled skills in full + a collapsed "+N more from
+   your agent dirs" count) so the read-only dashboard stays scannable.
 4. **`memory.py`:** repoint the "ecosystem" friction area to `goals skills`
    (hint + change text), or rename the area to "skills."
 5. **Delete:** `registries/skills.yml`, `registries/plugins.yml`,
    `src/goals/ecosystem.py`, the `goals ecosystem recommend|merge` CLI, the
    `Ecosystem*` models in `models.py`, and `tests/test_ecosystem.py`.
-6. **Clean** the dangling `gates.yml` → `safety-check.scanners: [...]` ref
+6. **Fix the 3 coupled test files** (they break otherwise, not just
+   `test_ecosystem.py`): `test_permission_policy.py` (remove the
+   `permission_report_for_recommendations` import + test; keep
+   `decide_permission` tests), `test_cli_integration.py` (remove `goals ecosystem`
+   command cases), `test_mode_a.py` (remove `recommended_tools` assertions).
+7. **Clean** the dangling `gates.yml` → `safety-check.scanners: [...]` ref
    (`scanners.py` was deleted earlier).
 
 **Verify:** no dangling imports; `ruff` clean; full `pytest` green;
@@ -183,6 +200,11 @@ list` proof holds.
    render `discover_skills()` output. A goal-scoped "attached skills" view arrives
    later with the visual builder.
 5. **Plugins** → *Decided:* dropped entirely, no replacement.
+6. **Namespace goals' own skills?** → *Recommend* shipping them as
+   `goals-decision-explainer` / `goals-architecture-map` so they never collide
+   with a user's same-named skill on install or in `list`. Runtime collision
+   safety (above) covers the un-prefixed case too, but a prefix avoids the clash
+   structurally and makes provenance obvious. NEEDS A CALL.
 
 ## Definition of done
 Live `SKILL.md` discovery is the only skill mechanism; goals' two native skills
