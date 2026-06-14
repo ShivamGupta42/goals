@@ -9,6 +9,10 @@ from goals.memory import derive_memory_suggestions, load_memory, render_memory_s
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.sources import render_claim_summary, render_source_summary
 from goals.storage import GoalsError
+from goals.user_memory import (
+    build_personalization_context,
+    render_personalization_context,
+)
 
 ModeAAdapter = Literal["auto", "claude", "codex"]
 
@@ -88,6 +92,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     criteria = _bullets(plan.acceptance_criteria)
     checks = _bullets(plan.recommended_checks)
     memory = render_memory_suggestions(plan.memory_suggestions)
+    personalization = _personalization_for_prompt()
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
@@ -142,6 +147,11 @@ Self-evolution memory:
 {memory}
 - To reuse lessons from a similar Goals project, run `goals memory sync PATH` first. It is a dry run by default and imports sanitized suggestions only with `--apply`.
 
+User personalization:
+{personalization}
+- Current explicit user instructions override user memory.
+- User memory can guide wording, recommendations, and reversible low-risk choices only; it must not bypass permission policy or high-risk approvals.
+
 Source evidence:
 {sources}
 
@@ -184,6 +194,7 @@ def _adapter_notes(adapter: Literal["claude", "codex"], ready: bool, detail: str
         return (
             "Claude Mode A notes:\n"
             "- Prefer a narrow context request before broad repository reads.\n"
+            "- If Claude Code `/insights` is useful, run it interactively and import the useful summary with `goals user import-insights --file -`.\n"
             "- For non-interactive dry runs, use `claude -p --safe-mode` with an explicit tool list and a realistic budget.\n"
             "- If permissions block progress, choose a reversible local action first and record the blocker as evidence.\n"
             f"- Adapter check detail: {detail if detail else ('ready' if ready else 'not confirmed')}"
@@ -191,10 +202,18 @@ def _adapter_notes(adapter: Literal["claude", "codex"], ready: bool, detail: str
     return (
         "Codex Mode A notes:\n"
         "- Use the native `/goal` loop when the local Codex goals feature is enabled.\n"
+        "- Use `goals user show` and current session notes for user preferences; do not assume a native Codex `/insights` command exists.\n"
         "- Keep the plan updated during substantial work and summarize checks after each phase.\n"
         "- If the Codex goals feature is unavailable, paste this prompt into the current Codex session and keep Goals as the state layer.\n"
         f"- Adapter check detail: {detail if detail else ('ready' if ready else 'not confirmed')}"
     )
+
+
+def _personalization_for_prompt() -> str:
+    try:
+        return render_personalization_context(build_personalization_context())
+    except GoalsError as exc:
+        return f"- User memory unavailable: {exc}"
 
 
 def _bullets(items: list[str]) -> str:

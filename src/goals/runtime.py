@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -7,8 +8,10 @@ from goals.architecture import architecture_for_snapshot, render_architecture_ma
 from goals.checkpoints import phase_checkpoint_blockers
 from goals.dashboard import render_dashboard
 from goals.git_ops import (
+    DEFAULT_BRANCHES,
     create_worktree,
     current_branch,
+    find_git_root,
     git_path,
     git_root,
     goal_worktrees,
@@ -79,6 +82,53 @@ def default_phases(objective: str) -> list[Phase]:
     ]
 
 
+Workspace = Literal["auto", "worktree", "in_place"]
+
+
+@dataclass
+class WorkspacePlan:
+    """Resolved decision for where a goal's work happens."""
+
+    mode: Literal["worktree", "in_place"]
+    repo: Path
+    is_git: bool
+    base_branch: str
+    #: True only for `auto` on a feature branch — the caller may prompt to offer
+    #: in-place vs worktree. On a default branch the choice is forced (worktree).
+    ambiguous: bool
+
+
+def resolve_workspace(
+    base: Path, *, requested: Workspace = "auto", new_project_created: bool = False
+) -> WorkspacePlan:
+    """Decide worktree vs in-place vs non-git, pure (no side effects).
+
+    Policy:
+    - **Non-git directory** → in-place (full non-git support); no isolation.
+    - **Default branch (main/master)** → always a worktree; goals never modifies
+      the base checkout. Any `--in-place` request is overridden here.
+    - **Feature branch** → honor `--worktree`/`--in-place`; `auto` defaults to a
+      worktree and flags `ambiguous` so an interactive caller can offer a choice.
+    - **Freshly created `--new` project** → worktree unless `in_place` requested.
+    """
+    git = find_git_root(base)
+    if git is None:
+        return WorkspacePlan("in_place", base.resolve(), False, "", False)
+    branch = current_branch(git)
+    # Protected-branch guard FIRST so nothing (incl. --new --in-place, since a
+    # fresh repo starts on a default branch) can work in place on main/master.
+    if branch in DEFAULT_BRANCHES:
+        return WorkspacePlan("worktree", git, True, branch, False)
+    if new_project_created:
+        mode = "in_place" if requested == "in_place" else "worktree"
+        return WorkspacePlan(mode, git, True, branch, False)
+    if requested == "worktree":
+        return WorkspacePlan("worktree", git, True, branch, False)
+    if requested == "in_place":
+        return WorkspacePlan("in_place", git, True, branch, False)
+    return WorkspacePlan("worktree", git, True, branch, True)  # auto → worktree, prompt-able
+
+
 def create_goal(
     objective: str,
     cwd: Path,
@@ -86,19 +136,35 @@ def create_goal(
     autonomy: str = "standard",
     why: str = "",
     new_project: Path | None = None,
+    workspace: Workspace = "auto",
 ) -> GoalSnapshot:
-    repo = _ensure_repo(cwd, new_project)
-    require_clean_repo(repo)
-    if not has_commits(repo):
-        raise GoalsError(
-            "Repository has no commits. Create an initial commit before creating a goal."
-        )
-    base_branch = current_branch(repo)
+    base = _ensure_repo(cwd, new_project) if new_project is not None else cwd
+    plan = resolve_workspace(base, requested=workspace, new_project_created=new_project is not None)
     goal_id = slugify(objective)
-    worktree, branch = create_worktree(repo, goal_id, objective)
+    if plan.mode == "in_place":
+        existing = _existing_goal_ids(plan.repo)
+        # In-place is one goal per repo root. Refuse ANY existing goal here —
+        # including a same-id slug collision (two different objectives that
+        # slugify alike), which would otherwise append a second goal_created
+        # event into the first goal's log and silently discard this objective.
+        if existing:
+            raise GoalsError(
+                f"A goal is already active here ({', '.join(existing)}). Finish it, "
+                "or run the new goal in its own worktree with `--worktree` "
+                "(worktrees are how you run several goals at once)."
+            )
+    if plan.mode == "worktree":
+        require_clean_repo(plan.repo)
+        if not has_commits(plan.repo):
+            raise GoalsError(
+                "Repository has no commits. Create an initial commit before creating a goal."
+            )
+        worktree, branch = create_worktree(plan.repo, goal_id, objective)
+    else:
+        worktree, branch = plan.repo, plan.base_branch
     lease = WorktreeLease(
-        base_repo=str(repo),
-        base_branch=base_branch,
+        base_repo=str(plan.repo),
+        base_branch=plan.base_branch,
         worktree_path=str(worktree),
         branch=branch,
     )
@@ -117,7 +183,7 @@ def create_goal(
         current_phase="P1",
         last_updated=utc_now(),
     )
-    goal_dir = worktree / ".agent-workflow" / "goals" / goal_id
+    goal_dir = Path(worktree) / ".agent-workflow" / "goals" / goal_id
     store = EventStore(goal_dir)
     store.append(
         Event(
@@ -126,27 +192,54 @@ def create_goal(
             payload={"snapshot": snapshot.model_dump()},
         )
     )
-    write_workflow_gitignore(repo)
-    write_workflow_gitignore(worktree)
+    if plan.is_git:
+        write_workflow_gitignore(plan.repo)
+        if Path(worktree) != plan.repo:
+            write_workflow_gitignore(worktree)
     return store.snapshot()
 
 
 def active_goal_dir(cwd: Path) -> Path:
-    repo = git_root(cwd)
+    # Fall back to cwd when not in a git repo, so non-git in-place goals resolve.
+    repo = find_git_root(cwd) or cwd.resolve()
     goals_dir = repo / ".agent-workflow" / "goals"
     goals = sorted(p for p in goals_dir.iterdir() if p.is_dir()) if goals_dir.exists() else []
     if not goals:
         raise GoalsError("No active goal in this directory." + _goal_location_hint(repo))
     if len(goals) > 1:
         active = [p for p in goals if (p / "goal.json").exists()]
+        if not active:
+            names = ", ".join(p.name for p in goals)
+            raise GoalsError(f"No readable goal among ({names}). Run `goals repair`.")
         if len(active) == 1:
             return active[0]
-        names = ", ".join(p.name for p in goals)
-        raise GoalsError(
-            f"Multiple goals found here ({names}). cd into the specific goal's "
-            "worktree and re-run."
-        )
+        # Several goals share this directory (in-place goals). Act on the most
+        # recently updated rather than bricking; creating a second in-place goal
+        # is refused at start, so this is rare and resilient by design.
+        return max(active, key=_goal_updated_at)
     return goals[0]
+
+
+def _existing_goal_ids(repo: Path) -> list[str]:
+    goals_dir = repo / ".agent-workflow" / "goals"
+    if not goals_dir.is_dir():
+        return []
+    return sorted(p.name for p in goals_dir.iterdir() if p.is_dir() and (p / "goal.json").exists())
+
+
+def _goal_updated_at(goal_dir: Path) -> str:
+    """Sort key for picking the active goal: the snapshot's last_updated.
+
+    Falls back to the file mtime if the snapshot can't be read, so resolution
+    never crashes on a malformed goal.json.
+    """
+    state = goal_dir / "goal.json"
+    try:
+        import json
+
+        return str(json.loads(state.read_text(encoding="utf-8")).get("last_updated", ""))
+    except (OSError, ValueError):
+        return ""
 
 
 def _goal_location_hint(repo: Path) -> str:
@@ -211,10 +304,20 @@ def claim_worktree(cwd: Path) -> WorktreeLease:
     lease = snapshot.topology
     worktree = Path(lease.worktree_path)
     if not worktree.exists():
-        raise GoalsError(f"Worktree missing: {worktree}")
+        raise GoalsError(
+            f"Goal workspace missing: {worktree}. It was moved or removed; "
+            "recreate the goal or run from the correct path."
+        )
+    # Non-git in-place goals (no branch) and dirs that are no longer git repos
+    # have no branch to verify — the path existing is the only invariant.
+    if not lease.branch or find_git_root(worktree) is None:
+        return lease
     branch = current_branch(worktree)
     if branch != lease.branch:
-        raise GoalsError(f"Expected branch {lease.branch}, found {branch}.")
+        raise GoalsError(
+            f"Expected branch {lease.branch}, found {branch}. "
+            f"`git switch {lease.branch}` (or cd into the goal's worktree)."
+        )
     return lease
 
 

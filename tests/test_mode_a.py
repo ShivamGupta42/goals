@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from goals.mode_a import build_mode_a_plan
-from goals.models import GoalSnapshot, WorktreeLease
+from goals.models import GoalSnapshot, UserMemoryEvent, WorktreeLease
 from goals.runtime import default_phases
+from goals.user_memory import append_user_event
 
 
 def snapshot_for(tmp_path: Path) -> GoalSnapshot:
@@ -25,6 +26,17 @@ def snapshot_for(tmp_path: Path) -> GoalSnapshot:
 
 
 def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    append_user_event(
+        UserMemoryEvent(
+            kind="manual",
+            area="communication",
+            summary="Prefer concise explanations.",
+            source="manual",
+            confidence=0.9,
+        )
+    )
+
     def fake_adapter_check(name: str) -> tuple[bool, str]:
         return name == "claude", f"{name} detail"
 
@@ -50,6 +62,10 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Self-evolution memory:" in plan.prompt
     assert "goals memory sync" in plan.prompt
     assert "goals memory record" in plan.prompt
+    assert "User personalization:" in plan.prompt
+    assert "Prefer concise explanations" in plan.prompt
+    assert "/insights" in plan.prompt
+    assert "goals user import-insights --file -" in plan.prompt
     assert "Source evidence:" in plan.prompt
     assert "goals source add" in plan.prompt
     assert "goals source freshness" in plan.prompt
@@ -62,9 +78,12 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
 
 
 def test_build_mode_a_plan_can_target_codex_when_not_ready(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
     monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (False, "feature disabled"))
     plan = build_mode_a_plan(snapshot_for(tmp_path), "codex")
     assert plan.adapter == "codex"
     assert plan.adapter_ready is False
     assert "Codex Mode A notes" in plan.prompt
+    assert "goals user show" in plan.prompt
+    assert "do not assume a native Codex `/insights` command exists" in plan.prompt
     assert "feature disabled" in plan.prompt

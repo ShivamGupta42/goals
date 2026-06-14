@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
 
 from goals.adapters import adapter_check
+from goals.agent_hooks import session_start_payload, stop_payload
 from goals.architecture import (
     analyze_code_architecture,
     architecture_for_snapshot,
@@ -48,6 +50,8 @@ from goals.loop_check import (
     render_fix_summary,
     render_loop_check_report,
 )
+from goals.diagram import render_architecture as render_architecture_diagram
+from goals.diagram import render_loop as render_loop_diagram
 from goals.loop_improve import (
     apply_loop_improvements,
     log_phase_regression,
@@ -66,6 +70,7 @@ from goals.models import (
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    GoalStatus,
     JudgementRecord,
     Phase,
     PermissionPolicyReport,
@@ -73,10 +78,12 @@ from goals.models import (
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
+    UserMemoryEvent,
     utc_now,
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
+from goals.setup import render_setup_report, setup_agents
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -84,6 +91,7 @@ from goals.runtime import (
     emit_architecture,
     emit_dashboard,
     load_active_snapshot,
+    resolve_workspace,
     run_gate,
     transition_phase,
 )
@@ -97,6 +105,7 @@ from goals.portability import (
     CONTEXT_TARGETS,
     emit_native_goal,
     export_goal,
+    render_context_block,
     render_context_sync,
     render_export,
     render_native_goal_emission,
@@ -109,6 +118,18 @@ from goals.skill_discovery import (
     render_skills_list,
 )
 from goals.storage import EventStore, GoalsError, atomic_write_text
+from goals.user_memory import (
+    INTERVIEW_QUESTIONS,
+    append_user_event,
+    build_personalization_context,
+    events_from_insights,
+    forget_claim,
+    load_user_memory,
+    mark_interview_prompted,
+    record_interview_answers,
+    render_post_goal_interview,
+    render_user_memory,
+)
 from goals.workflows import (
     check_workflow,
     next_workflow,
@@ -125,12 +146,14 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
+hooks_app = typer.Typer(help="Emit Claude Code plugin hook payloads.")
 loop_app = typer.Typer(help="Visually build, check, and improve goal loops.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
 skills_app = typer.Typer(help="Discover and install skills from agent dirs.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
+user_app = typer.Typer(help="Record and inspect private global user memory.")
 
 
 def _handle(fn):
@@ -153,10 +176,30 @@ def start(
     autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
     why: str = typer.Option("", help="Plain-language reason this goal matters."),
     new: Optional[Path] = typer.Option(None, help="Create a new minimal project first."),
+    worktree: bool = typer.Option(
+        False, "--worktree", help="Force an isolated worktree (best for several goals at once)."
+    ),
+    in_place: bool = typer.Option(
+        False, "--in-place", help="Work on the current branch (ignored on main/master)."
+    ),
 ) -> None:
     """Start a goal and show the shortest next steps."""
 
     def run():
+        if worktree and in_place:
+            raise GoalsError("Choose either --worktree or --in-place, not both.")
+        requested = "worktree" if worktree else "in_place" if in_place else "auto"
+        # On a feature branch with no explicit choice, offer the worktree-vs-in-place
+        # decision interactively; non-interactive callers (agents) get the safe default.
+        if requested == "auto" and new is None and sys.stdin.isatty():
+            plan = resolve_workspace(Path.cwd(), requested="auto")
+            if plan.ambiguous:
+                answer = typer.prompt(
+                    f"On branch '{plan.base_branch}'. Isolate this goal in a worktree "
+                    "(recommended for parallel goals) or work in place? [worktree/in-place]",
+                    default="worktree",
+                )
+                requested = "in_place" if answer.strip().lower().startswith("in") else "worktree"
         report = start_workflow(
             objective,
             Path.cwd(),
@@ -164,6 +207,7 @@ def start(
             autonomy=autonomy,
             why=why,
             new_project=new,
+            workspace=requested,
         )
         typer.echo(render_start_workflow(report))
 
@@ -195,12 +239,31 @@ def check(
         "--strict",
         help="Exit non-zero when the combined check needs attention.",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
     """Run the main read-only goal health checks in one command."""
 
     def run():
         report = check_workflow(Path.cwd())
-        typer.echo(render_check_workflow(report))
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    {
+                        "goal_id": report.snapshot.goal_id,
+                        "passed": report.passed,
+                        "brief": report.brief.model_dump(mode="json"),
+                        "issues": report.issues.model_dump(mode="json"),
+                        "checkpoint": (
+                            report.checkpoint.model_dump(mode="json")
+                            if report.checkpoint
+                            else None
+                        ),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo(render_check_workflow(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
@@ -284,12 +347,14 @@ app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced b
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
+app.add_typer(hooks_app, name="hooks", rich_help_panel="Portability")
 app.add_typer(loop_app, name="loop", rich_help_panel="Simple workflow")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
 app.add_typer(skills_app, name="skills", rich_help_panel="Portability")
 app.add_typer(source_app, name="source", rich_help_panel="Advanced building blocks")
+app.add_typer(user_app, name="user", rich_help_panel="Advanced building blocks")
 
 
 @app.command(rich_help_panel="Advanced building blocks")
@@ -319,15 +384,66 @@ def create(
 
 
 @app.command(rich_help_panel="Advanced building blocks")
-def status() -> None:
+def status(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
     """Show the active goal status."""
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    {
+                        "goal_id": snapshot.goal_id,
+                        "objective": snapshot.objective,
+                        "status": str(snapshot.status),
+                        "current_phase": snapshot.current_phase,
+                        "event_count": snapshot.event_count,
+                    },
+                    indent=2,
+                )
+            )
+            return
         typer.echo(f"Goal: {snapshot.objective}")
         typer.echo(f"Status: {snapshot.status}")
         typer.echo(f"Current phase: {snapshot.current_phase or 'none'}")
         typer.echo(f"Events: {snapshot.event_count}")
+
+    _handle(run)
+
+
+@context_app.command("show")
+def context_show(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Print the active goal's context block (for agent session hooks)."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if not json_output:
+            typer.echo(render_context_block(snapshot))
+            return
+        brief = build_goal_brief(snapshot)
+        current = next(
+            (p for p in snapshot.phases if p.phase_id == snapshot.current_phase), None
+        )
+        typer.echo(
+            json.dumps(
+                {
+                    "goal_id": snapshot.goal_id,
+                    "objective": snapshot.objective,
+                    "status": str(snapshot.status),
+                    "current_phase": snapshot.current_phase,
+                    "phase_title": current.title if current else None,
+                    "acceptance_criteria": list(current.acceptance_criteria) if current else [],
+                    "waiting_on": brief.waiting_on,
+                    "worktree_path": snapshot.topology.worktree_path,
+                    "next_step": brief.current_step,
+                },
+                indent=2,
+            )
+        )
 
     _handle(run)
 
@@ -829,6 +945,124 @@ def memory_sync(
     _handle(run)
 
 
+@user_app.command("show")
+def user_show(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show private global user memory."""
+
+    def run():
+        memory = load_user_memory()
+        if json_output:
+            typer.echo(memory.model_dump_json(indent=2))
+        else:
+            typer.echo(render_user_memory(memory))
+
+    _handle(run)
+
+
+@user_app.command("record")
+def user_record(
+    preference: str,
+    area: str = typer.Option(
+        "decision",
+        help="risk, communication, workflow, technical, decision, or other.",
+    ),
+    confidence: float = typer.Option(0.95, "--confidence", min=0.0, max=1.0),
+) -> None:
+    """Record an explicit user preference in private global memory."""
+
+    def run():
+        event = UserMemoryEvent(
+            kind="manual",
+            area=_user_area(area),  # type: ignore[arg-type]
+            summary=preference,
+            source="manual",
+            confidence=confidence,
+        )
+        memory = append_user_event(event)
+        typer.echo(f"Recorded user memory event: {event.event_id}")
+        active = [claim for claim in memory.claims if claim.status == "active"]
+        if active:
+            typer.echo(render_user_memory(memory))
+
+    _handle(run)
+
+
+@user_app.command("import-insights")
+def user_import_insights(
+    file: Path = typer.Option(..., "--file", "-f", help="Read Claude /insights text from a file, or '-' for stdin."),
+    area: str = typer.Option(
+        "decision",
+        help="risk, communication, workflow, technical, decision, or other.",
+    ),
+) -> None:
+    """Import a Claude Code /insights summary as candidate user memory."""
+
+    def run():
+        text = sys.stdin.read() if str(file) == "-" else file.read_text(encoding="utf-8")
+        events = events_from_insights(text, area=_user_area(area))  # type: ignore[arg-type]
+        if not events:
+            raise GoalsError("No usable insight statements found.")
+        memory = None
+        for event in events:
+            memory = append_user_event(event)
+        typer.echo(f"Imported {len(events)} user memory candidate(s) from Claude insights.")
+        if memory is not None:
+            typer.echo(render_user_memory(memory))
+
+    _handle(run)
+
+
+@user_app.command("interview")
+def user_interview(
+    goal: str = typer.Option("current", "--goal", help="'current' or a goal id."),
+    answers: Optional[list[str]] = typer.Option(
+        None,
+        "--answer",
+        "-a",
+        help="Interview answer. Repeat exactly three times.",
+    ),
+) -> None:
+    """Record the three-question post-goal personalization interview."""
+
+    def run():
+        goal_id = _resolve_user_goal_id(goal)
+        collected = list(answers or [])
+        if not collected and sys.stdin.isatty():
+            collected = [typer.prompt(question) for question in INTERVIEW_QUESTIONS]
+        event = record_interview_answers(goal_id, collected)
+        memory = append_user_event(event)
+        typer.echo(f"Recorded post-goal user interview: {event.event_id}")
+        typer.echo(render_user_memory(memory))
+
+    _handle(run)
+
+
+@user_app.command("forget")
+def user_forget(
+    claim_id: Optional[str] = typer.Argument(None, help="Claim id to forget."),
+    all_claims: bool = typer.Option(False, "--all", help="Forget all user-memory claims."),
+    purge: bool = typer.Option(False, "--purge", help="Delete user memory files when used with --all."),
+) -> None:
+    """Deactivate or purge private user-memory claims."""
+
+    def run():
+        if all_claims:
+            memory = forget_claim("--all", purge=purge)
+            typer.echo("Forgot all user-memory claims." if not purge else "Purged user memory.")
+            if not purge:
+                typer.echo(render_user_memory(memory))
+            return
+        if not claim_id:
+            raise GoalsError("Provide a claim id, or use --all.")
+        memory = forget_claim(claim_id)
+        typer.echo(f"Forgot user-memory claim: {claim_id}")
+        typer.echo(render_user_memory(memory))
+
+    _handle(run)
+
+
 @permission_app.command("check")
 def permission_check(
     name: str = typer.Argument(..., help="Tool, command, or action being considered."),
@@ -1019,7 +1253,7 @@ def decision_explain(
         if level not in {"basic", "detailed", "technical"}:
             raise GoalsError("level must be basic, detailed, or technical.")
         snapshot = load_active_snapshot(Path.cwd())
-        context = build_decision_context(snapshot)
+        context = build_decision_context(snapshot, _personalization_or_none())
         decision = Decision.model_validate_json(file.read_text(encoding="utf-8"))
         if not decision.suggested_reply:
             decision.suggested_reply = f"I choose: {decision.recommendation}"
@@ -1049,6 +1283,13 @@ def decision_record(
     phase: Optional[str] = typer.Option(
         None, "--phase", help="Phase this decision belongs to (e.g. P2)."
     ),
+    evidence: Optional[list[str]] = typer.Option(
+        None, "--evidence", help="Evidence reference. Repeat for multiple refs."
+    ),
+    profile_claim: Optional[list[str]] = typer.Option(
+        None, "--profile-claim", help="User-memory claim id used for this decision."
+    ),
+    confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
 ) -> None:
     """Record a decision the user (or agent) made, building the judgement log.
 
@@ -1066,6 +1307,9 @@ def decision_record(
             decided_by=_validate_choice(by, {"user", "agent"}, "by"),  # type: ignore[arg-type]
             reversible=reversible,
             phase_id=phase,
+            evidence_refs=evidence or [],
+            profile_claim_ids=profile_claim or [],
+            confidence=confidence,
         )
         append_event(
             Path.cwd(),
@@ -1075,6 +1319,7 @@ def decision_record(
                 payload={"judgement": record.model_dump()},
             ),
         )
+        _maybe_record_user_judgement_signal(snapshot.goal_id, record)
         typer.echo(f"Recorded decision: {record.judgement_id}")
 
     _handle(run)
@@ -1088,7 +1333,7 @@ def decision_brief(
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        brief = build_decision_brief(snapshot)
+        brief = build_decision_brief(snapshot, _personalization_or_none())
         if json_output:
             typer.echo(brief.model_dump_json(indent=2))
         else:
@@ -1123,6 +1368,50 @@ def _validate_choice(value: str, choices: set[str], label: str) -> str:
     if value not in choices:
         raise GoalsError(f"{label} must be one of: {', '.join(sorted(choices))}")
     return value
+
+
+def _user_area(value: str) -> str:
+    return _validate_choice(
+        value,
+        {"risk", "communication", "workflow", "technical", "decision", "other"},
+        "area",
+    )
+
+
+def _resolve_user_goal_id(goal: str) -> str:
+    if goal != "current":
+        return goal
+    snapshot = _optional_snapshot(Path.cwd())
+    return snapshot.goal_id if snapshot is not None else ""
+
+
+def _personalization_or_none():
+    try:
+        return build_personalization_context()
+    except GoalsError as exc:
+        typer.echo(f"User memory warning: {exc}", err=True)
+        return None
+
+
+def _maybe_record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> None:
+    if record.decided_by != "user":
+        return
+    summary = f"For '{record.question}', the user chose '{record.choice}'."
+    if record.rationale:
+        summary += f" Rationale: {record.rationale}"
+    try:
+        append_user_event(
+            UserMemoryEvent(
+                kind="judgement",
+                area="decision",
+                summary=summary,
+                source="judgement",
+                goal_id=goal_id,
+                confidence=record.confidence or 0.5,
+            )
+        )
+    except GoalsError as exc:
+        typer.echo(f"User memory warning: {exc}", err=True)
 
 
 @phase_app.command("start")
@@ -1185,8 +1474,14 @@ def phase_accept(phase_id: str) -> None:
     """Accept a reviewed phase."""
 
     def run():
-        transition_phase(Path.cwd(), phase_id, "accept")
+        snapshot = transition_phase(Path.cwd(), phase_id, "accept")
         typer.echo(f"Accepted phase {phase_id}")
+        if snapshot.status == GoalStatus.COMPLETE:
+            try:
+                if mark_interview_prompted(snapshot.goal_id):
+                    typer.echo(render_post_goal_interview(snapshot.goal_id))
+            except GoalsError as exc:
+                typer.echo(f"User memory warning: {exc}", err=True)
 
     _handle(run)
 
@@ -1361,6 +1656,66 @@ def loop_improve(
         else:
             plan = plan_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
         typer.echo(render_loop_improvement_plan(plan))
+
+    _handle(run)
+
+
+@hooks_app.command("session-start")
+def hooks_session_start() -> None:
+    """Emit the SessionStart payload (active goal context) for the plugin hook."""
+    typer.echo(session_start_payload(Path.cwd()), nl=False)
+
+
+@hooks_app.command("stop")
+def hooks_stop() -> None:
+    """Emit the Stop payload (opt-in phase gate via GOALS_ENFORCE)."""
+    typer.echo(stop_payload(Path.cwd()), nl=False)
+
+
+@app.command(rich_help_panel="Portability")
+def setup(
+    agent: str = typer.Option(..., "--agent", help="Wire up: claude, codex, or both."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying."),
+) -> None:
+    """One command to make goals work inside Claude Code and/or Codex."""
+
+    def run():
+        choice = _validate_choice(agent, {"claude", "codex", "both"}, "agent")
+        targets = ["claude", "codex"] if choice == "both" else [choice]
+        report = setup_agents(targets, dry_run=dry_run)
+        typer.echo(render_setup_report(report))
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def diagram(
+    source: str = typer.Option(
+        "architecture", "--source", help="What to diagram: architecture or loop."
+    ),
+    fmt: str = typer.Option("mermaid", "--format", help="Output format: mermaid or excalidraw."),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Write to a file instead of stdout."
+    ),
+) -> None:
+    """Generate a clean diagram of the goal architecture or designed loop."""
+
+    def run():
+        src = _validate_choice(source, {"architecture", "loop"}, "source")
+        fmt_choice = _validate_choice(fmt, {"mermaid", "excalidraw"}, "format")
+        if src == "architecture":
+            snapshot = load_active_snapshot(Path.cwd())
+            content = render_architecture_diagram(
+                architecture_for_snapshot(snapshot), fmt=fmt_choice
+            )
+        else:
+            design = load_design(Path.cwd() / ".goals")
+            content = render_loop_diagram(design, fmt=fmt_choice)
+        if out is not None:
+            atomic_write_text(out, content)
+            typer.echo(f"Wrote {out}")
+        else:
+            typer.echo(content)
 
     _handle(run)
 

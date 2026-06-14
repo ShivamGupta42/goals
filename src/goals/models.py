@@ -201,6 +201,7 @@ class DecisionContext(BaseModel):
     source_claims: list[str] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     learnings: list[str] = Field(default_factory=list)
+    personalization: "PersonalizationContext | None" = None
 
 
 class DecisionExplanation(BaseModel):
@@ -377,7 +378,79 @@ class JudgementRecord(BaseModel):
     decided_by: Literal["user", "agent"] = "user"
     reversible: bool = True
     phase_id: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    profile_claim_ids: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
     recorded_at: str = Field(default_factory=utc_now)
+
+
+UserPreferenceArea = Literal[
+    "risk",
+    "communication",
+    "workflow",
+    "technical",
+    "decision",
+    "other",
+]
+
+
+class UserMemoryEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(default_factory=lambda: f"UME-{uuid4().hex[:8]}")
+    kind: Literal[
+        "manual",
+        "interview",
+        "insights",
+        "judgement",
+        "interview_prompted",
+        "forget",
+    ]
+    area: UserPreferenceArea = "other"
+    summary: str = ""
+    source: Literal[
+        "manual",
+        "post_goal_interview",
+        "claude_insights",
+        "judgement",
+        "system",
+    ] = "manual"
+    goal_id: str = ""
+    confidence: float = 0.5
+    target_claim_id: str = ""
+    details: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=utc_now)
+
+
+class UserPreferenceClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    area: UserPreferenceArea = "other"
+    statement: str
+    confidence: float = 0.0
+    evidence_event_ids: list[str] = Field(default_factory=list)
+    status: Literal["candidate", "active", "inactive", "forgotten"] = "candidate"
+    updated_at: str = Field(default_factory=utc_now)
+
+
+class UserMemory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    claims: list[UserPreferenceClaim] = Field(default_factory=list)
+    prompted_goal_ids: list[str] = Field(default_factory=list)
+    interviewed_goal_ids: list[str] = Field(default_factory=list)
+    updated_at: str = Field(default_factory=utc_now)
+
+
+class PersonalizationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = ""
+    claim_ids: list[str] = Field(default_factory=list)
+    guidance: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
 
 
 class SourceFreshnessFinding(BaseModel):
@@ -699,6 +772,7 @@ class GoalSnapshot(BaseModel):
 
 
 Phase.model_rebuild()
+DecisionContext.model_rebuild()
 
 
 class PortableExport(BaseModel):

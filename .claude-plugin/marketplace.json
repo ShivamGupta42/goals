@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "goals",
+  "version": "0.1.0",
+  "description": "Self-hosted marketplace for the goals plugin.",
+  "owner": { "name": "Shivam Gupta" },
+  "plugins": [
+    {
+      "name": "goals",
+      "description": "Durable, reviewable goal loops inside Claude Code — phases, evidence, review gates, diagrams.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ from goals.portability import (
     _replace_block,
 )
 from goals.runtime import default_phases
+from goals.models import UserMemoryEvent
+from goals.user_memory import append_user_event
 
 
 def snapshot_for(tmp_path: Path) -> GoalSnapshot:
@@ -41,6 +43,26 @@ def test_build_portable_state_is_sanitized(tmp_path: Path) -> None:
     assert state["current_phase"] == "P1"
     assert state["phases"], "phases should be exported"
     assert all("acceptance_criteria" in phase for phase in state["phases"])
+
+
+def test_portable_state_excludes_user_memory(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    append_user_event(
+        UserMemoryEvent(
+            kind="manual",
+            area="communication",
+            summary="Prefer unusually specific private wording.",
+            source="manual",
+            confidence=0.95,
+        )
+    )
+
+    state = build_portable_state(snapshot_for(tmp_path))
+    rendered = render_goal_markdown(snapshot_for(tmp_path))
+    payload = json.dumps(state) + rendered
+
+    assert "unusually specific private wording" not in payload
+    assert "user memory" not in payload.lower()
 
 
 def test_render_goal_markdown_marks_current_phase(tmp_path: Path) -> None:

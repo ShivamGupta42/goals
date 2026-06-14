@@ -88,15 +88,28 @@ def test_goal_worktrees_handles_paths_with_spaces(tmp_path: Path) -> None:
     assert worktree.resolve() in [p.resolve() for p in goal_worktrees(base)]
 
 
-def test_multiple_goals_message_names_them(tmp_path: Path) -> None:
+def test_unreadable_multiple_goals_message_names_them(tmp_path: Path) -> None:
+    # Goal dirs with no goal.json are corrupt; the error names them + points to repair.
     _init_repo(tmp_path)
     for name in ("alpha", "beta"):
         (tmp_path / ".agent-workflow" / "goals" / name).mkdir(parents=True)
     with pytest.raises(GoalsError) as exc:
         active_goal_dir(tmp_path)
     message = str(exc.value)
-    assert "Multiple goals found here" in message
+    assert "No readable goal" in message
     assert "alpha" in message and "beta" in message
+
+
+def test_multiple_in_place_goals_resolve_to_most_recent(tmp_path: Path) -> None:
+    # Several valid in-place goals in one dir resolve to the most recently updated
+    # instead of bricking.
+    _init_repo(tmp_path)
+    goals_root = tmp_path / ".agent-workflow" / "goals"
+    for name, updated in (("old", "2026-01-01T00:00:00+00:00"), ("new", "2026-06-01T00:00:00+00:00")):
+        d = goals_root / name
+        d.mkdir(parents=True)
+        (d / "goal.json").write_text(f'{{"last_updated": "{updated}"}}')
+    assert active_goal_dir(tmp_path).name == "new"
 
 
 def test_dirty_tree_message_states_the_fix(tmp_path: Path) -> None:

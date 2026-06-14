@@ -1,8 +1,10 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
-from goals.models import Event, EventType
+from goals.models import Event, EventType, Evidence, GateResult, GateVerdict, GoalSnapshot, Phase, WorktreeLease
+from goals.storage import EventStore
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -14,6 +16,22 @@ def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 def run_unchecked(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+    )
+
+
+def run_with_env(
+    cmd: list[str], cwd: Path, env: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    merged = os.environ.copy()
+    merged.update(env)
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+        env=merged,
     )
 
 
@@ -35,6 +53,47 @@ def init_repo(path: Path) -> None:
         (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
     run(["git", "add", "README.md", "LICENSE", "registries"], path)
     run(["git", "commit", "-m", "init"], path)
+
+
+def test_final_phase_accept_prints_user_interview_once(tmp_path: Path) -> None:
+    goal_dir = tmp_path / ".agent-workflow" / "goals" / "demo"
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Finish tiny goal",
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="",
+            worktree_path=str(tmp_path),
+            branch="",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Only phase",
+                goal="Finish",
+                evidence=Evidence(checks_run=["manual"], acceptance_met=["done"], confidence=0.9),
+                reviews=[
+                    GateResult(gate_id="phase-review", verdict=GateVerdict.PASS, summary="ok")
+                ],
+            )
+        ],
+        current_phase="P1",
+    )
+    EventStore(goal_dir).append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    env = {"GOALS_HOME": str(tmp_path / "goals-home")}
+
+    first = run_with_env(["python", "-m", "goals.cli", "phase", "accept", "P1"], tmp_path, env)
+    second = run_with_env(["python", "-m", "goals.cli", "phase", "accept", "P1"], tmp_path, env)
+
+    assert "Post-goal personalization interview" in first.stdout
+    assert "goals user interview --goal demo" in first.stdout
+    assert "Post-goal personalization interview" not in second.stdout
 
 
 def test_create_status_dashboard_validate(tmp_path: Path) -> None:

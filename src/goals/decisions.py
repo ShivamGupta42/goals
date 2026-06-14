@@ -10,6 +10,7 @@ from goals.models import (
     DecisionExplanation,
     DecisionOption,
     GoalSnapshot,
+    PersonalizationContext,
     PhaseStatus,
 )
 
@@ -44,7 +45,10 @@ def explain_decision(
     return decision
 
 
-def build_decision_context(snapshot: GoalSnapshot) -> DecisionContext:
+def build_decision_context(
+    snapshot: GoalSnapshot,
+    personalization: PersonalizationContext | None = None,
+) -> DecisionContext:
     checks: list[str] = []
     changed_files: list[str] = []
     known_gaps: list[str] = []
@@ -74,6 +78,7 @@ def build_decision_context(snapshot: GoalSnapshot) -> DecisionContext:
         ),
         blockers=_dedupe(snapshot.blockers),
         learnings=_dedupe(snapshot.learnings),
+        personalization=personalization,
     )
 
 
@@ -99,8 +104,11 @@ def render_decision_explanation(
     )
 
 
-def build_decision_brief(snapshot: GoalSnapshot) -> DecisionBrief:
-    context = build_decision_context(snapshot)
+def build_decision_brief(
+    snapshot: GoalSnapshot,
+    personalization: PersonalizationContext | None = None,
+) -> DecisionBrief:
+    context = build_decision_context(snapshot, personalization)
     user_decisions: list[DecisionBriefItem] = []
     agent_handled_count = 0
     for decision in snapshot.decisions:
@@ -205,6 +213,10 @@ def context_summary(context: DecisionContext) -> list[str]:
         summary.append(f"Known gaps: {', '.join(context.known_gaps[:4])}")
     if context.source_claims:
         summary.append(f"Source-backed claims: {', '.join(context.source_claims[:4])}")
+    if context.personalization and context.personalization.guidance:
+        summary.append(
+            "User memory: " + "; ".join(context.personalization.guidance[:3])
+        )
     return summary
 
 
@@ -214,6 +226,8 @@ def evidence_refs(context: DecisionContext) -> list[str]:
     refs.extend([f"check:{check}" for check in context.checks_run])
     refs.extend([f"file:{path}" for path in context.changed_files])
     refs.extend([f"source:{claim}" for claim in context.source_claims])
+    if context.personalization:
+        refs.extend([f"profile:{claim_id}" for claim_id in context.personalization.claim_ids])
     return refs
 
 
