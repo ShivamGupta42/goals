@@ -37,6 +37,9 @@ LOW_CONFIDENCE = 0.5
 _MEM_SEVERITY = {"p0": "high", "p1": "medium", "p2": "low"}
 # Memory areas whose lessons point at the loop's shape rather than execution.
 _LOOP_DESIGN_AREAS = {"phase", "gate"}
+# Review verdicts that must surface to the user, not defer — a blocked or
+# needs-human review is the same severity class as an itemized P0.
+_BLOCKING_VERDICTS = {GateVerdict.BLOCKED, GateVerdict.UNSAFE, GateVerdict.NEEDS_HUMAN}
 
 
 class RegressionFinding(BaseModel):
@@ -142,7 +145,7 @@ def detect_phase_regression(snapshot: GoalSnapshot, phase_id: str) -> list[Regre
     if phase.reviews:
         last = phase.reviews[-1]
         if last.verdict != GateVerdict.PASS:
-            blocking = bool(last.p0) or last.verdict == GateVerdict.UNSAFE
+            blocking = bool(last.p0) or last.verdict in _BLOCKING_VERDICTS
             findings.append(
                 RegressionFinding(
                     severity="p0" if blocking else "p1",
@@ -165,10 +168,20 @@ def log_phase_regression(cwd: Path, snapshot: GoalSnapshot, phase_id: str) -> Re
     """
     findings = detect_phase_regression(snapshot, phase_id)
     memory = load_memory(cwd, snapshot)
-    existing = {(e.goal_id, e.area, e.note, e.phase_id) for e in memory.entries}
+    # Dedup by content so re-running is idempotent. Severity is part of the key
+    # so two distinct findings that share a summary are not collapsed; the key
+    # mirrors the entry fields (note holds the summary), so it also matches
+    # entries written by a prior run.
+    existing = {(e.goal_id, e.area, e.note, e.phase_id, e.severity) for e in memory.entries}
     added = 0
     for finding in findings:
-        key = (snapshot.goal_id, finding.area, finding.summary, phase_id)
+        key = (
+            snapshot.goal_id,
+            finding.area,
+            finding.summary,
+            phase_id,
+            _MEM_SEVERITY[finding.severity],
+        )
         if key in existing:
             continue
         existing.add(key)

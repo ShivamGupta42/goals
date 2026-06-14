@@ -69,6 +69,19 @@ def test_known_gap_routes_to_defer(tmp_path: Path) -> None:
     assert findings and all(f.routing == "defer" for f in findings)
 
 
+def test_blocked_and_needs_human_reviews_surface_even_without_p0(tmp_path: Path) -> None:
+    # A blocking verdict with no itemized p0 must still route to improve-now.
+    for verdict in (GateVerdict.BLOCKED, GateVerdict.NEEDS_HUMAN):
+        phase = Phase(
+            phase_id="P1",
+            title="P",
+            goal="g",
+            reviews=[GateResult(gate_id="phase-review", verdict=verdict, summary="data-loss risk")],
+        )
+        findings = detect_phase_regression(_snapshot(tmp_path, phase), "P1")
+        assert any(f.routing == "improve_now" for f in findings), verdict
+
+
 def test_unsafe_review_is_blocking(tmp_path: Path) -> None:
     phase = Phase(
         phase_id="P1",
