@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from goals.setup import setup_agents
+from goals.storage import GoalsError
 
 
 def _claude_settings(home: Path) -> dict:
@@ -47,6 +50,27 @@ def test_dry_run_writes_nothing(tmp_path: Path) -> None:
     assert not (claude / "settings.json").exists()
     assert not (claude / "skills").exists()
     assert report.actions  # but it described what it would do
+
+
+def test_malformed_settings_is_never_overwritten(tmp_path: Path) -> None:
+    claude = tmp_path / "claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    original = '{ "theme": "dark", broken json here'
+    settings.write_text(original)
+    with pytest.raises(GoalsError, match="refusing to overwrite"):
+        setup_agents(["claude"], claude_home=claude, codex_home=tmp_path / "codex")
+    assert settings.read_text() == original  # untouched — no data loss
+
+
+def test_non_dict_settings_is_never_overwritten(tmp_path: Path) -> None:
+    claude = tmp_path / "claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    settings.write_text('["a", "b"]')
+    with pytest.raises(GoalsError, match="not a JSON object"):
+        setup_agents(["claude"], claude_home=claude, codex_home=tmp_path / "codex")
+    assert settings.read_text() == '["a", "b"]'
 
 
 def test_codex_setup_installs_skills(tmp_path: Path) -> None:

@@ -19,7 +19,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from goals.skill_discovery import install_bundled_skills
-from goals.storage import atomic_write_text
+from goals.storage import GoalsError, atomic_write_text
 
 MARKETPLACE_REPO = "ShivamGupta42/goals"
 MARKETPLACE_NAME = "goals"
@@ -132,13 +132,27 @@ def _install_skills(target: str, home: Path, *, dry_run: bool) -> list[SetupActi
 
 
 def _load_json(path: Path) -> dict:
+    """Load an existing settings dict, or {} if the file is absent.
+
+    Critically distinguishes "absent" (safe to create) from "present but
+    unreadable/not-an-object" — the latter raises so we NEVER overwrite (and
+    destroy) a real settings file we merely failed to parse.
+    """
     if not path.exists():
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    except (OSError, ValueError) as exc:
+        raise GoalsError(
+            f"Could not read {path} ({exc}); refusing to overwrite it. "
+            "Fix or move the file, then re-run `goals setup`."
+        ) from exc
+    if not isinstance(data, dict):
+        raise GoalsError(
+            f"{path} is not a JSON object; refusing to overwrite it. "
+            "Move it aside, then re-run `goals setup`."
+        )
+    return data
 
 
 def render_setup_report(report: SetupReport) -> str:
