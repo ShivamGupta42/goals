@@ -19,11 +19,11 @@ from goals.decisions import (
     render_decision_explanation,
     should_surface_decision,
 )
-from goals.ecosystem import recommend_ecosystem_tools
 from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
+from goals.skill_discovery import discover_skills
 from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
 
@@ -57,7 +57,7 @@ def render_dashboard(
     )
     decisions = _decision_html(snapshot, surfaced_decisions, decision_brief)
     issues = _issues_html(issue_report)
-    recommendations = _recommendations_html(snapshot)
+    skills_panel = _skills_html()
     memory = _memory_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
@@ -136,7 +136,7 @@ def render_dashboard(
     <a href="#progress">Progress</a>
     <a href="#issues">Issues</a>
     <a href="#decisions">Decisions</a>
-    <a href="#ecosystem">Skills & Plugins</a>
+    <a href="#skills">Skills</a>
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
     <a href="#evidence">Evidence</a>
@@ -163,9 +163,9 @@ def render_dashboard(
     <h2>Decisions Needed</h2>
     {decisions}
   </section>
-  <section id="ecosystem" class="panel">
-    <h2>Suggested Skills and Plugins</h2>
-    {recommendations}
+  <section id="skills" class="panel">
+    <h2>Skills</h2>
+    {skills_panel}
   </section>
   <section id="memory" class="panel">
     <h2>Self-Evolution Memory</h2>
@@ -440,21 +440,33 @@ def _bullets_html(items: list[str]) -> str:
     return "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
 
 
-def _recommendations_html(snapshot: GoalSnapshot) -> str:
-    recommendations = recommend_ecosystem_tools(Path(snapshot.topology.worktree_path), snapshot)
-    if not recommendations:
-        return "<p>No skill or plugin recommendations matched this phase.</p>"
+def _skills_html() -> str:
+    """Render live-discovered skills, with a noise guard for the user's own dirs.
+
+    Goals' bundled skills are shown in full; the (potentially 100+) skills from
+    the agent dirs are collapsed to a count so the read-only dashboard stays
+    scannable. Run ``goals skills list`` for the full set.
+    """
+    skills = discover_skills()
+    if not skills:
+        return "<p>No skills discovered.</p>"
+    bundled = [skill for skill in skills if "bundled" in skill.sources]
+    others = [skill for skill in skills if "bundled" not in skill.sources]
     items = "\n".join(
         "<li>"
-        f"<strong>{escape(rec.label)}</strong> "
-        f'<span class="pill">{escape(rec.kind)}</span>'
-        f"<p>{escape(rec.reason)}</p>"
-        + (f"<p><code>{escape(rec.command_hint)}</code></p>" if rec.command_hint else "")
-        + ("<p>User approval needed before using this.</p>" if rec.user_approval_required else "")
-        + "</li>"
-        for rec in recommendations
+        f"<strong>{escape(skill.name)}</strong> "
+        f'<span class="pill">{escape(", ".join(skill.agents) or "not installed")}</span>'
+        f"<p>{escape(skill.description)}</p>"
+        "</li>"
+        for skill in bundled
     )
-    return f'<ul class="node-list">{items}</ul>'
+    body = f'<ul class="node-list">{items}</ul>' if items else ""
+    if others:
+        body += (
+            f"<p>+ {len(others)} more from your agent dirs — run "
+            "<code>goals skills list</code> for the full set.</p>"
+        )
+    return body or "<p>No skills discovered.</p>"
 
 
 def _memory_html(snapshot: GoalSnapshot) -> str:

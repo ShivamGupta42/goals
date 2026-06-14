@@ -44,9 +44,7 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Architecture map:" in plan.prompt
     assert "goals architecture check" in plan.prompt
     assert "Parallel worktree merge gate:" in plan.prompt
-    assert plan.recommended_tools
-    assert "Recommended skills/plugins for this phase:" in plan.prompt
-    assert "goals ecosystem merge" in plan.prompt
+    assert "goals skills list" in plan.prompt
     assert "Permission policy:" in plan.prompt
     assert "goals permission check" in plan.prompt
     assert "Self-evolution memory:" in plan.prompt

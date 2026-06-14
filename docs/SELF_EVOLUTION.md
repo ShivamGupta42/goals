@@ -131,8 +131,9 @@ underneath the native inner loop. Goals provides:
 - a portable, committable goal spec (`goals export`) that any tool can read,
 - adapter-aware native stop-conditions (`goals emit`) and synced context blocks
   (`goals context sync`),
-- registries for skills, plugins, and adapters with `goals ecosystem recommend`
-  and a coordinator merge view with `goals ecosystem merge`,
+- live skill discovery (`goals skills list`) that reads `~/.claude/skills`,
+  `~/.codex/skills`, and goals' own bundled skills with no registry to maintain,
+  plus optional install into an agent's dir (`goals skills install`),
 - a permission policy (`goals permission check`) that keeps routine tool choices
   with the agent while surfacing external, costly, or destructive actions,
 - source evidence (`goals source add|freshness|list`) so research and business

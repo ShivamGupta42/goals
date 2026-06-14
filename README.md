@@ -133,8 +133,13 @@ Goals is a small workflow layer over composable primitives.
 - Keep `src/goals/cli.py` thin: commands mostly call workflow helpers or domain
   modules.
 - Add reusable capabilities as focused modules under `src/goals/`.
-- Add portable skill, plugin, permission, and adapter metadata under
-  `registries/*.yml`.
+- Ship goals' own skills as `SKILL.md` dirs under `skills/`; add permission and
+  adapter metadata under `registries/*.yml`.
+
+Skills are **discovered live**, never registered: `goals skills list` reads
+`~/.claude/skills`, `~/.codex/skills`, and goals' own bundled `skills/`. There is
+no skill catalog to maintain. `goals skills install --target claude|codex|both`
+is optional — only needed to invoke a bundled skill from a raw agent session.
 
 Advanced building blocks still available for agents and scripts:
 
@@ -147,7 +152,7 @@ goals checkpoint current
 goals decision brief
 goals source add | freshness | list
 goals architecture check
-goals ecosystem recommend | merge
+goals skills list | install
 goals permission check
 goals validate | doctor | repair
 ```
