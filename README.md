@@ -122,6 +122,16 @@ your checkout stays clean. `goals check --json` gives agents a machine-readable 
 Note: `goals start` runs in a git project (it makes a safe, isolated copy to work in).
 Run `goals --help` for the full CLI, portability commands, and the visual loop builder.
 
+## Show you use Goals
+
+Running a project with Goals? Add the badge to your README:
+
+[![tracked with Goals](https://img.shields.io/badge/tracked%20with-Goals-6B50FF)](https://github.com/ShivamGupta42/goals)
+
+```md
+[![tracked with Goals](https://img.shields.io/badge/tracked%20with-Goals-6B50FF)](https://github.com/ShivamGupta42/goals)
+```
+
 ## Contributing
 
 Issues and PRs welcome.
