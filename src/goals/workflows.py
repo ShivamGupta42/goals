@@ -142,7 +142,11 @@ def render_start_workflow(report: WorkflowStart) -> str:
             if topology.base_branch in ("main", "master")
             else "Created an isolated worktree (run several goals in parallel this way)."
         )
-        steps = [f"1. `cd {worktree}`", f"2. `goals next --agent {plan.adapter}`"]
+        steps = [
+            f"1. Work in `{worktree}` — `cd` there yourself, or the goals plugin "
+            "drives your agent there for you.",
+            f"2. `goals next --agent {plan.adapter}`",
+        ]
         tip = (
             "Tip: on macOS, `goals next --agent "
             f"{plan.adapter} | pbcopy` from the worktree copies the handoff."
