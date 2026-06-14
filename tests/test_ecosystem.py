@@ -2,14 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import (
     merge_agent_recommendations,
     recommend_ecosystem_tools,
     render_recommendation_merge_report,
     render_recommendations,
 )
-from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
 from goals.models import (
     AgentRecommendationSet,
     EcosystemRecommendation,
@@ -17,7 +15,6 @@ from goals.models import (
     WorktreeLease,
 )
 from goals.registry import validate_registry_file
-from goals.registry_sync import apply_registry_sync, plan_registry_sync
 from goals.runtime import default_phases
 from goals.storage import GoalsError
 
@@ -147,199 +144,6 @@ skills:
 
     with pytest.raises(GoalsError):
         validate_registry_file(path)
-
-
-def test_ecosystem_quality_audit_passes_builtin_registries(tmp_path: Path) -> None:
-    report = audit_ecosystem_quality(tmp_path)
-    rendered = render_ecosystem_quality_report(report)
-
-    assert report.passed is True
-    assert report.entry_count > 0
-    assert not [finding for finding in report.findings if finding.severity in {"p0", "p1"}]
-    assert "Ecosystem Quality Audit" in rendered
-    assert "SkillOpt-style loop" in rendered
-
-
-def test_ecosystem_quality_audit_flags_unsafe_and_vague_entries(tmp_path: Path) -> None:
-    registry_root = tmp_path / "registries"
-    registry_root.mkdir()
-    local_path_hint = "/" + "Users" + "/example/private/run-cleanup"
-    (registry_root / "skills.yml").write_text(
-        """
-version: 1
-kind: skills
-skills:
-  vague-helper:
-    label: Helper
-    description: Helps.
-    use_when: [anything, everything]
-    risk: low
-    requires_user_approval: false
-"""
-    )
-    (registry_root / "plugins.yml").write_text(
-        f"""
-version: 1
-kind: plugins
-plugins:
-  dangerous-plugin:
-    label: Dangerous Plugin
-    description: Deletes remote resources for cleanup goals.
-    use_when: [cleanup, deletion, remote resources]
-    phases: [P3]
-    command_hint: {local_path_hint}
-    risk: high
-    requires_user_approval: false
-"""
-    )
-
-    report = audit_ecosystem_quality(tmp_path)
-    rendered = render_ecosystem_quality_report(report)
-
-    assert report.passed is False
-    assert any(finding.area == "routing" for finding in report.findings)
-    assert any(finding.area == "safety" and finding.severity == "p0" for finding in report.findings)
-    assert "High-risk plugins must require user approval" in rendered
-    assert "/" + "Users" + "/example" not in rendered
-    assert "command_hint contains local path" in rendered
-
-
-def test_discovery_finds_local_skills_without_leaking_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    registry_root = tmp_path / "registries"
-    registry_root.mkdir()
-    (registry_root / "skills.yml").write_text(
-        "version: 1\nkind: skills\nskills:\n  decision-explainer:\n    label: Decision Explainer\n"
-    )
-    (registry_root / "adapters.yml").write_text(
-        "version: 1\nkind: adapters\nadapters:\n  claude:\n    label: Claude\n"
-    )
-    skill_root = tmp_path / "local-skills"
-    skill = skill_root / "migration-helper"
-    skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(
-        """---
-name: Migration Helper
-description: Helps coordinate database migrations safely.
----
-
-# Migration Helper
-"""
-    )
-    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: f"/bin/{name}")
-    monkeypatch.setattr("goals.discovery.adapter_check", lambda name: (name == "claude", "ok"))
-
-    report = discover_local_ecosystem(tmp_path, skill_roots=[skill_root])
-    rendered = render_discovery_report(report)
-
-    discovered = {tool.name: tool for tool in report.tools}
-    assert discovered["migration-helper"].registered is False
-    assert discovered["migration-helper"].suggested_registry_entry["migration-helper"]["label"] == (
-        "Migration Helper"
-    )
-    assert discovered["claude"].registered is True
-    assert "migration-helper" in rendered
-    assert str(tmp_path) not in rendered
-
-
-def test_discovery_finds_local_plugins_without_leaking_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    registry_root = tmp_path / "registries"
-    registry_root.mkdir()
-    (registry_root / "plugins.yml").write_text("version: 1\nkind: plugins\nplugins: {}\n")
-    plugin_root = tmp_path / "local-plugins"
-    plugin = plugin_root / "customer-research" / ".codex-plugin"
-    plugin.mkdir(parents=True)
-    (plugin / "plugin.json").write_text(
-        """
-{
-  "name": "@acme/customer-research",
-  "displayName": "Customer Research",
-  "description": "Finds and summarizes customer research sources.",
-  "keywords": ["research", "sources"]
-}
-"""
-    )
-    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
-
-    report = discover_local_ecosystem(tmp_path, plugin_roots=[plugin_root])
-    rendered = render_discovery_report(report)
-
-    discovered = {tool.name: tool for tool in report.tools}
-    assert discovered["customer-research"].kind == "plugin"
-    assert discovered["customer-research"].registered is False
-    entry = discovered["customer-research"].suggested_registry_entry["customer-research"]
-    assert entry["label"] == "Customer Research"
-    assert entry["requires_user_approval"] is True
-    assert "research" in entry["use_when"]
-    assert "customer-research" in rendered
-    assert str(tmp_path) not in rendered
-    assert str(tmp_path) not in report.model_dump_json()
-
-
-def test_discovery_json_is_sanitized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    skill_root = tmp_path / "skills"
-    skill = skill_root / "review"
-    skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(
-        "---\nname: Review\ndescription: Reviews source changes.\n---\n"
-    )
-    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
-
-    report = discover_local_ecosystem(tmp_path, skill_roots=[skill_root])
-
-    assert str(tmp_path) not in report.model_dump_json()
-    assert report.missing_from_registry
-
-
-def test_registry_sync_dry_run_and_apply(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    registry_root = tmp_path / "registries"
-    registry_root.mkdir()
-    (registry_root / "skills.yml").write_text("version: 1\nkind: skills\nskills: {}\n")
-    (registry_root / "plugins.yml").write_text("version: 1\nkind: plugins\nplugins: {}\n")
-    (registry_root / "adapters.yml").write_text("version: 1\nkind: adapters\nadapters: {}\n")
-    skill_root = tmp_path / "skills"
-    skill = skill_root / "migration-helper"
-    skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(
-        "---\nname: Migration Helper\n"
-        "description: Helps coordinate database migrations safely.\n---\n"
-    )
-    plugin_root = tmp_path / "plugins"
-    plugin = plugin_root / "customer-research"
-    plugin.mkdir(parents=True)
-    (plugin / "package.json").write_text(
-        """
-{
-  "name": "@acme/customer-research",
-  "description": "Finds customer research sources."
-}
-"""
-    )
-    monkeypatch.setattr("goals.discovery.shutil.which", lambda name: None)
-
-    plan = plan_registry_sync(tmp_path, skill_roots=[skill_root], plugin_roots=[plugin_root])
-
-    assert plan.dry_run is True
-    assert any(change.name == "migration-helper" for change in plan.changes)
-    assert any(change.name == "customer-research" for change in plan.changes)
-    assert "migration-helper" not in (registry_root / "skills.yml").read_text()
-    assert "customer-research" not in (registry_root / "plugins.yml").read_text()
-
-    applied = apply_registry_sync(tmp_path, plan)
-
-    assert applied.dry_run is False
-    skills_text = (registry_root / "skills.yml").read_text()
-    plugins_text = (registry_root / "plugins.yml").read_text()
-    assert "migration-helper" in skills_text
-    assert "customer-research" in plugins_text
-    assert "requires_user_approval: true" in plugins_text
-    assert str(tmp_path) not in skills_text
-    assert str(tmp_path) not in plugins_text
-    validate_registry_file(registry_root / "skills.yml")
-    validate_registry_file(registry_root / "plugins.yml")
 
 
 def _recommendation(

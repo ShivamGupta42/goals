@@ -14,58 +14,21 @@ from goals.architecture import (
     render_architecture_check_report,
     render_architecture_brief,
 )
-from goals.assets import (
-    analyze_asset_provenance,
-    render_asset_provenance_report,
-    render_asset_summary,
-)
-from goals.boundaries import build_professional_boundary_report, render_professional_boundary_report
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.checkpoints import build_current_checkpoint_brief, render_current_checkpoint_brief
-from goals.citations import analyze_citation_quality, render_citation_quality_report
-from goals.creative import (
-    analyze_creative_variants,
-    render_creative_comparison_report,
-    render_creative_summary,
-)
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
     render_decision_brief,
     render_decision_explanation,
 )
-from goals.discovery import discover_local_ecosystem, render_discovery_report
 from goals.ecosystem import (
     merge_agent_recommendations,
     recommend_ecosystem_tools,
     render_recommendation_merge_report,
     render_recommendations,
 )
-from goals.ecosystem_quality import audit_ecosystem_quality, render_ecosystem_quality_report
-from goals.evaluations import (
-    dogfood_goal_scenarios,
-    evaluate_goal_scenarios,
-    evaluate_use_case_coverage,
-    rehearse_goal_lifecycles,
-    render_coverage_report,
-    render_dogfood_report,
-    render_issue_stress_report,
-    render_rehearsal_report,
-    render_self_check_report,
-    run_self_check,
-    stress_goal_issue_discovery,
-)
-from goals.external_reviews import (
-    analyze_external_reviews,
-    render_external_review_report,
-    render_external_review_summary,
-)
 from goals.issues import analyze_goal_issues, render_issue_report
-from goals.handoffs import (
-    analyze_handoff_owners,
-    render_handoff_owner_report,
-    render_handoff_summary,
-)
 from goals.memory import (
     absorb_goal_memory,
     append_memory_entry,
@@ -81,20 +44,15 @@ from goals.merge_readiness import analyze_merge_readiness, render_merge_readines
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
     AgentRecommendationSet,
-    AssetRecord,
     CheckpointKind,
     CheckpointStatus,
-    CreativeVariant,
-    CreativeVariantScore,
     Decision,
     EcosystemRecommendation,
     Event,
     EventType,
     Evidence,
-    ExternalReview,
     GateVerdict,
     GoalArchitectureMap,
-    HandoffOwner,
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
@@ -105,8 +63,6 @@ from goals.models import (
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
-from goals.registry_sync import apply_registry_sync, plan_registry_sync, render_registry_sync_plan
-from goals.roadmap import apply_roadmap_update, plan_roadmap_update, render_roadmap_update_plan
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -117,12 +73,20 @@ from goals.runtime import (
     run_gate,
     transition_phase,
 )
-from goals.scanners import run_safety_scanners
 from goals.sources import (
     analyze_source_freshness,
     render_claim_summary,
     render_source_freshness_report,
     render_source_summary,
+)
+from goals.portability import (
+    CONTEXT_TARGETS,
+    emit_native_goal,
+    export_goal,
+    render_context_sync,
+    render_export,
+    render_native_goal_emission,
+    sync_context_files,
 )
 from goals.storage import EventStore, GoalsError, atomic_write_text
 from goals.workflows import (
@@ -138,24 +102,14 @@ from goals.workflows import (
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
-asset_app = typer.Typer(help="Record and inspect asset provenance.")
-boundary_app = typer.Typer(help="Explain professional boundaries for high-stakes goals.")
-creative_app = typer.Typer(help="Record and compare creative variants.")
-creative_variant_app = typer.Typer(help="Record and inspect creative directions.")
+context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
 ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
-eval_app = typer.Typer(help="Evaluate Goals use-case coverage.")
-external_review_app = typer.Typer(help="Record and check external reviews.")
-handoff_app = typer.Typer(help="Record and check handoff owners.")
-handoff_owner_app = typer.Typer(help="Record and inspect handoff owners.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
-roadmap_app = typer.Typer(help="Plan self-evolution roadmap updates.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
-creative_app.add_typer(creative_variant_app, name="variant")
-handoff_app.add_typer(handoff_owner_app, name="owner")
 
 
 def _handle(fn):
@@ -253,23 +207,66 @@ def view(
     _handle(run)
 
 
+@app.command(rich_help_panel="Portability")
+def export() -> None:
+    """Write the portable, committable goal spec to `.goals/`."""
+
+    def run():
+        typer.echo(render_export(export_goal(Path.cwd())))
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Portability")
+def emit(
+    agent: str = typer.Option(
+        "claude",
+        "--agent",
+        "--adapter",
+        help="Native agent to emit a stop-condition for: claude or codex.",
+    ),
+) -> None:
+    """Emit a native `/goal` stop-condition from the current phase's acceptance."""
+
+    def run():
+        if agent not in ("claude", "codex"):
+            raise GoalsError("--agent must be 'claude' or 'codex'.")
+        typer.echo(render_native_goal_emission(emit_native_goal(Path.cwd(), agent)))
+
+    _handle(run)
+
+
+@context_app.command("sync")
+def context_sync(
+    target: str = typer.Option(
+        "both",
+        help="Which files to sync: agents, claude, or both.",
+    ),
+) -> None:
+    """Sync the active goal into AGENTS.md and/or CLAUDE.md managed blocks."""
+
+    def run():
+        mapping = {
+            "agents": ("AGENTS.md",),
+            "claude": ("CLAUDE.md",),
+            "both": CONTEXT_TARGETS,
+        }
+        if target not in mapping:
+            raise GoalsError("--target must be 'agents', 'claude', or 'both'.")
+        typer.echo(render_context_sync(sync_context_files(Path.cwd(), targets=mapping[target])))
+
+    _handle(run)
+
+
 app.add_typer(adapter_app, name="adapter", rich_help_panel="Advanced building blocks")
 app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced building blocks")
-app.add_typer(asset_app, name="asset", rich_help_panel="Advanced building blocks")
-app.add_typer(boundary_app, name="boundary", rich_help_panel="Advanced building blocks")
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
-app.add_typer(creative_app, name="creative", rich_help_panel="Advanced building blocks")
+app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
 app.add_typer(ecosystem_app, name="ecosystem", rich_help_panel="Advanced building blocks")
-app.add_typer(eval_app, name="eval", rich_help_panel="Advanced building blocks")
-app.add_typer(
-    external_review_app, name="external-review", rich_help_panel="Advanced building blocks"
-)
-app.add_typer(handoff_app, name="handoff", rich_help_panel="Advanced building blocks")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
-app.add_typer(roadmap_app, name="roadmap", rich_help_panel="Advanced building blocks")
 app.add_typer(source_app, name="source", rich_help_panel="Advanced building blocks")
 
 
@@ -602,28 +599,6 @@ def cleanup() -> None:
     typer.echo("Cleanup is report-only in v1. Remove goal worktrees manually after review.")
 
 
-@app.command("safety-check", rich_help_panel="Advanced building blocks")
-def safety_check(
-    path: Path = typer.Argument(Path.cwd()),
-    mode: str = typer.Option(
-        "publish", help="local allows generated goal state; publish blocks it."
-    ),
-) -> None:
-    """Run public-safety scanners."""
-
-    if mode not in {"local", "publish"}:
-        typer.secho("Error: mode must be local or publish", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    results = run_safety_scanners(path.resolve(), mode=mode)
-    failed = [result for result in results if result.verdict != GateVerdict.PASS]
-    for result in results:
-        typer.echo(f"{result.scanner}: {result.verdict}")
-        for finding in result.findings:
-            typer.echo(f"  - {finding}")
-    if failed:
-        raise typer.Exit(1)
-
-
 @adapter_app.command("check")
 def adapter_check_command(name: str) -> None:
     """Check whether a native goal-loop adapter is available."""
@@ -709,44 +684,6 @@ def architecture_update(
     _handle(run)
 
 
-@boundary_app.command("explain")
-def boundary_explain(
-    domain: str = typer.Option(
-        "auto",
-        help="auto, general, medical, legal, financial, or safety.",
-    ),
-    level: str = typer.Option(
-        "basic",
-        help="basic, detailed, or technical.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Explain the safe professional boundary for a high-stakes goal."""
-
-    def run():
-        selected_domain = _validate_choice(
-            domain,
-            {"auto", "general", "medical", "legal", "financial", "safety"},
-            "domain",
-        )
-        selected_level = _validate_choice(level, {"basic", "detailed", "technical"}, "level")
-        report = build_professional_boundary_report(
-            _optional_snapshot(Path.cwd()),
-            domain=selected_domain,  # type: ignore[arg-type]
-        )
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(
-                render_professional_boundary_report(
-                    report,
-                    level=selected_level,  # type: ignore[arg-type]
-                )
-            )
-
-    _handle(run)
-
-
 @ecosystem_app.command("recommend")
 def ecosystem_recommend(
     limit: int = typer.Option(6, help="Maximum number of recommendations."),
@@ -795,96 +732,6 @@ def ecosystem_merge(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_recommendation_merge_report(report))
-
-    _handle(run)
-
-
-@ecosystem_app.command("discover")
-def ecosystem_discover(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-    skill_root: Optional[list[Path]] = typer.Option(
-        None,
-        "--skill-root",
-        help="Skill root to inspect. Repeat for multiple roots.",
-    ),
-    plugin_root: Optional[list[Path]] = typer.Option(
-        None,
-        "--plugin-root",
-        help="Plugin root to inspect. Repeat for multiple roots.",
-    ),
-    max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
-    max_plugins: int = typer.Option(100, help="Maximum number of plugins to inspect."),
-) -> None:
-    """Discover local skills/plugins/adapters and suggest portable registry additions."""
-
-    def run():
-        report = discover_local_ecosystem(
-            Path.cwd(),
-            skill_roots=skill_root,
-            plugin_roots=plugin_root,
-            max_skills=max_skills,
-            max_plugins=max_plugins,
-        )
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_discovery_report(report))
-
-    _handle(run)
-
-
-@ecosystem_app.command("sync")
-def ecosystem_sync(
-    apply: bool = typer.Option(False, "--apply", help="Write proposed registry additions."),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-    skill_root: Optional[list[Path]] = typer.Option(
-        None,
-        "--skill-root",
-        help="Skill root to inspect. Repeat for multiple roots.",
-    ),
-    plugin_root: Optional[list[Path]] = typer.Option(
-        None,
-        "--plugin-root",
-        help="Plugin root to inspect. Repeat for multiple roots.",
-    ),
-    max_skills: int = typer.Option(200, help="Maximum number of skills to inspect."),
-    max_plugins: int = typer.Option(100, help="Maximum number of plugins to inspect."),
-) -> None:
-    """Plan or apply portable registry additions from local discovery."""
-
-    def run():
-        plan = plan_registry_sync(
-            Path.cwd(),
-            skill_roots=skill_root,
-            plugin_roots=plugin_root,
-            max_skills=max_skills,
-            max_plugins=max_plugins,
-        )
-        result = apply_registry_sync(Path.cwd(), plan) if apply else plan
-        if json_output:
-            typer.echo(result.model_dump_json(indent=2))
-        else:
-            typer.echo(render_registry_sync_plan(result))
-            if not apply and result.changes:
-                typer.echo("Run again with --apply to update registries after review.")
-
-    _handle(run)
-
-
-@ecosystem_app.command("audit")
-def ecosystem_audit(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Audit skill/plugin registries for routing quality, safety, and validation readiness."""
-
-    def run():
-        report = audit_ecosystem_quality(Path.cwd())
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_ecosystem_quality_report(report))
-        if not report.passed:
-            raise typer.Exit(1)
 
     _handle(run)
 
@@ -1072,560 +919,6 @@ def permission_check(
     _handle(run)
 
 
-@roadmap_app.command("suggest")
-def roadmap_suggest(
-    apply: bool = typer.Option(False, "--apply", help="Write the generated roadmap block."),
-    adapter: str = typer.Option("both", help="claude, codex, or both."),
-    path: Path = typer.Option(Path("ROADMAP.md"), help="Roadmap file to update."),
-    max_user_decisions: int = typer.Option(
-        2,
-        help="Maximum important user decisions allowed per synthetic goal.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Turn self-check findings into a bounded roadmap update plan."""
-
-    def run():
-        if adapter == "both":
-            adapters = ["claude", "codex"]
-        elif adapter in {"claude", "codex"}:
-            adapters = [adapter]
-        else:
-            typer.secho("Error: adapter must be claude, codex, or both", fg=typer.colors.RED)
-            raise typer.Exit(1)
-        plan = plan_roadmap_update(
-            Path.cwd(),
-            path=path,
-            adapters=adapters,
-            max_user_decisions=max_user_decisions,
-        )
-        result = apply_roadmap_update(Path.cwd(), plan) if apply else plan
-        if json_output:
-            typer.echo(result.model_dump_json(indent=2))
-        else:
-            typer.echo(render_roadmap_update_plan(result))
-            if not apply and result.suggestions:
-                typer.echo("Run again with --apply to update the generated roadmap block.")
-
-    _handle(run)
-
-
-@asset_app.command("add")
-def asset_add(
-    title: str,
-    locator: str = typer.Option("", help="Repo-relative path, URL, or stable asset id."),
-    asset_type: str = typer.Option(
-        "other",
-        help="image, video, audio, document, design, code, dataset, or other.",
-    ),
-    origin: str = typer.Option(
-        "other",
-        help="generated, user_provided, stock, external, derived, or other.",
-    ),
-    creator_tool: str = typer.Option("", help="Generator, plugin, model, or tool used."),
-    license: str = typer.Option("", help="License or rights statement."),
-    usage_rights: str = typer.Option(
-        "unknown",
-        help="unknown, allowed, restricted, or blocked.",
-    ),
-    source_id: Optional[list[str]] = typer.Option(
-        None,
-        "--source-id",
-        help="Source id supporting this asset's provenance. Repeat for multiple sources.",
-    ),
-    prompt: str = typer.Option("", help="Sanitized generation prompt or prompt summary."),
-    notes: str = typer.Option("", help="Short provenance note."),
-) -> None:
-    """Record an asset with provenance, rights, and source evidence."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        asset = AssetRecord(
-            title=title,
-            locator=locator,
-            asset_type=_validate_choice(
-                asset_type,
-                {"image", "video", "audio", "document", "design", "code", "dataset", "other"},
-                "asset_type",
-            ),  # type: ignore[arg-type]
-            origin=_validate_choice(
-                origin,
-                {"generated", "user_provided", "stock", "external", "derived", "other"},
-                "origin",
-            ),  # type: ignore[arg-type]
-            creator_tool=creator_tool,
-            license=license,
-            usage_rights=_validate_choice(
-                usage_rights,
-                {"unknown", "allowed", "restricted", "blocked"},
-                "usage_rights",
-            ),  # type: ignore[arg-type]
-            source_ids=source_id or [],
-            prompt=prompt,
-            notes=notes,
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.ASSET_RECORDED,
-                payload={"asset": asset.model_dump()},
-            ),
-        )
-        typer.echo(f"Recorded asset: {asset.asset_id}")
-
-    _handle(run)
-
-
-@asset_app.command("list")
-def asset_list(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded assets for the active goal."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        if json_output:
-            typer.echo(
-                json.dumps([asset.model_dump(mode="json") for asset in snapshot.assets], indent=2)
-            )
-        else:
-            typer.echo("Assets:")
-            typer.echo(render_asset_summary(snapshot))
-
-    _handle(run)
-
-
-@asset_app.command("provenance")
-def asset_provenance(
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Exit non-zero when asset provenance issues are found.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Check whether recorded assets have enough provenance to use."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_asset_provenance(snapshot)
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_asset_provenance_report(report))
-        if strict and not report.passed:
-            raise typer.Exit(1)
-
-    _handle(run)
-
-
-@creative_variant_app.command("add")
-def creative_variant_add(
-    title: str,
-    summary: str = typer.Option("", help="Plain-language variant summary."),
-    best_for: str = typer.Option("", help="When this variant is the right choice."),
-    asset_id: Optional[list[str]] = typer.Option(
-        None,
-        "--asset-id",
-        help="Recorded asset id used by this variant. Repeat for multiple assets.",
-    ),
-    source_id: Optional[list[str]] = typer.Option(
-        None,
-        "--source-id",
-        help="Source id supporting this variant. Repeat for multiple sources.",
-    ),
-    score: Optional[list[str]] = typer.Option(
-        None,
-        "--score",
-        help='Comparison score as "criterion=1-5:optional rationale". Repeat as needed.',
-    ),
-    strength: Optional[list[str]] = typer.Option(
-        None,
-        "--strength",
-        help="Variant strength. Repeat for multiple strengths.",
-    ),
-    risk: Optional[list[str]] = typer.Option(
-        None,
-        "--risk",
-        help="Variant risk or concern. Repeat for multiple risks.",
-    ),
-    tradeoff: Optional[list[str]] = typer.Option(
-        None,
-        "--tradeoff",
-        help="Variant tradeoff. Repeat for multiple tradeoffs.",
-    ),
-    status: str = typer.Option(
-        "candidate",
-        help="candidate, shortlisted, selected, or rejected.",
-    ),
-) -> None:
-    """Record a creative direction, draft, concept, or variant."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        variant = CreativeVariant(
-            title=title,
-            summary=summary,
-            best_for=best_for,
-            asset_ids=asset_id or [],
-            source_ids=source_id or [],
-            scores=[_parse_creative_score(item) for item in score or []],
-            strengths=strength or [],
-            risks=risk or [],
-            tradeoffs=tradeoff or [],
-            status=_validate_choice(
-                status,
-                {"candidate", "shortlisted", "selected", "rejected"},
-                "status",
-            ),  # type: ignore[arg-type]
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.CREATIVE_VARIANT_RECORDED,
-                payload={"variant": variant.model_dump()},
-            ),
-        )
-        typer.echo(f"Recorded creative variant: {variant.variant_id}")
-
-    _handle(run)
-
-
-@creative_variant_app.command("list")
-def creative_variant_list(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded creative variants for the active goal."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        if json_output:
-            typer.echo(
-                json.dumps(
-                    [variant.model_dump(mode="json") for variant in snapshot.creative_variants],
-                    indent=2,
-                )
-            )
-        else:
-            typer.echo("Creative variants:")
-            typer.echo(render_creative_summary(snapshot))
-
-    _handle(run)
-
-
-@creative_app.command("variants")
-def creative_variants(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded creative variants for the active goal."""
-    creative_variant_list(json_output=json_output)
-
-
-@creative_app.command("compare")
-def creative_compare(
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Exit non-zero when creative comparison issues are found.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Compare creative variants and recommend the best current direction."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_creative_variants(snapshot)
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_creative_comparison_report(report))
-        if strict and not report.passed:
-            raise typer.Exit(1)
-
-    _handle(run)
-
-
-@external_review_app.command("add")
-def external_review_add(
-    title: str,
-    reviewer: str = typer.Option("", help="Reviewer label or professional role."),
-    reviewer_type: str = typer.Option(
-        "other",
-        help="user, professional, security, legal, financial, medical, compliance, team, external, or other.",
-    ),
-    risk_domain: str = typer.Option(
-        "general",
-        help="general, medical, legal, financial, safety, security, compliance, privacy, production, or other.",
-    ),
-    status: str = typer.Option(
-        "required",
-        help="required, requested, passed, failed, waived, or blocked.",
-    ),
-    phase_id: Optional[list[str]] = typer.Option(
-        None,
-        "--phase-id",
-        help="Phase id this review applies to. Repeat for multiple phases.",
-    ),
-    scope: Optional[list[str]] = typer.Option(
-        None,
-        "--scope",
-        help="What the reviewer is checking. Repeat for multiple scope items.",
-    ),
-    summary: str = typer.Option("", help="Plain-language review request or outcome."),
-    evidence: Optional[list[str]] = typer.Option(
-        None,
-        "--evidence",
-        help="Evidence id, approval link, note id, or checklist reference. Repeat for multiple refs.",
-    ),
-    completed_at: Optional[str] = typer.Option(
-        None,
-        "--completed-at",
-        help="Optional ISO-8601 timestamp for a completed review.",
-    ),
-    waiver_reason: str = typer.Option("", help="Reason when status is waived."),
-    review_notes: str = typer.Option("", help="Short non-sensitive review notes."),
-) -> None:
-    """Record required, requested, passed, failed, blocked, or waived external review."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        review = ExternalReview(
-            title=title,
-            reviewer=reviewer,
-            reviewer_type=_validate_choice(
-                reviewer_type,
-                {
-                    "user",
-                    "professional",
-                    "security",
-                    "legal",
-                    "financial",
-                    "medical",
-                    "compliance",
-                    "team",
-                    "external",
-                    "other",
-                },
-                "reviewer_type",
-            ),  # type: ignore[arg-type]
-            risk_domain=_validate_choice(
-                risk_domain,
-                {
-                    "general",
-                    "medical",
-                    "legal",
-                    "financial",
-                    "safety",
-                    "security",
-                    "compliance",
-                    "privacy",
-                    "production",
-                    "other",
-                },
-                "risk_domain",
-            ),  # type: ignore[arg-type]
-            status=_validate_choice(
-                status,
-                {"required", "requested", "passed", "failed", "waived", "blocked"},
-                "status",
-            ),  # type: ignore[arg-type]
-            phase_ids=phase_id or [],
-            scope=scope or [],
-            summary=summary,
-            evidence_refs=evidence or [],
-            **({"completed_at": completed_at} if completed_at else {}),
-            waiver_reason=waiver_reason,
-            review_notes=review_notes,
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.EXTERNAL_REVIEW_RECORDED,
-                payload={"review": review.model_dump()},
-            ),
-        )
-        typer.echo(f"Recorded external review: {review.review_id}")
-
-    _handle(run)
-
-
-@external_review_app.command("list")
-def external_review_list(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded external reviews for the active goal."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        if json_output:
-            typer.echo(
-                json.dumps(
-                    [review.model_dump(mode="json") for review in snapshot.external_reviews],
-                    indent=2,
-                )
-            )
-        else:
-            typer.echo("External reviews:")
-            typer.echo(render_external_review_summary(snapshot))
-
-    _handle(run)
-
-
-@external_review_app.command("check")
-def external_review_check(
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Exit non-zero when external review issues are found.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Check whether high-risk or explicit review work has review proof."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_external_reviews(snapshot)
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_external_review_report(report))
-        if strict and not report.passed:
-            raise typer.Exit(1)
-
-    _handle(run)
-
-
-@handoff_owner_app.command("add")
-def handoff_owner_add(
-    label: str,
-    role: str = typer.Option("", help="Plain role, such as reviewer or follow-up owner."),
-    responsibility: str = typer.Option("", help="Specific work this owner is accountable for."),
-    owner_type: str = typer.Option(
-        "unknown",
-        help="agent, user, team, external, or unknown.",
-    ),
-    phase_id: Optional[list[str]] = typer.Option(
-        None,
-        "--phase-id",
-        help="Phase id this owner applies to. Repeat for multiple phases.",
-    ),
-    decision_scope: Optional[list[str]] = typer.Option(
-        None,
-        "--decision-scope",
-        help="Decision or task scope owned by this entry. Repeat for multiple scopes.",
-    ),
-    escalation_path: str = typer.Option(
-        "",
-        help="Where the agent should route blockers before asking the user.",
-    ),
-    confirmation: str = typer.Option(
-        "not_required",
-        help="not_required, agent_confirmed, user_confirmed, or needs_user.",
-    ),
-    status: str = typer.Option(
-        "proposed",
-        help="proposed, active, inactive, or blocked.",
-    ),
-    notes: str = typer.Option("", help="Short non-sensitive handoff note."),
-) -> None:
-    """Record who owns a follow-up, review, phase handoff, or process step."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        owner = HandoffOwner(
-            label=label,
-            role=role,
-            responsibility=responsibility,
-            owner_type=_validate_choice(
-                owner_type,
-                {"agent", "user", "team", "external", "unknown"},
-                "owner_type",
-            ),  # type: ignore[arg-type]
-            phase_ids=phase_id or [],
-            decision_scope=decision_scope or [],
-            escalation_path=escalation_path,
-            confirmation=_validate_choice(
-                confirmation,
-                {"not_required", "agent_confirmed", "user_confirmed", "needs_user"},
-                "confirmation",
-            ),  # type: ignore[arg-type]
-            status=_validate_choice(
-                status,
-                {"proposed", "active", "inactive", "blocked"},
-                "status",
-            ),  # type: ignore[arg-type]
-            notes=notes,
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.HANDOFF_OWNER_RECORDED,
-                payload={"owner": owner.model_dump()},
-            ),
-        )
-        typer.echo(f"Recorded handoff owner: {owner.owner_id}")
-
-    _handle(run)
-
-
-@handoff_owner_app.command("list")
-def handoff_owner_list(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded handoff owners for the active goal."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        if json_output:
-            typer.echo(
-                json.dumps(
-                    [owner.model_dump(mode="json") for owner in snapshot.handoff_owners],
-                    indent=2,
-                )
-            )
-        else:
-            typer.echo("Handoff owners:")
-            typer.echo(render_handoff_summary(snapshot))
-
-    _handle(run)
-
-
-@handoff_app.command("owners")
-def handoff_owners(
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """List recorded handoff owners for the active goal."""
-    handoff_owner_list(json_output=json_output)
-
-
-@handoff_app.command("check")
-def handoff_check(
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Exit non-zero when handoff owner issues are found.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Check whether handoff owners are clear enough for the agent to continue."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_handoff_owners(snapshot)
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_handoff_owner_report(report))
-        if strict and not report.passed:
-            raise typer.Exit(1)
-
-    _handle(run)
-
-
 @source_app.command("add")
 def source_add(
     title: str,
@@ -1715,30 +1008,6 @@ def source_freshness(
     _handle(run)
 
 
-@source_app.command("citations")
-def source_citations(
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Exit non-zero when citation quality issues are found.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Check whether source-backed claims have good enough citations."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_citation_quality(snapshot)
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_citation_quality_report(report))
-        if strict and not report.passed:
-            raise typer.Exit(1)
-
-    _handle(run)
-
-
 @source_app.command("list")
 def source_list(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
@@ -1766,139 +1035,6 @@ def source_list(
             typer.echo(render_claim_summary(snapshot))
 
     _handle(run)
-
-
-@eval_app.command("scenarios")
-def eval_scenarios(
-    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Evaluate default personal, technical, business, self-evolution, and ecosystem scenarios."""
-
-    results = evaluate_goal_scenarios(Path.cwd(), adapter=adapter)
-    if json_output:
-        typer.echo(json.dumps([result.model_dump(mode="json") for result in results], indent=2))
-    else:
-        for result in results:
-            verdict = "pass" if result.current_supported else "missing"
-            typer.echo(f"{result.scenario_id}: {verdict} - {result.summary}")
-            if result.surfaced_decisions:
-                typer.echo("  surfaced decisions:")
-                for decision in result.surfaced_decisions:
-                    typer.echo(f"  - {decision.plain_question}")
-            if result.planned_capabilities:
-                typer.echo(f"  planned: {', '.join(result.planned_capabilities)}")
-            if result.missing_capabilities:
-                typer.echo(f"  missing: {', '.join(result.missing_capabilities)}")
-    if any(not result.current_supported for result in results):
-        raise typer.Exit(1)
-
-
-@eval_app.command("dogfood")
-def eval_dogfood(
-    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
-    max_user_decisions: int = typer.Option(
-        2,
-        help="Maximum important user decisions allowed per synthetic goal.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Dogfood Goals across synthetic personal, technical, business, self-evolution, and ecosystem goals."""
-
-    report = dogfood_goal_scenarios(
-        Path.cwd(),
-        adapter=adapter,
-        max_user_decisions=max_user_decisions,
-    )
-    if json_output:
-        typer.echo(report.model_dump_json(indent=2))
-    else:
-        typer.echo(render_dogfood_report(report))
-    if not report.passed:
-        raise typer.Exit(1)
-
-
-@eval_app.command("coverage")
-def eval_coverage(
-    adapter: ModeAAdapter = typer.Option("claude", help="Native adapter shape to evaluate."),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Evaluate representative goal use-case coverage beyond coding tasks."""
-
-    report = evaluate_use_case_coverage(Path.cwd(), adapter=adapter)
-    if json_output:
-        typer.echo(report.model_dump_json(indent=2))
-    else:
-        typer.echo(render_coverage_report(report))
-    if not report.passed:
-        raise typer.Exit(1)
-
-
-@eval_app.command("rehearsal")
-def eval_rehearsal(
-    adapter: ModeAAdapter = typer.Option(
-        "claude", help="Native adapter shape to label the rehearsal."
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Run temporary end-to-end goal lifecycle rehearsals."""
-
-    report = rehearse_goal_lifecycles(adapter=adapter)
-    if json_output:
-        typer.echo(report.model_dump_json(indent=2))
-    else:
-        typer.echo(render_rehearsal_report(report))
-    if not report.passed:
-        raise typer.Exit(1)
-
-
-@eval_app.command("issue-stress")
-def eval_issue_stress(
-    adapter: ModeAAdapter = typer.Option(
-        "claude", help="Native adapter shape to label the stress report."
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Stress issue discovery and user-decision filtering with broken goal states."""
-
-    report = stress_goal_issue_discovery(Path.cwd(), adapter=adapter)
-    if json_output:
-        typer.echo(report.model_dump_json(indent=2))
-    else:
-        typer.echo(render_issue_stress_report(report))
-    if not report.passed:
-        raise typer.Exit(1)
-
-
-@eval_app.command("self-check")
-def eval_self_check(
-    adapter: str = typer.Option("both", help="claude, codex, or both."),
-    max_user_decisions: int = typer.Option(
-        2,
-        help="Maximum important user decisions allowed per synthetic goal.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Run the full self-evolution evaluation matrix and summarize next slices."""
-
-    if adapter == "both":
-        adapters = ["claude", "codex"]
-    elif adapter in {"claude", "codex"}:
-        adapters = [adapter]
-    else:
-        typer.secho("Error: adapter must be claude, codex, or both", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    report = run_self_check(
-        Path.cwd(),
-        adapters=adapters,
-        max_user_decisions=max_user_decisions,
-    )
-    if json_output:
-        typer.echo(report.model_dump_json(indent=2))
-    else:
-        typer.echo(render_self_check_report(report))
-    if not report.passed:
-        raise typer.Exit(1)
 
 
 @decision_app.command("explain")
@@ -2030,27 +1166,6 @@ def _validate_choice(value: str, choices: set[str], label: str) -> str:
     if value not in choices:
         raise GoalsError(f"{label} must be one of: {', '.join(sorted(choices))}")
     return value
-
-
-def _parse_creative_score(raw: str) -> CreativeVariantScore:
-    if "=" not in raw:
-        raise GoalsError('score must use "criterion=1-5:optional rationale" format.')
-    criterion, rest = raw.split("=", 1)
-    criterion = criterion.strip()
-    if not criterion:
-        raise GoalsError("score criterion cannot be empty.")
-    score_text, _, rationale = rest.partition(":")
-    try:
-        score = int(score_text.strip())
-    except ValueError as exc:
-        raise GoalsError("score value must be an integer from 1 to 5.") from exc
-    if score < 1 or score > 5:
-        raise GoalsError("score value must be an integer from 1 to 5.")
-    return CreativeVariantScore(
-        criterion=criterion,
-        score=score,
-        rationale=rationale.strip(),
-    )
 
 
 @phase_app.command("start")

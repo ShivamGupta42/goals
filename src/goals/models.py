@@ -7,7 +7,16 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 1
+# v2 dropped the asset/creative/external-review/handoff event types and the
+# matching GoalSnapshot fields. Loading tolerates v1 state (storage skips
+# retired events and drops unknown snapshot fields), so this bump is a signal,
+# not a hard gate.
+SCHEMA_VERSION = 2
+
+# Version of the portable, vendor-neutral goal-state spec written to `.goals/`.
+# Bumped independently of the internal SCHEMA_VERSION because this is the
+# external contract other agents (Claude Code, Codex, Cursor, ...) read.
+PORTABLE_SPEC_VERSION = 1
 
 
 def utc_now() -> str:
@@ -47,13 +56,8 @@ class EventType(StrEnum):
     PHASE_CHECKPOINT_RECORDED = "phase_checkpoint_recorded"
     DECISION_REQUESTED = "decision_requested"
     ARCHITECTURE_UPDATED = "architecture_updated"
-    ASSET_RECORDED = "asset_recorded"
-    CREATIVE_VARIANT_RECORDED = "creative_variant_recorded"
-    EXTERNAL_REVIEW_RECORDED = "external_review_recorded"
-    HANDOFF_OWNER_RECORDED = "handoff_owner_recorded"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
-    SCAN_COMPLETED = "scan_completed"
 
 
 class Event(BaseModel):
@@ -239,23 +243,6 @@ class DecisionBrief(BaseModel):
     agent_handled_summary: str = ""
 
 
-class ProfessionalBoundaryReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str = ""
-    domain: Literal["general", "medical", "legal", "financial", "safety"] = "general"
-    detected_domains: list[str] = Field(default_factory=list)
-    title: str
-    plain_boundary: str
-    what_agent_can_do: list[str] = Field(default_factory=list)
-    needs_user_or_professional: list[str] = Field(default_factory=list)
-    evidence_expectations: list[str] = Field(default_factory=list)
-    safe_next_steps: list[str] = Field(default_factory=list)
-    suggested_user_message: str
-    confidence: float = 0.0
-    summary: str
-
-
 class GoalBriefAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -405,70 +392,6 @@ class PermissionPolicyReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
-class DiscoveredTool(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["skill", "plugin", "adapter"]
-    name: str
-    label: str
-    description: str = ""
-    source: str = ""
-    registered: bool = False
-    available: bool = True
-    registry: str = ""
-    suggested_registry_entry: dict[str, Any] = Field(default_factory=dict)
-
-
-class EcosystemDiscoveryReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tools: list[DiscoveredTool] = Field(default_factory=list)
-    missing_from_registry: list[DiscoveredTool] = Field(default_factory=list)
-    summary: str
-
-
-class EcosystemQualityFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    kind: Literal["skill", "plugin", "registry"]
-    name: str
-    area: Literal["schema", "routing", "safety", "validation", "optimization"]
-    summary: str
-    recommendation: str
-    evidence: list[str] = Field(default_factory=list)
-
-
-class EcosystemQualityReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    passed: bool
-    summary: str
-    registry_root: str
-    registry_count: int = 0
-    entry_count: int = 0
-    findings: list[EcosystemQualityFinding] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class RegistrySyncChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    registry: str
-    kind: Literal["skill", "plugin", "adapter"]
-    name: str
-    action: Literal["add"] = "add"
-    entry: dict[str, Any] = Field(default_factory=dict)
-
-
-class RegistrySyncPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    changes: list[RegistrySyncChange] = Field(default_factory=list)
-    dry_run: bool = True
-    summary: str
-
-
 class SourceRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -521,252 +444,6 @@ class SourceFreshnessReport(BaseModel):
     passed: bool
     summary: str
     findings: list[SourceFreshnessFinding] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
-class CitationQualityFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    claim: str = ""
-    source_ids: list[str] = Field(default_factory=list)
-    summary: str
-    detail: str = ""
-    suggested_action: str = ""
-    needs_user: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class CitationQualityReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str
-    passed: bool
-    summary: str
-    findings: list[CitationQualityFinding] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
-class AssetRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    asset_id: str = Field(default_factory=lambda: f"AST-{uuid4().hex[:8]}")
-    title: str
-    locator: str = ""
-    asset_type: Literal[
-        "image",
-        "video",
-        "audio",
-        "document",
-        "design",
-        "code",
-        "dataset",
-        "other",
-    ] = "other"
-    origin: Literal[
-        "generated",
-        "user_provided",
-        "stock",
-        "external",
-        "derived",
-        "other",
-    ] = "other"
-    creator_tool: str = ""
-    license: str = ""
-    usage_rights: Literal["unknown", "allowed", "restricted", "blocked"] = "unknown"
-    source_ids: list[str] = Field(default_factory=list)
-    prompt: str = ""
-    notes: str = ""
-    created_at: str = Field(default_factory=utc_now)
-
-
-class AssetProvenanceFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    asset_id: str
-    title: str
-    summary: str
-    detail: str = ""
-    suggested_action: str = ""
-    needs_user: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class AssetProvenanceReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str
-    passed: bool
-    summary: str
-    findings: list[AssetProvenanceFinding] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
-class CreativeVariantScore(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    criterion: str
-    score: int = Field(ge=1, le=5)
-    rationale: str = ""
-
-
-class CreativeVariant(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    variant_id: str = Field(default_factory=lambda: f"VAR-{uuid4().hex[:8]}")
-    title: str
-    summary: str = ""
-    best_for: str = ""
-    asset_ids: list[str] = Field(default_factory=list)
-    source_ids: list[str] = Field(default_factory=list)
-    scores: list[CreativeVariantScore] = Field(default_factory=list)
-    strengths: list[str] = Field(default_factory=list)
-    risks: list[str] = Field(default_factory=list)
-    tradeoffs: list[str] = Field(default_factory=list)
-    status: Literal["candidate", "shortlisted", "selected", "rejected"] = "candidate"
-    created_at: str = Field(default_factory=utc_now)
-
-
-class CreativeVariantFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    variant_id: str
-    title: str
-    summary: str
-    detail: str = ""
-    suggested_action: str = ""
-    needs_user: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class CreativeVariantComparisonReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str
-    passed: bool
-    summary: str
-    variants_compared: int = 0
-    recommended_variant_id: str | None = None
-    findings: list[CreativeVariantFinding] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
-class HandoffOwner(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    owner_id: str = Field(default_factory=lambda: f"OWN-{uuid4().hex[:8]}")
-    label: str
-    role: str = ""
-    responsibility: str = ""
-    owner_type: Literal["agent", "user", "team", "external", "unknown"] = "unknown"
-    phase_ids: list[str] = Field(default_factory=list)
-    decision_scope: list[str] = Field(default_factory=list)
-    escalation_path: str = ""
-    confirmation: Literal[
-        "not_required",
-        "agent_confirmed",
-        "user_confirmed",
-        "needs_user",
-    ] = "not_required"
-    status: Literal["proposed", "active", "inactive", "blocked"] = "proposed"
-    notes: str = ""
-    created_at: str = Field(default_factory=utc_now)
-
-
-class HandoffOwnerFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    owner_id: str
-    label: str
-    summary: str
-    detail: str = ""
-    suggested_action: str = ""
-    needs_user: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class HandoffOwnerReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str
-    passed: bool
-    summary: str
-    owners_checked: int = 0
-    findings: list[HandoffOwnerFinding] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
-class ExternalReview(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    review_id: str = Field(default_factory=lambda: f"REV-{uuid4().hex[:8]}")
-    title: str
-    reviewer: str = ""
-    reviewer_type: Literal[
-        "user",
-        "professional",
-        "security",
-        "legal",
-        "financial",
-        "medical",
-        "compliance",
-        "team",
-        "external",
-        "other",
-    ] = "other"
-    risk_domain: Literal[
-        "general",
-        "medical",
-        "legal",
-        "financial",
-        "safety",
-        "security",
-        "compliance",
-        "privacy",
-        "production",
-        "other",
-    ] = "general"
-    status: Literal["required", "requested", "passed", "failed", "waived", "blocked"] = "required"
-    phase_ids: list[str] = Field(default_factory=list)
-    scope: list[str] = Field(default_factory=list)
-    summary: str = ""
-    evidence_refs: list[str] = Field(default_factory=list)
-    requested_at: str = Field(default_factory=utc_now)
-    completed_at: str | None = None
-    waiver_reason: str = ""
-    review_notes: str = ""
-
-
-class ExternalReviewFinding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    review_id: str
-    title: str
-    summary: str
-    detail: str = ""
-    suggested_action: str = ""
-    needs_user: bool = False
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class ExternalReviewReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal_id: str
-    passed: bool
-    summary: str
-    reviews_checked: int = 0
-    high_stakes_domains: list[str] = Field(default_factory=list)
-    findings: list[ExternalReviewFinding] = Field(default_factory=list)
     user_questions: list[str] = Field(default_factory=list)
     agent_actions: list[str] = Field(default_factory=list)
 
@@ -933,222 +610,6 @@ class ArchitectureCheckReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
-class ScenarioDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str
-    plain_question: str
-    priority: Literal["blocking", "important", "later"] = "blocking"
-    options: list[str] = Field(default_factory=list)
-    why_surface: str = ""
-
-
-class GoalScenario(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scenario_id: str
-    category: Literal["personal", "technical", "business", "self_evolution", "ecosystem"]
-    objective: str
-    why: str
-    required_capabilities: list[str] = Field(default_factory=list)
-    future_capabilities: list[str] = Field(default_factory=list)
-    decisions: list[ScenarioDecision] = Field(default_factory=list)
-    agent_can_decide: list[str] = Field(default_factory=list)
-    success_evidence: list[str] = Field(default_factory=list)
-
-
-class ScenarioEvaluation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scenario_id: str
-    category: str
-    current_supported: bool
-    supported_capabilities: list[str] = Field(default_factory=list)
-    missing_capabilities: list[str] = Field(default_factory=list)
-    planned_capabilities: list[str] = Field(default_factory=list)
-    surfaced_decisions: list[ScenarioDecision] = Field(default_factory=list)
-    agent_decisions: list[str] = Field(default_factory=list)
-    summary: str
-
-
-class ScenarioDogfoodCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scenario_id: str
-    category: str
-    objective: str
-    status: Literal["pass", "fail"]
-    plain_summary: str
-    user_decision_count: int = 0
-    agent_decision_count: int = 0
-    surfaced_questions: list[str] = Field(default_factory=list)
-    agent_handled_decisions: list[str] = Field(default_factory=list)
-    required_evidence: list[str] = Field(default_factory=list)
-    missing_capabilities: list[str] = Field(default_factory=list)
-    findings: list[str] = Field(default_factory=list)
-
-
-class ScenarioDogfoodReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    adapter: Literal["claude", "codex"]
-    passed: bool
-    summary: str
-    cases: list[ScenarioDogfoodCase] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class GoalUseCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    use_case_id: str
-    category: str
-    objective: str
-    why: str
-    required_capabilities: list[str] = Field(default_factory=list)
-    planned_capabilities: list[str] = Field(default_factory=list)
-    important_user_decisions: list[str] = Field(default_factory=list)
-    agent_can_decide: list[str] = Field(default_factory=list)
-    proof_required: list[str] = Field(default_factory=list)
-
-
-class GoalUseCaseCoverage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    use_case_id: str
-    category: str
-    status: Literal["covered", "partial"]
-    supported_capabilities: list[str] = Field(default_factory=list)
-    missing_capabilities: list[str] = Field(default_factory=list)
-    planned_capabilities: list[str] = Field(default_factory=list)
-    important_user_decisions: list[str] = Field(default_factory=list)
-    agent_can_decide: list[str] = Field(default_factory=list)
-    proof_required: list[str] = Field(default_factory=list)
-    summary: str
-
-
-class GoalUseCaseCoverageReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    adapter: Literal["claude", "codex"]
-    passed: bool
-    summary: str
-    cases: list[GoalUseCaseCoverage] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class GoalRehearsalCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scenario_id: str
-    category: str
-    status: Literal["pass", "fail"]
-    goal_id: str = ""
-    phases_accepted: int = 0
-    dashboard_rendered: bool = False
-    issue_count: int = 0
-    user_question_count: int = 0
-    proof_recorded: list[str] = Field(default_factory=list)
-    summary: str
-    error: str = ""
-
-
-class GoalRehearsalReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    adapter: Literal["claude", "codex"]
-    passed: bool
-    summary: str
-    cases: list[GoalRehearsalCase] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class GoalIssueStressCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    stress_id: str
-    category: str
-    passed: bool
-    issue_report_passed: bool
-    expected_issue_areas: list[str] = Field(default_factory=list)
-    found_issue_areas: list[str] = Field(default_factory=list)
-    expected_user_questions: list[str] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_action_count: int = 0
-    minimum_agent_actions: int = 0
-    missing_issue_areas: list[str] = Field(default_factory=list)
-    missing_user_questions: list[str] = Field(default_factory=list)
-    unexpected_user_questions: list[str] = Field(default_factory=list)
-    findings: list[str] = Field(default_factory=list)
-    summary: str
-
-
-class GoalIssueStressReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    adapter: Literal["claude", "codex"]
-    passed: bool
-    summary: str
-    cases: list[GoalIssueStressCase] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class SelfCheckSuiteResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    adapter: Literal["claude", "codex"]
-    scenarios_passed: bool
-    dogfood_passed: bool
-    coverage_passed: bool
-    rehearsal_passed: bool
-    issue_stress_passed: bool
-    user_decision_count: int = 0
-    agent_decision_count: int = 0
-    agent_repair_action_count: int = 0
-    covered_use_cases: int = 0
-    partial_use_cases: int = 0
-    failed_rehearsals: list[str] = Field(default_factory=list)
-    failed_issue_stress_cases: list[str] = Field(default_factory=list)
-    missing_capabilities: list[str] = Field(default_factory=list)
-    planned_capabilities: list[str] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-
-
-class SelfCheckReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    passed: bool
-    summary: str
-    adapters: list[SelfCheckSuiteResult] = Field(default_factory=list)
-    next_slices: list[str] = Field(default_factory=list)
-    user_experience_findings: list[str] = Field(default_factory=list)
-    ecosystem_findings: list[str] = Field(default_factory=list)
-
-
-class RoadmapSuggestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    suggestion_id: str
-    title: str
-    plain_summary: str
-    source: Literal["self-check", "memory", "manual"] = "self-check"
-    capability: str = ""
-    recommended_change: str
-    priority: Literal["p0", "p1", "p2"] = "p1"
-    roadmap_section: str = "Self-Evolution Memory"
-    evidence_refs: list[str] = Field(default_factory=list)
-
-
-class RoadmapUpdatePlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    path: str
-    dry_run: bool = True
-    summary: str
-    suggestions: list[RoadmapSuggestion] = Field(default_factory=list)
-    patch_preview: str = ""
-
-
 class ParallelWorktreeInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1204,16 +665,10 @@ class GoalIssue(BaseModel):
     severity: Literal["p0", "p1", "p2"]
     area: Literal[
         "architecture",
-        "asset",
-        "boundary",
-        "citation",
-        "creative",
         "decision",
         "checkpoint",
         "evidence",
-        "external_review",
         "gate",
-        "handoff",
         "merge",
         "phase",
         "source",
@@ -1236,14 +691,6 @@ class GoalIssueReport(BaseModel):
     issues: list[GoalIssue] = Field(default_factory=list)
     user_questions: list[str] = Field(default_factory=list)
     agent_actions: list[str] = Field(default_factory=list)
-
-
-class ScanResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scanner: str
-    verdict: GateVerdict
-    findings: list[str] = Field(default_factory=list)
 
 
 class ModeAPlan(BaseModel):
@@ -1281,10 +728,6 @@ class GoalSnapshot(BaseModel):
     phases: list[Phase]
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
-    assets: list[AssetRecord] = Field(default_factory=list)
-    creative_variants: list[CreativeVariant] = Field(default_factory=list)
-    external_reviews: list[ExternalReview] = Field(default_factory=list)
-    handoff_owners: list[HandoffOwner] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None
@@ -1296,3 +739,36 @@ class GoalSnapshot(BaseModel):
 
 
 Phase.model_rebuild()
+
+
+class PortableExport(BaseModel):
+    """Result of writing the portable, committable goal spec to `.goals/`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    spec_version: int
+    goal_id: str
+    state_path: str
+    markdown_path: str
+    phase_count: int
+
+
+class ContextSyncResult(BaseModel):
+    """Result of syncing the managed goal block into AGENTS.md / CLAUDE.md."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    created: list[str] = Field(default_factory=list)
+    updated: list[str] = Field(default_factory=list)
+    unchanged: list[str] = Field(default_factory=list)
+
+
+class NativeGoalEmission(BaseModel):
+    """A native stop-condition derived from the current phase's acceptance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["claude", "codex"]
+    condition: str
+    command: str
+    notes: list[str] = Field(default_factory=list)

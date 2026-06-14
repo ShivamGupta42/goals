@@ -1,20 +1,82 @@
+import json
 from pathlib import Path
 
 from goals.models import (
     CheckpointStatus,
-    CreativeVariant,
-    CreativeVariantScore,
     Event,
     EventType,
-    ExternalReview,
     GoalArchitectureMap,
-    HandoffOwner,
     SourceClaim,
     SourceRecord,
 )
 from goals.runtime import default_phases
 from goals.models import Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, WorktreeLease
 from goals.storage import EventStore
+
+
+def test_load_tolerates_legacy_state(tmp_path: Path) -> None:
+    """A goal started on a previous version still loads after upgrade."""
+    snapshot = GoalSnapshot(
+        goal_id="legacy",
+        objective="Legacy goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/legacy"
+        ),
+        phases=default_phases("Legacy goal"),
+        current_phase="P1",
+    )
+    # A v1 GOAL_CREATED snapshot that still carried a since-removed field.
+    legacy_snapshot = snapshot.model_dump()
+    legacy_snapshot["assets"] = []
+    created = Event(
+        goal_id="legacy",
+        event_type=EventType.GOAL_CREATED,
+        payload={"snapshot": legacy_snapshot},
+    )
+
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    retired = json.dumps(
+        {
+            "event_id": "evt-legacy-asset",
+            "goal_id": "legacy",
+            "event_type": "asset_recorded",  # removed in v2 — no replay handler
+            "payload": {"asset": {"asset_id": "AST-1"}},
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    (goal_dir / "events.jsonl").write_text(created.model_dump_json() + "\n" + retired + "\n")
+
+    loaded = EventStore(goal_dir).snapshot()  # must not raise
+    assert loaded.goal_id == "legacy"
+    assert loaded.current_phase == "P1"
+    # The retired event is skipped; only GOAL_CREATED is counted.
+    assert loaded.event_count == 1
+
+
+def test_genuinely_corrupt_event_still_raises(tmp_path: Path) -> None:
+    from goals.storage import GoalsError
+
+    snapshot = GoalSnapshot(
+        goal_id="x",
+        objective="x",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/x"
+        ),
+        phases=default_phases("x"),
+        current_phase="P1",
+    )
+    created = Event(
+        goal_id="x", event_type=EventType.GOAL_CREATED, payload={"snapshot": snapshot.model_dump()}
+    )
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    (goal_dir / "events.jsonl").write_text(created.model_dump_json() + "\n{ not json \n")
+    try:
+        EventStore(goal_dir).read_events()
+    except GoalsError:
+        return
+    raise AssertionError("corrupt event line should raise GoalsError")
 
 
 def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:
@@ -230,126 +292,3 @@ def test_source_record_replays_into_snapshot(tmp_path: Path) -> None:
 
     assert derived.sources[0].title == "Customer interview"
     assert derived.source_claims[0].claim == "Users need plain-language progress."
-
-
-def test_creative_variant_replays_into_snapshot(tmp_path: Path) -> None:
-    snapshot = GoalSnapshot(
-        goal_id="demo",
-        objective="Demo goal",
-        topology=WorktreeLease(
-            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
-        ),
-        phases=default_phases("Demo goal"),
-        current_phase="P1",
-    )
-    variant = CreativeVariant(
-        variant_id="VAR-demo",
-        title="Calm direction",
-        summary="Plain, trust-building direction.",
-        best_for="non-technical users",
-        scores=[CreativeVariantScore(criterion="clarity", score=5)],
-    )
-    store = EventStore(tmp_path / "goal")
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.GOAL_CREATED,
-            payload={"snapshot": snapshot.model_dump()},
-        )
-    )
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.CREATIVE_VARIANT_RECORDED,
-            payload={"variant": variant.model_dump()},
-        )
-    )
-
-    derived = store.snapshot()
-
-    assert derived.creative_variants[0].variant_id == "VAR-demo"
-    assert derived.creative_variants[0].scores[0].criterion == "clarity"
-
-
-def test_external_review_replays_into_snapshot(tmp_path: Path) -> None:
-    snapshot = GoalSnapshot(
-        goal_id="demo",
-        objective="Demo goal",
-        topology=WorktreeLease(
-            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
-        ),
-        phases=default_phases("Demo goal"),
-        current_phase="P1",
-    )
-    review = ExternalReview(
-        review_id="REV-demo",
-        title="Security review",
-        reviewer="Security lead",
-        reviewer_type="security",
-        risk_domain="security",
-        status="passed",
-        scope=["Prompt injection"],
-        summary="Approved.",
-        evidence_refs=["evidence:P2"],
-    )
-    store = EventStore(tmp_path / "goal")
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.GOAL_CREATED,
-            payload={"snapshot": snapshot.model_dump()},
-        )
-    )
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.EXTERNAL_REVIEW_RECORDED,
-            payload={"review": review.model_dump()},
-        )
-    )
-
-    derived = store.snapshot()
-
-    assert derived.external_reviews[0].review_id == "REV-demo"
-    assert derived.external_reviews[0].status == "passed"
-
-
-def test_handoff_owner_replays_into_snapshot(tmp_path: Path) -> None:
-    snapshot = GoalSnapshot(
-        goal_id="demo",
-        objective="Demo goal",
-        topology=WorktreeLease(
-            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
-        ),
-        phases=default_phases("Demo goal"),
-        current_phase="P1",
-    )
-    owner = HandoffOwner(
-        owner_id="OWN-demo",
-        label="Support lead",
-        role="reviewer",
-        responsibility="Review the rollout checklist.",
-        owner_type="team",
-        phase_ids=["P2"],
-        escalation_path="Escalate to coordinator.",
-    )
-    store = EventStore(tmp_path / "goal")
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.GOAL_CREATED,
-            payload={"snapshot": snapshot.model_dump()},
-        )
-    )
-    store.append(
-        Event(
-            goal_id="demo",
-            event_type=EventType.HANDOFF_OWNER_RECORDED,
-            payload={"owner": owner.model_dump()},
-        )
-    )
-
-    derived = store.snapshot()
-
-    assert derived.handoff_owners[0].owner_id == "OWN-demo"
-    assert derived.handoff_owners[0].responsibility == "Review the rollout checklist."

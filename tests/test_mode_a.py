@@ -46,48 +46,21 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert "Parallel worktree merge gate:" in plan.prompt
     assert plan.recommended_tools
     assert "Recommended skills/plugins for this phase:" in plan.prompt
-    assert "goals ecosystem discover" in plan.prompt
-    assert "skills/plugins/adapters" in plan.prompt
-    assert "goals ecosystem sync" in plan.prompt
     assert "goals ecosystem merge" in plan.prompt
     assert "Permission policy:" in plan.prompt
     assert "goals permission check" in plan.prompt
-    assert "Professional boundaries:" in plan.prompt
-    assert "goals boundary explain --domain auto" in plan.prompt
-    assert "External review gate:" in plan.prompt
-    assert "goals external-review add" in plan.prompt
-    assert "goals external-review check" in plan.prompt
     assert "Self-evolution memory:" in plan.prompt
     assert "goals memory sync" in plan.prompt
-    assert "goals roadmap suggest" in plan.prompt
     assert "goals memory record" in plan.prompt
     assert "Source evidence:" in plan.prompt
     assert "goals source add" in plan.prompt
-    assert "Citation quality:" in plan.prompt
-    assert "goals source citations" in plan.prompt
     assert "goals source freshness" in plan.prompt
-    assert "Asset provenance:" in plan.prompt
-    assert "goals asset add" in plan.prompt
-    assert "goals asset provenance" in plan.prompt
-    assert "Creative variants:" in plan.prompt
-    assert "goals creative variant add" in plan.prompt
-    assert "goals creative compare" in plan.prompt
-    assert "Handoff owners:" in plan.prompt
-    assert "goals handoff owner add" in plan.prompt
-    assert "goals handoff check" in plan.prompt
-    assert "goals asset provenance --strict" in plan.recommended_checks
-    assert "goals creative compare --strict" in plan.recommended_checks
-    assert "goals handoff check --strict" in plan.recommended_checks
-    assert "goals external-review check --strict" in plan.recommended_checks
     assert "goals architecture check --strict" in plan.recommended_checks
-    assert "goals source citations --strict" in plan.recommended_checks
     assert "goals source freshness --strict" in plan.recommended_checks
-    assert "goals boundary explain --domain auto" in plan.recommended_checks
     assert "uv run pytest -q" in plan.recommended_checks
     assert "goals brief" in plan.recommended_checks
     assert "goals checkpoint current" in plan.recommended_checks
     assert "source_ids" in plan.evidence_template.model_dump()
-    assert "goals safety-check --mode local ." in plan.recommended_checks
 
 
 def test_build_mode_a_plan_can_target_codex_when_not_ready(monkeypatch, tmp_path: Path) -> None:

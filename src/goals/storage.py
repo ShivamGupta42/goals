@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import contextmanager
@@ -8,18 +9,14 @@ from tempfile import NamedTemporaryFile
 from typing import Iterator
 
 from goals.models import (
-    AssetRecord,
-    CreativeVariant,
     Decision,
     Evidence,
     Event,
     EventType,
-    ExternalReview,
     GateResult,
     GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
-    HandoffOwner,
     PhaseCheckpoint,
     PhaseStatus,
     SourceClaim,
@@ -29,6 +26,33 @@ from goals.models import (
 
 class GoalsError(RuntimeError):
     """Base error for user-facing Goals failures."""
+
+
+_KNOWN_EVENT_TYPES = {member.value for member in EventType}
+
+
+def _is_retired_event(line: str) -> bool:
+    """True if a line is a well-formed event for a since-removed feature.
+
+    Earlier versions recorded events (e.g. ``asset_recorded``) whose event_type
+    is no longer a known member. They have no replay handler, so skipping them
+    lets an upgraded Goals still load goals started on a previous version
+    instead of bricking the whole goal. Genuinely corrupt lines are not retired.
+    """
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        return False
+    event_type = data.get("event_type")
+    return isinstance(event_type, str) and event_type not in _KNOWN_EVENT_TYPES
+
+
+def _drop_unknown_fields(payload: object, model: type) -> object:
+    """Strip top-level keys a model no longer declares (forward-compat load)."""
+    if not isinstance(payload, dict):
+        return payload
+    fields = getattr(model, "model_fields", {})
+    return {key: value for key, value in payload.items() if key in fields}
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -77,6 +101,8 @@ class EventStore:
             try:
                 events.append(Event.model_validate_json(line))
             except Exception as exc:  # noqa: BLE001
+                if _is_retired_event(line):
+                    continue
                 raise GoalsError(
                     f"Invalid event at {self.events_path}:{line_number}: {exc}"
                 ) from exc
@@ -106,7 +132,9 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
     first = events[0]
     if first.event_type != EventType.GOAL_CREATED:
         raise GoalsError("First event must be goal_created.")
-    snapshot = GoalSnapshot.model_validate(first.payload["snapshot"])
+    snapshot = GoalSnapshot.model_validate(
+        _drop_unknown_fields(first.payload["snapshot"], GoalSnapshot)
+    )
     snapshot.event_count = len(events)
     for event in events[1:]:
         snapshot.last_updated = event.timestamp
@@ -139,26 +167,6 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
-        elif event.event_type == EventType.ASSET_RECORDED:
-            asset = AssetRecord.model_validate(payload["asset"])
-            if not any(existing.asset_id == asset.asset_id for existing in snapshot.assets):
-                snapshot.assets.append(asset)
-        elif event.event_type == EventType.CREATIVE_VARIANT_RECORDED:
-            variant = CreativeVariant.model_validate(payload["variant"])
-            if not any(
-                existing.variant_id == variant.variant_id for existing in snapshot.creative_variants
-            ):
-                snapshot.creative_variants.append(variant)
-        elif event.event_type == EventType.EXTERNAL_REVIEW_RECORDED:
-            review = ExternalReview.model_validate(payload["review"])
-            if not any(
-                existing.review_id == review.review_id for existing in snapshot.external_reviews
-            ):
-                snapshot.external_reviews.append(review)
-        elif event.event_type == EventType.HANDOFF_OWNER_RECORDED:
-            owner = HandoffOwner.model_validate(payload["owner"])
-            if not any(existing.owner_id == owner.owner_id for existing in snapshot.handoff_owners):
-                snapshot.handoff_owners.append(owner)
         elif event.event_type == EventType.SOURCE_RECORDED:
             source = SourceRecord.model_validate(payload["source"])
             if not any(existing.source_id == source.source_id for existing in snapshot.sources):

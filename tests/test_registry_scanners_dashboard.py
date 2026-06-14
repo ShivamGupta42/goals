@@ -18,7 +18,6 @@ from goals.models import (
 )
 from goals.registry import validate_registry_file
 from goals.runtime import default_phases
-from goals.scanners import run_safety_scanners
 from goals.storage import GoalsError
 
 
@@ -27,29 +26,6 @@ def test_registry_rejects_unknown_critical_field(tmp_path: Path) -> None:
     path.write_text("version: 1\nkind: gates\nsurprise: true\n")
     with pytest.raises(GoalsError):
         validate_registry_file(path)
-
-
-def test_safety_scanner_detects_secret_and_local_path(tmp_path: Path) -> None:
-    secret_label = "api" + "_key"
-    local_path = "/" + "Users/example/private"
-    (tmp_path / "README.md").write_text(
-        f"{secret_label} = 'abcdefghijklmnopqrstuvwxyz'\n{local_path}\n"
-    )
-    (tmp_path / "LICENSE").write_text("MIT\n")
-    results = {result.scanner: result for result in run_safety_scanners(tmp_path)}
-    assert results["secrets"].findings
-    assert results["local_paths"].findings
-
-
-def test_publish_safety_blocks_self_evolution_memory(tmp_path: Path) -> None:
-    (tmp_path / "LICENSE").write_text("MIT\n")
-    memory_dir = tmp_path / ".agent-workflow" / "self-evolution"
-    memory_dir.mkdir(parents=True)
-    (memory_dir / "memory.json").write_text('{"entries":[]}\n')
-
-    results = {result.scanner: result for result in run_safety_scanners(tmp_path)}
-
-    assert results["public_repo_hygiene"].findings
 
 
 def test_dashboard_escapes_html(tmp_path: Path) -> None:
@@ -84,18 +60,8 @@ def test_dashboard_escapes_html(tmp_path: Path) -> None:
     assert "Code-Derived Check" in text
     assert "Review focus" in text
     assert "Evidence gaps and open questions" in text
-    assert "Creative Variants" in text
-    assert "No creative variants recorded yet." in text
-    assert "External Reviews" in text
-    assert "No external reviews are recorded yet." in text
-    assert "External review is required before high-stakes work is accepted." not in text
-    assert "Handoff Owners" in text
-    assert "No handoff owners recorded yet." in text
     assert "Sources" in text
-    assert "Citation Quality" in text
     assert "Freshness" in text
-    assert "Assets" in text
-    assert "No assets recorded yet." in text
     assert "No decisions are waiting on you." in text
     assert "P1 has no evidence yet." in text
     assert "Goal ID:" in text

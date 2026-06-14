@@ -5,12 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from goals.adapters import adapter_check
-from goals.assets import render_asset_summary
-from goals.citations import render_citation_quality_summary
-from goals.creative import render_creative_summary
 from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
-from goals.external_reviews import render_external_review_summary
-from goals.handoffs import render_handoff_summary
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.sources import render_claim_summary, render_source_summary
@@ -83,16 +78,9 @@ def recommended_checks(worktree: Path) -> list[str]:
             "goals brief",
             "goals checkpoint current",
             "goals architecture check --strict",
-            "goals boundary explain --domain auto",
-            "goals external-review check --strict",
-            "goals asset provenance --strict",
-            "goals creative compare --strict",
-            "goals handoff check --strict",
             "goals merge-check",
-            "goals source citations --strict",
             "goals source freshness --strict",
             "goals validate",
-            "goals safety-check --mode local .",
         ]
     )
     return checks
@@ -106,11 +94,6 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     memory = render_memory_suggestions(plan.memory_suggestions)
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
-    citations = render_citation_quality_summary(snapshot)
-    assets = render_asset_summary(snapshot)
-    creative = render_creative_summary(snapshot)
-    external_reviews = render_external_review_summary(snapshot)
-    handoffs = render_handoff_summary(snapshot)
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
@@ -122,6 +105,7 @@ State files:
 - Dashboard: `{plan.dashboard_file}`
 - Architecture map: `{plan.architecture_file}`
 - Evidence draft: `{plan.evidence_file}`
+- Portable spec: `{snapshot.topology.worktree_path}/.goals/GOAL.md` (+ `goal-state.json`)
 
 Current phase: {plan.current_phase} - {plan.phase_title}
 Phase goal: {plan.phase_goal}
@@ -154,46 +138,16 @@ Recommended checks for this repo:
 Recommended skills/plugins for this phase:
 {tools}
 
-Local ecosystem discovery:
-- If recommendations seem incomplete, run `goals ecosystem discover` to inspect installed local skills/plugins/adapters and suggest portable registry additions.
-- Use `goals ecosystem sync` for a dry-run registry update plan; only use `--apply` after reviewing the proposed portable YAML entries.
+Ecosystem recommendation merge:
 - When multiple agents recommend tools, use `goals ecosystem merge` to deduplicate recommendations, surface approval-required tools, and keep routine routing decisions with the coordinator.
 
 Permission policy:
 - Before using an external service, connector, paid tool, production-affecting action, or destructive command, run `goals permission check NAME --kind plugin --action "plain-language action"`.
 - If the permission report says `agent_decide`, proceed with a reversible local action and record evidence. If it says `ask_user`, use `goals brief` wording before asking. If it says `deny`, stop and choose a safer local alternative unless the user explicitly approves.
 
-Professional boundaries:
-- If the work touches medical, legal, financial, safety, compliance, or other professional judgment, run `goals boundary explain --domain auto` before giving guidance or asking the user.
-- Use the boundary report's suggested wording, evidence expectations, and safe next steps. Do not turn a professional judgment into an agent-only decision.
-
-External review gate:
-{external_reviews}
-- If this phase touches medical, legal, financial, safety, security, compliance, privacy, production rollout, public claims, or irreversible user/business impact, record the review need with `goals external-review add "Review title" --risk-domain safety --status required --scope "what must be checked"`.
-- Run `goals external-review check --strict` before review. Fill missing scope, summaries, evidence refs, phase ids, and review notes yourself. Ask the user only when a reviewer must be chosen, review is blocked or failed, or the user wants to waive a high-stakes review.
-
-Asset provenance:
-{assets}
-- If this phase creates, imports, selects, edits, or publishes images, videos, audio, documents, designs, datasets, or other assets, record them with `goals asset add "Asset title" --locator "path-or-url" --asset-type image --origin generated --usage-rights allowed`.
-- Run `goals asset provenance --strict` before review; fix missing locators, licenses, source references, generation prompts, local paths, or unclear rights before asking the user unless rights are blocked or restricted.
-
-Creative variants:
-{creative}
-- If this phase explores creative directions, drafts, concepts, campaign options, or design alternatives, record each meaningful option with `goals creative variant add "Variant title" --summary "plain description" --best-for "when to use it" --score "brand_fit=4:why"`.
-- Run `goals creative compare --strict` before asking the user. The agent should shortlist, reject, or recommend variants itself when the choice is reversible; ask the user only for brand direction, publishing approval, or blocked/restricted asset rights.
-
-Handoff owners:
-{handoffs}
-- If this phase changes who owns a follow-up, review, process step, approval, rollout, or recurring task, record the owner with `goals handoff owner add "Owner label" --role reviewer --responsibility "what they own" --phase-id {plan.current_phase}`.
-- Run `goals handoff check --strict` before review. Fill missing roles, responsibilities, phase ids, or escalation paths yourself. Ask the user only when an owner is blocked or `--confirmation needs_user` is required for an accountability change.
-
 Self-evolution memory:
 {memory}
 - To reuse lessons from a similar Goals project, run `goals memory sync PATH` first. It is a dry run by default and imports sanitized suggestions only with `--apply`.
-
-Self-evolution roadmap:
-- After self-check or repeated friction, run `goals roadmap suggest` for a dry-run ROADMAP.md update plan.
-- Use `goals roadmap suggest --apply` only after reviewing the generated roadmap block.
 
 Source evidence:
 {sources}
@@ -202,10 +156,8 @@ Source-backed claims:
 {claims}
 
 If this phase makes research, business, customer, market, architecture, migration, or safety claims, record sources with `goals source add "Source title" --locator "url-or-file" --claim "claim supported by this source" --confidence 0.8`.
-Citation quality:
-{citations}
 
-Before relying on source-backed claims, run `goals source citations --strict` and `goals source freshness --strict`; add missing locators or summaries, fix missing source ids, soften absolute claims, refresh, replace, or mark stale sources before asking the user unless a report says the user must decide.
+Before relying on source-backed claims, run `goals source freshness --strict`; add missing locators or summaries, fix missing source ids, refresh, replace, or mark stale sources before asking the user unless a report says the user must decide.
 
 Evidence JSON shape:
 ```json
@@ -216,7 +168,12 @@ Evidence JSON shape:
 
 If you hit repeated friction, record it with `goals memory record "what happened" --area phase --kind friction` so future runs can improve phases, skills, gates, or docs.
 
-Goals is the durable state and review layer. The native agent goal loop owns persistence of attention; Goals owns phases, evidence, gates, decisions, learnings, memory, and the dashboard.
+Portable handoff (works across agents):
+- Run `goals export` to refresh `.goals/GOAL.md` and `.goals/goal-state.json`. These are sanitized of local paths and safe to commit so any agent (Claude Code, Codex, Cursor) can resume this goal.
+- Run `goals context sync` to keep this goal's managed block current in `AGENTS.md` and `CLAUDE.md` without touching human-authored content.
+- Run `goals emit --agent {plan.adapter}` to get a transcript-verifiable native stop-condition derived from this phase's acceptance criteria.
+
+Goals is the durable state and review layer. The native agent goal loop owns persistence of attention; Goals owns phases, evidence, gates, decisions, learnings, memory, the dashboard, and the portable goal spec other agents can read.
 """
 
 

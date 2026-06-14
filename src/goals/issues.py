@@ -3,14 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
-from goals.assets import analyze_asset_provenance
-from goals.boundaries import detect_professional_domains
-from goals.citations import analyze_citation_quality
-from goals.creative import analyze_creative_variants
 from goals.decisions import should_surface_decision
-from goals.external_reviews import analyze_external_reviews
 from goals.gates import review_phase
-from goals.handoffs import analyze_handoff_owners
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     CheckpointStatus,
@@ -30,12 +24,6 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_phase_issues(snapshot))
     issues.extend(_decision_issues(snapshot))
     issues.extend(_source_issues(snapshot))
-    issues.extend(_citation_issues(snapshot))
-    issues.extend(_asset_issues(snapshot))
-    issues.extend(_creative_issues(snapshot))
-    issues.extend(_external_review_issues(snapshot))
-    issues.extend(_handoff_issues(snapshot))
-    issues.extend(_boundary_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
     issues.extend(_architecture_issues(snapshot))
     issues.extend(_merge_readiness_issues(snapshot))
@@ -350,22 +338,6 @@ def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return issues
 
 
-def _citation_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_citation_quality(snapshot)
-    return [
-        GoalIssue(
-            severity=finding.severity,
-            area="citation",
-            summary=finding.summary,
-            detail=finding.detail,
-            suggested_action=finding.suggested_action,
-            needs_user=finding.needs_user,
-            evidence_refs=finding.evidence_refs,
-        )
-        for finding in report.findings
-    ]
-
-
 def _risk_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return [
         GoalIssue(
@@ -375,95 +347,6 @@ def _risk_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             suggested_action="Mitigate, accept, or convert this risk into a clear decision.",
         )
         for risk in snapshot.risks
-    ]
-
-
-def _boundary_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    text = " ".join(
-        [
-            snapshot.objective,
-            snapshot.why,
-            *snapshot.definition_of_done,
-            *snapshot.risks,
-            *(claim.claim for claim in snapshot.source_claims),
-        ]
-    )
-    domains = detect_professional_domains(text)
-    if not domains:
-        return []
-    return [
-        GoalIssue(
-            severity="p1",
-            area="boundary",
-            summary=f"Professional boundary template needed for {domains[0]} goal.",
-            detail=f"Detected high-stakes domain(s): {', '.join(domains)}.",
-            suggested_action=f"Run `goals boundary explain --domain {domains[0]}` and use the suggested plain wording before giving guidance.",
-            evidence_refs=[f"boundary:{domain}" for domain in domains],
-        )
-    ]
-
-
-def _asset_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_asset_provenance(snapshot)
-    return [
-        GoalIssue(
-            severity=finding.severity,
-            area="asset",
-            summary=finding.summary,
-            detail=finding.detail,
-            suggested_action=finding.suggested_action,
-            needs_user=finding.needs_user,
-            evidence_refs=finding.evidence_refs,
-        )
-        for finding in report.findings
-    ]
-
-
-def _creative_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_creative_variants(snapshot)
-    return [
-        GoalIssue(
-            severity=finding.severity,
-            area="creative",
-            summary=finding.summary,
-            detail=finding.detail,
-            suggested_action=finding.suggested_action,
-            needs_user=finding.needs_user,
-            evidence_refs=finding.evidence_refs,
-        )
-        for finding in report.findings
-    ]
-
-
-def _external_review_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_external_reviews(snapshot)
-    return [
-        GoalIssue(
-            severity=finding.severity,
-            area="external_review",
-            summary=finding.summary,
-            detail=finding.detail,
-            suggested_action=finding.suggested_action,
-            needs_user=finding.needs_user,
-            evidence_refs=finding.evidence_refs,
-        )
-        for finding in report.findings
-    ]
-
-
-def _handoff_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_handoff_owners(snapshot)
-    return [
-        GoalIssue(
-            severity=finding.severity,
-            area="handoff",
-            summary=finding.summary,
-            detail=finding.detail,
-            suggested_action=finding.suggested_action,
-            needs_user=finding.needs_user,
-            evidence_refs=finding.evidence_refs,
-        )
-        for finding in report.findings
     ]
 
 

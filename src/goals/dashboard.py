@@ -10,11 +10,8 @@ from goals.architecture import (
     build_architecture_brief,
     render_mermaid,
 )
-from goals.assets import analyze_asset_provenance
 from goals.brief import build_goal_brief
 from goals.checkpoints import build_current_checkpoint_brief
-from goals.citations import analyze_citation_quality
-from goals.creative import analyze_creative_variants
 from goals.decisions import (
     build_decision_brief,
     build_decision_context,
@@ -23,9 +20,7 @@ from goals.decisions import (
     should_surface_decision,
 )
 from goals.ecosystem import recommend_ecosystem_tools
-from goals.external_reviews import analyze_external_reviews
 from goals.git_ops import source_commit
-from goals.handoffs import analyze_handoff_owners
 from goals.issues import analyze_goal_issues
 from goals.memory import derive_memory_suggestions, load_memory
 from goals.models import GoalArchitectureMap, GoalSnapshot
@@ -64,10 +59,6 @@ def render_dashboard(
     issues = _issues_html(issue_report)
     recommendations = _recommendations_html(snapshot)
     memory = _memory_html(snapshot)
-    assets = _assets_html(snapshot)
-    creative = _creative_html(snapshot)
-    external_reviews = _external_reviews_html(snapshot)
-    handoffs = _handoffs_html(snapshot)
     sources = _sources_html(snapshot)
     evidence = "\n".join(
         f"<li>{escape(p.phase_id)}: {escape((p.evidence.notes if p.evidence else 'No evidence yet'))}</li>"
@@ -148,11 +139,7 @@ def render_dashboard(
     <a href="#ecosystem">Skills & Plugins</a>
     <a href="#memory">Memory</a>
     <a href="#architecture">Architecture</a>
-    <a href="#creative">Creative</a>
-    <a href="#external-reviews">External Reviews</a>
-    <a href="#handoffs">Handoffs</a>
     <a href="#evidence">Evidence</a>
-    <a href="#assets">Assets</a>
     <a href="#sources">Sources</a>
     <a href="#technical">Technical Details</a>
   </nav>
@@ -188,25 +175,9 @@ def render_dashboard(
     <h2>Architecture Map</h2>
     {architecture_html}
   </section>
-  <section id="creative" class="panel">
-    <h2>Creative Variants</h2>
-    {creative}
-  </section>
-  <section id="external-reviews" class="panel">
-    <h2>External Reviews</h2>
-    {external_reviews}
-  </section>
-  <section id="handoffs" class="panel">
-    <h2>Handoff Owners</h2>
-    {handoffs}
-  </section>
   <section id="evidence" class="panel">
     <h2>Proof and Evidence</h2>
     <ul>{evidence}</ul>
-  </section>
-  <section id="assets" class="panel">
-    <h2>Assets</h2>
-    {assets}
   </section>
   <section id="sources" class="panel">
     <h2>Sources</h2>
@@ -512,9 +483,8 @@ def _memory_html(snapshot: GoalSnapshot) -> str:
 
 def _sources_html(snapshot: GoalSnapshot) -> str:
     if not snapshot.sources and not snapshot.source_claims:
-        return "<h3>Citation Quality</h3><p>No sources recorded yet.</p><h3>Freshness</h3><p>No sources recorded yet.</p>"
+        return "<h3>Freshness</h3><p>No sources recorded yet.</p>"
     freshness = analyze_source_freshness(snapshot)
-    citations = analyze_citation_quality(snapshot)
     source_items = "\n".join(
         "<li>"
         f"<strong>{escape(source.title)}</strong>"
@@ -555,238 +525,10 @@ def _sources_html(snapshot: GoalSnapshot) -> str:
         if freshness.findings
         else f"<p>{escape(freshness.summary)}</p>"
     )
-    citation_items = "".join(
-        "<li>"
-        f"<strong>{escape(finding.summary)}</strong>"
-        f"<p>{escape(finding.detail)}</p>"
-        + (
-            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-            if finding.suggested_action
-            else ""
-        )
-        + "</li>"
-        for finding in citations.findings[:5]
-    )
-    citation_html = (
-        f"<p>{escape(citations.summary)}</p><ul>{citation_items}</ul>"
-        if citations.findings
-        else f"<p>{escape(citations.summary)}</p>"
-    )
     return (
-        f"{warning}<h3>Citation Quality</h3>{citation_html}<h3>Freshness</h3>{freshness_html}"
+        f"{warning}<h3>Freshness</h3>{freshness_html}"
         f'<h3>Recorded Sources</h3><ul class="node-list">{source_items}</ul>'
         f"<h3>Source-backed Claims</h3><ul>{claim_items or '<li>No claims recorded yet.</li>'}</ul>"
-    )
-
-
-def _assets_html(snapshot: GoalSnapshot) -> str:
-    if not snapshot.assets:
-        return "<h3>Provenance</h3><p>No assets recorded yet.</p>"
-    report = analyze_asset_provenance(snapshot)
-    asset_items = "\n".join(
-        "<li>"
-        f"<strong>{escape(asset.title)}</strong>"
-        f"<p>{escape(asset.notes or asset.locator or 'No note recorded.')}</p>"
-        f'<span class="pill">{escape(asset.asset_type)}</span> '
-        f'<span class="pill">{escape(asset.origin)}</span> '
-        f'<span class="status-label {escape(asset.usage_rights)}">{escape(asset.usage_rights)}</span>'
-        + (f"<p>License: {escape(asset.license)}</p>" if asset.license else "")
-        + "</li>"
-        for asset in snapshot.assets
-    )
-    finding_items = "".join(
-        "<li>"
-        f"<strong>{escape(finding.summary)}</strong>"
-        f"<p>{escape(finding.detail)}</p>"
-        + (
-            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-            if finding.suggested_action
-            else ""
-        )
-        + "</li>"
-        for finding in report.findings[:5]
-    )
-    provenance_html = (
-        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
-        if report.findings
-        else f"<p>{escape(report.summary)}</p>"
-    )
-    return (
-        f"<h3>Provenance</h3>{provenance_html}"
-        f'<h3>Recorded Assets</h3><ul class="node-list">{asset_items}</ul>'
-    )
-
-
-def _creative_html(snapshot: GoalSnapshot) -> str:
-    report = analyze_creative_variants(snapshot)
-    if not snapshot.creative_variants:
-        return "<h3>Comparison</h3><p>No creative variants recorded yet.</p>"
-    recommended = report.recommended_variant_id or "none"
-    variant_items = "\n".join(
-        "<li>"
-        f"<strong>{escape(variant.title)}</strong>"
-        f"<p>{escape(variant.summary or 'No summary recorded.')}</p>"
-        f'<span class="pill">{escape(variant.variant_id)}</span> '
-        f'<span class="status-label {escape(variant.status)}">{escape(variant.status)}</span>'
-        + (
-            f"<p><strong>Best for:</strong> {escape(variant.best_for)}</p>"
-            if variant.best_for
-            else ""
-        )
-        + (
-            f"<p><strong>Scores:</strong> {escape(_score_text(variant.scores))}</p>"
-            if variant.scores
-            else ""
-        )
-        + (
-            f"<p><strong>Assets:</strong> {escape(', '.join(variant.asset_ids))}</p>"
-            if variant.asset_ids
-            else ""
-        )
-        + "</li>"
-        for variant in snapshot.creative_variants
-    )
-    finding_items = "".join(
-        "<li>"
-        f"<strong>{escape(finding.summary)}</strong>"
-        f"<p>{escape(finding.detail)}</p>"
-        + (
-            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-            if finding.suggested_action
-            else ""
-        )
-        + "</li>"
-        for finding in report.findings[:5]
-    )
-    findings_html = (
-        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
-        if report.findings
-        else f"<p>{escape(report.summary)}</p>"
-    )
-    return (
-        f"<h3>Comparison</h3>{findings_html}"
-        f"<p><strong>Recommended variant:</strong> <code>{escape(recommended)}</code></p>"
-        f'<h3>Recorded Variants</h3><ul class="node-list">{variant_items}</ul>'
-    )
-
-
-def _external_reviews_html(snapshot: GoalSnapshot) -> str:
-    report = analyze_external_reviews(snapshot)
-    if not snapshot.external_reviews:
-        return f"<h3>Review Gate</h3><p>{escape(report.summary)}</p>" + (
-            "<ul>"
-            + "".join(
-                "<li>"
-                f"<strong>{escape(finding.summary)}</strong>"
-                f"<p>{escape(finding.detail)}</p>"
-                f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-                "</li>"
-                for finding in report.findings[:5]
-            )
-            + "</ul>"
-            if report.findings
-            else ""
-        )
-    review_items = "\n".join(
-        "<li>"
-        f"<strong>{escape(review.title)}</strong>"
-        f"<p>{escape(review.summary or review.review_notes or 'No summary recorded.')}</p>"
-        f'<span class="pill">{escape(review.review_id)}</span> '
-        f'<span class="pill">{escape(review.risk_domain)}</span> '
-        f'<span class="pill">{escape(review.reviewer_type)}</span> '
-        f'<span class="status-label {escape(review.status)}">{escape(review.status)}</span>'
-        + (
-            f"<p><strong>Reviewer:</strong> {escape(review.reviewer)}</p>"
-            if review.reviewer
-            else ""
-        )
-        + (
-            f"<p><strong>Scope:</strong> {escape(', '.join(review.scope))}</p>"
-            if review.scope
-            else ""
-        )
-        + (
-            f"<p><strong>Evidence:</strong> {escape(', '.join(review.evidence_refs))}</p>"
-            if review.evidence_refs
-            else ""
-        )
-        + (
-            f"<p><strong>Waiver:</strong> {escape(review.waiver_reason)}</p>"
-            if review.waiver_reason
-            else ""
-        )
-        + "</li>"
-        for review in snapshot.external_reviews
-    )
-    finding_items = "".join(
-        "<li>"
-        f"<strong>{escape(finding.summary)}</strong>"
-        f"<p>{escape(finding.detail)}</p>"
-        + (
-            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-            if finding.suggested_action
-            else ""
-        )
-        + "</li>"
-        for finding in report.findings[:5]
-    )
-    findings_html = (
-        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
-        if report.findings
-        else f"<p>{escape(report.summary)}</p>"
-    )
-    return (
-        f"<h3>Review Gate</h3>{findings_html}"
-        f'<h3>Recorded Reviews</h3><ul class="node-list">{review_items}</ul>'
-    )
-
-
-def _handoffs_html(snapshot: GoalSnapshot) -> str:
-    report = analyze_handoff_owners(snapshot)
-    if not snapshot.handoff_owners:
-        return "<h3>Owner Registry</h3><p>No handoff owners recorded yet.</p>"
-    owner_items = "\n".join(
-        "<li>"
-        f"<strong>{escape(owner.label)}</strong>"
-        f"<p>{escape(owner.responsibility or owner.notes or 'No responsibility recorded.')}</p>"
-        f'<span class="pill">{escape(owner.owner_id)}</span> '
-        f'<span class="pill">{escape(owner.owner_type)}</span> '
-        f'<span class="status-label {escape(owner.status)}">{escape(owner.status)}</span> '
-        f'<span class="pill">confirmation: {escape(owner.confirmation)}</span>'
-        + (f"<p><strong>Role:</strong> {escape(owner.role)}</p>" if owner.role else "")
-        + (
-            f"<p><strong>Phases:</strong> {escape(', '.join(owner.phase_ids))}</p>"
-            if owner.phase_ids
-            else ""
-        )
-        + (
-            f"<p><strong>Escalation:</strong> {escape(owner.escalation_path)}</p>"
-            if owner.escalation_path
-            else ""
-        )
-        + "</li>"
-        for owner in snapshot.handoff_owners
-    )
-    finding_items = "".join(
-        "<li>"
-        f"<strong>{escape(finding.summary)}</strong>"
-        f"<p>{escape(finding.detail)}</p>"
-        + (
-            f"<p><strong>Next:</strong> {escape(finding.suggested_action)}</p>"
-            if finding.suggested_action
-            else ""
-        )
-        + "</li>"
-        for finding in report.findings[:5]
-    )
-    findings_html = (
-        f"<p>{escape(report.summary)}</p><ul>{finding_items}</ul>"
-        if report.findings
-        else f"<p>{escape(report.summary)}</p>"
-    )
-    return (
-        f"<h3>Owner Registry</h3>{findings_html}"
-        f'<h3>Recorded Owners</h3><ul class="node-list">{owner_items}</ul>'
     )
 
 
