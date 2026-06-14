@@ -55,6 +55,7 @@ class EventType(StrEnum):
     PHASE_ACCEPTED = "phase_accepted"
     PHASE_CHECKPOINT_RECORDED = "phase_checkpoint_recorded"
     DECISION_REQUESTED = "decision_requested"
+    DECISION_RECORDED = "decision_recorded"
     ARCHITECTURE_UPDATED = "architecture_updated"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
@@ -356,6 +357,27 @@ class SourceClaim(BaseModel):
     claim: str
     source_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0
+
+
+class JudgementRecord(BaseModel):
+    """A decision the user (or agent) actually made during the goal.
+
+    This is the durable record of *what was decided* — distinct from a surfaced
+    ``Decision`` (which only requests input). The dashboard displays these as a
+    read-only judgement log, and they are the substrate for later learning a
+    user's judgement style for autonomous execution.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    judgement_id: str = Field(default_factory=lambda: f"JDG-{uuid4().hex[:8]}")
+    question: str
+    choice: str
+    rationale: str = ""
+    decided_by: Literal["user", "agent"] = "user"
+    reversible: bool = True
+    phase_id: str | None = None
+    recorded_at: str = Field(default_factory=utc_now)
 
 
 class SourceFreshnessFinding(BaseModel):
@@ -665,6 +687,7 @@ class GoalSnapshot(BaseModel):
     phases: list[Phase]
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
+    judgements: list[JudgementRecord] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

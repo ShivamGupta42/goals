@@ -17,6 +17,7 @@ from goals.models import (
     GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
+    JudgementRecord,
     PhaseCheckpoint,
     PhaseStatus,
     SourceClaim,
@@ -165,6 +166,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             snapshot.decisions.append(decision)
             if payload["decision"].get("priority") == "blocking":
                 snapshot.status = GoalStatus.BLOCKED
+        elif event.event_type == EventType.DECISION_RECORDED:
+            snapshot.judgements.append(JudgementRecord.model_validate(payload["judgement"]))
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
         elif event.event_type == EventType.SOURCE_RECORDED:

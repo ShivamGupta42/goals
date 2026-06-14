@@ -70,6 +70,7 @@ from goals.models import (
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    JudgementRecord,
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
@@ -1132,6 +1133,49 @@ def decision_explain(
             typer.echo(explanation.markdown)
             if not explanation.surfaced_to_user:
                 typer.echo("\nAgent note: this does not need to interrupt the user.")
+
+    _handle(run)
+
+
+@decision_app.command("record")
+def decision_record(
+    question: str = typer.Argument(..., help="The question or choice that was decided."),
+    choice: str = typer.Option(..., "--choice", help="What was chosen."),
+    why: str = typer.Option("", "--why", help="Why this choice was made."),
+    by: str = typer.Option("user", "--by", help="Who decided: user or agent."),
+    reversible: bool = typer.Option(
+        True, "--reversible/--irreversible", help="Whether the choice can be undone."
+    ),
+    phase: Optional[str] = typer.Option(
+        None, "--phase", help="Phase this decision belongs to (e.g. P2)."
+    ),
+) -> None:
+    """Record a decision the user (or agent) made, building the judgement log.
+
+    Decisions happen in the agent conversation, not on the read-only dashboard.
+    Call this when a judgement is made so the dashboard can show what was decided
+    and why — the durable history behind the goal.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        record = JudgementRecord(
+            question=question,
+            choice=choice,
+            rationale=why,
+            decided_by=_validate_choice(by, {"user", "agent"}, "by"),  # type: ignore[arg-type]
+            reversible=reversible,
+            phase_id=phase,
+        )
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.DECISION_RECORDED,
+                payload={"judgement": record.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded decision: {record.judgement_id}")
 
     _handle(run)
 
