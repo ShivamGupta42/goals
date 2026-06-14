@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 
 from goals.adapters import adapter_check
+from goals.agent_hooks import session_start_payload, stop_payload
 from goals.architecture import (
     analyze_code_architecture,
     architecture_for_snapshot,
@@ -129,6 +130,7 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
+hooks_app = typer.Typer(help="Emit Claude Code plugin hook payloads.")
 loop_app = typer.Typer(help="Visually build, check, and improve goal loops.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
@@ -328,6 +330,7 @@ app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced b
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
+app.add_typer(hooks_app, name="hooks", rich_help_panel="Portability")
 app.add_typer(loop_app, name="loop", rich_help_panel="Simple workflow")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
@@ -1415,6 +1418,18 @@ def loop_improve(
         typer.echo(render_loop_improvement_plan(plan))
 
     _handle(run)
+
+
+@hooks_app.command("session-start")
+def hooks_session_start() -> None:
+    """Emit the SessionStart payload (active goal context) for the plugin hook."""
+    typer.echo(session_start_payload(Path.cwd()), nl=False)
+
+
+@hooks_app.command("stop")
+def hooks_stop() -> None:
+    """Emit the Stop payload (opt-in phase gate via GOALS_ENFORCE)."""
+    typer.echo(stop_payload(Path.cwd()), nl=False)
 
 
 @app.command(rich_help_panel="Simple workflow")
