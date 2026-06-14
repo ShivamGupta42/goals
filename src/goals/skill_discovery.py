@@ -8,11 +8,17 @@ single source of truth for "what skills exist," replacing the old static
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, ConfigDict
+
+# Matches a YAML frontmatter fence (`---`) on its own line, so a `---` inside a
+# description value or the markdown body never splits the frontmatter.
+_FENCE_RE = re.compile(r"(?m)^---[ \t]*$")
 
 CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
 CODEX_SKILLS_DIR = Path.home() / ".codex" / "skills"
@@ -149,15 +155,20 @@ def _scan_source(root: Path) -> dict[str, tuple[str, Path]]:
 
 
 def _parse_skill_md(path: Path) -> tuple[str, str] | None:
-    """Return (name, description) from SKILL.md frontmatter, or None if invalid."""
+    """Return (name, description) from SKILL.md frontmatter, or None if invalid.
+
+    Splits only on a ``---`` fence that sits on its own line, so a ``---`` inside
+    a value or the body never corrupts the frontmatter. Non-UTF8, unreadable,
+    malformed-YAML, non-dict, and nameless files are skipped without raising
+    (``UnicodeDecodeError`` is a ``ValueError``, not an ``OSError``, so it is
+    caught explicitly).
+    """
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
-    if not text.lstrip().startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    parts = _FENCE_RE.split(text, maxsplit=2)
+    if len(parts) < 3 or parts[0].strip():
         return None
     try:
         data = yaml.safe_load(parts[1])
@@ -213,20 +224,44 @@ def _install_one(src: Path, dest: Path, *, force: bool) -> str:
         if not force:
             return "blocked"
         dest.unlink()
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dest)
+        _copy_into_place(src, dest)
         return "overwritten"
     if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dest)
+        _copy_into_place(src, dest)
         return "installed"
     if _same_tree(src, dest):
         return "current"
     if force:
-        shutil.rmtree(dest)
-        shutil.copytree(src, dest)
+        _copy_into_place(src, dest)
         return "overwritten"
     return "blocked"
+
+
+def _copy_into_place(src: Path, dest: Path) -> None:
+    """Replace ``dest`` with a copy of ``src`` as atomically as practical.
+
+    Copy to a temp sibling, then swap via ``os.replace`` with a backup, so an
+    interruption never leaves ``dest`` half-written or missing. The temp/backup
+    names are dot-prefixed, so a crash leftover is ignored by discovery.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.parent / f".{dest.name}.goals-tmp"
+    backup = dest.parent / f".{dest.name}.goals-bak"
+    for stale in (tmp, backup):
+        if stale.exists():
+            shutil.rmtree(stale)
+    shutil.copytree(src, tmp)
+    if dest.exists():
+        os.replace(dest, backup)
+    try:
+        os.replace(tmp, dest)
+    except OSError:
+        if backup.exists():
+            os.replace(backup, dest)  # roll back to the original
+        raise
+    finally:
+        if backup.exists():
+            shutil.rmtree(backup)
 
 
 def render_skills_list(skills: list[DiscoveredSkill]) -> str:

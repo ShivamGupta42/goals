@@ -98,6 +98,41 @@ def test_malformed_frontmatter_is_skipped(tmp_path: Path) -> None:
     assert names == {"good"}
 
 
+def test_inline_triple_dash_in_description_is_preserved(tmp_path: Path) -> None:
+    skill = tmp_path / "claude" / "dashy"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        '---\nname: dashy\ndescription: "before --- after"\n---\n# body\n', encoding="utf-8"
+    )
+
+    found = {s.name: s for s in _discover(tmp_path)}
+
+    assert found["dashy"].description == "before --- after"
+
+
+def test_non_utf8_skill_md_is_skipped(tmp_path: Path) -> None:
+    claude = tmp_path / "claude"
+    _write_skill(claude, "good")
+    bad = claude / "binary"
+    bad.mkdir(parents=True)
+    (bad / "SKILL.md").write_bytes(b"---\nname: \xff\xfe bad\n---\n")
+
+    names = {s.name for s in _discover(tmp_path)}
+
+    assert names == {"good"}
+
+
+def test_force_overwrite_leaves_no_temp_dirs(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+    _write_skill(dirs["claude"], "goals-x", "user's different version")
+
+    install_bundled_skills(["claude"], force=True, bundled_dir=bundled, target_dirs=dirs)
+
+    leftovers = [p.name for p in dirs["claude"].iterdir() if p.name.startswith(".")]
+    assert leftovers == []
+    assert "Bundled skill" in (dirs["claude"] / "goals-x" / "SKILL.md").read_text()
+
+
 def test_missing_source_dir_is_skipped(tmp_path: Path) -> None:
     # Only codex exists; claude and bundled dirs are absent.
     _write_skill(tmp_path / "codex", "lonely")
