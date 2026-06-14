@@ -7,11 +7,42 @@ from goals.models import (
     GateResult,
     GateVerdict,
     GoalSnapshot,
+    GoalStatus,
     Phase,
     PhaseCheckpoint,
     PhaseStatus,
     WorktreeLease,
 )
+
+
+def test_completed_goal_waits_on_no_one_despite_agent_followups(tmp_path) -> None:
+    # A complete goal with a leftover agent-side issue (an accepted phase with no
+    # recorded evidence) must not claim it's "waiting on agent" — that would
+    # contradict its completed status on the dashboard and in `goals check`.
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship the thing",
+        status=GoalStatus.COMPLETE,
+        topology=WorktreeLease(
+            base_repo=str(tmp_path),
+            base_branch="main",
+            worktree_path=str(tmp_path),
+            branch="goal/demo",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Build",
+                goal="Build it.",
+                status=PhaseStatus.ACCEPTED,  # accepted but no evidence → agent issue
+            )
+        ],
+        current_phase=None,
+    )
+
+    brief = build_goal_brief(snapshot)
+
+    assert brief.waiting_on == "no one"
 
 
 def test_goal_brief_surfaces_only_user_worthy_items(tmp_path) -> None:

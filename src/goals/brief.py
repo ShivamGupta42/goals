@@ -38,7 +38,7 @@ def build_goal_brief(snapshot: GoalSnapshot) -> GoalBrief:
         user_actions.append(_issue_user_action(issue))
 
     agent_actions = _agent_actions(snapshot, issue_report.issues)
-    waiting_on = _waiting_on(snapshot, user_actions, agent_actions)
+    waiting_on = _waiting_on(snapshot, user_actions)
     accepted_count = len(
         [phase for phase in snapshot.phases if phase.status == PhaseStatus.ACCEPTED]
     )
@@ -152,13 +152,15 @@ def _agent_actions(snapshot: GoalSnapshot, issues: list[GoalIssue]) -> list[Goal
 def _waiting_on(
     snapshot: GoalSnapshot,
     user_actions: list[GoalBriefAction],
-    agent_actions: list[GoalBriefAction],
 ) -> str:
     if user_actions:
         return "you"
-    if agent_actions or str(snapshot.status) not in {"complete", "failed"}:
-        return "agent"
-    return "no one"
+    # A terminal goal isn't waiting on anyone. Even if leftover agent-side
+    # follow-ups remain, those surface under Issues — saying "waiting on agent"
+    # on a complete goal contradicts its status.
+    if str(snapshot.status) in {"complete", "failed"}:
+        return "no one"
+    return "agent"
 
 
 def _summary(

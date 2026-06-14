@@ -195,7 +195,56 @@ def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:
     assert "<h2>Status</h2>" in text
 
     # "Waiting on" is mapped to plain language, never the raw token.
-    assert "Agent (working)" in text
+    assert "Agent" in text
+    assert "Agent (working)" not in text  # status, not turn-ownership, says "working"
+
+
+def test_dashboard_header_frames_journey_and_clamps_long_goal(tmp_path: Path) -> None:
+    long_objective = (
+        "figure out how do people market and get distribution for their github "
+        "repos on agentic coding and llms and how can we popularise this one"
+    )
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective=long_objective,
+        why="Keep a long-running agent task understandable, reviewable, and resumable.",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    # "Goal journey" framing replaces the bare status kicker.
+    assert "The goal journey ·" in text
+    assert "From first intent to finished proof" in text
+
+    # The "why" line is gone entirely.
+    assert "Keep a long-running agent task" not in text
+    assert 'class="why"' not in text
+
+    # A long objective gets a clamped title plus a "read the full goal" expander,
+    # and the full text is still present for screen readers.
+    assert '<h1 class="title">' in text
+    assert "Read the full goal" in text
+    assert long_objective in text
+
+
+def test_dashboard_short_goal_has_no_full_goal_expander(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add a settings page",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    assert "The goal journey ·" in text
+    assert "Read the full goal" not in text  # short objective → no expander
 
 
 def test_friendly_timestamp_only_states_what_it_carries() -> None:
