@@ -83,24 +83,60 @@ def render_loop(design: LoopDesign, *, fmt: str = "mermaid") -> str:
 
 
 def _render(nodes: list[_Node], edges: list[_Edge], *, fmt: str, title: str) -> str:
+    nodes = _dedupe(nodes)
+    id_map = _unique_ids(nodes)
+    edges = [e for e in edges if e.src in id_map and e.dst in id_map]
     if fmt == "mermaid":
-        return _to_mermaid(nodes, edges)
+        return _to_mermaid(nodes, edges, id_map)
     if fmt == "excalidraw":
-        return json.dumps(_to_excalidraw(nodes, edges), indent=2) + "\n"
+        return json.dumps(_to_excalidraw(nodes, edges, id_map), indent=2) + "\n"
     raise ValueError(f"Unknown diagram format: {fmt}")
+
+
+def _dedupe(nodes: list[_Node]) -> list[_Node]:
+    """Drop duplicate raw ids (keep first) so element/Mermaid ids never repeat."""
+    seen: set[str] = set()
+    out: list[_Node] = []
+    for node in nodes:
+        if node.id in seen:
+            continue
+        seen.add(node.id)
+        out.append(node)
+    return out
+
+
+def _unique_ids(nodes: list[_Node]) -> dict[str, str]:
+    """Map each raw id to a unique safe id.
+
+    Distinct raw ids that sanitize to the same string (e.g. ``a-b`` and ``a.b``
+    both → ``a_b``) get a numeric suffix, so they never silently merge into one
+    node or produce duplicate Excalidraw element ids.
+    """
+    mapping: dict[str, str] = {}
+    used: set[str] = set()
+    for node in nodes:
+        base = _safe_id(node.id)
+        candidate = base
+        counter = 2
+        while candidate in used:
+            candidate = f"{base}_{counter}"
+            counter += 1
+        used.add(candidate)
+        mapping[node.id] = candidate
+    return mapping
 
 
 # --------------------------------------------------------------------------- #
 # Mermaid
 # --------------------------------------------------------------------------- #
-def _to_mermaid(nodes: list[_Node], edges: list[_Edge]) -> str:
+def _to_mermaid(nodes: list[_Node], edges: list[_Edge], id_map: dict[str, str]) -> str:
     lines = ["flowchart TD"]
     for node in nodes:
-        lines.append(f'    {_safe_id(node.id)}["{_mermaid_text(node.label)}"]:::{node.status}')
+        lines.append(f'    {id_map[node.id]}["{_mermaid_text(node.label)}"]:::{node.status}')
     for edge in edges:
         rel = _mermaid_text(edge.label.replace("_", " ")) if edge.label else ""
         arrow = f"-->|{rel}|" if rel else "-->"
-        lines.append(f"    {_safe_id(edge.src)} {arrow} {_safe_id(edge.dst)}")
+        lines.append(f"    {id_map[edge.src]} {arrow} {id_map[edge.dst]}")
     used = {n.status for n in nodes}
     for status in sorted(used):
         stroke, bg = _STATUS_STYLE.get(status, _STATUS_STYLE[_DEFAULT_STATUS])
@@ -114,7 +150,10 @@ def _safe_id(raw: str) -> str:
 
 
 def _mermaid_text(text: str) -> str:
-    # Quotes and brackets break Mermaid node labels; entity-escape them.
+    # Collapse whitespace (newlines/tabs split a Mermaid statement) and
+    # neutralize the `;` statement separator BEFORE entity-escaping, so the
+    # entities we introduce (which contain `;`) are not corrupted.
+    text = " ".join(text.split()).replace(";", ",")
     return (
         text.replace("&", "&amp;")
         .replace('"', "&quot;")
@@ -126,7 +165,7 @@ def _mermaid_text(text: str) -> str:
 # --------------------------------------------------------------------------- #
 # Excalidraw
 # --------------------------------------------------------------------------- #
-def _to_excalidraw(nodes: list[_Node], edges: list[_Edge]) -> dict:
+def _to_excalidraw(nodes: list[_Node], edges: list[_Edge], id_map: dict[str, str]) -> dict:
     positions = _layered_positions(nodes, edges)
     bound: dict[str, list[dict[str, str]]] = {n.id: [] for n in nodes}
 
@@ -134,7 +173,7 @@ def _to_excalidraw(nodes: list[_Node], edges: list[_Edge]) -> dict:
     arrows: list[tuple[str, _Edge]] = []
     for index, edge in enumerate(edges):
         if edge.src in bound and edge.dst in bound:
-            arrow_id = f"arrow-{index}-{_safe_id(edge.src)}-{_safe_id(edge.dst)}"
+            arrow_id = f"arrow-{index}-{id_map[edge.src]}-{id_map[edge.dst]}"
             arrows.append((arrow_id, edge))
             bound[edge.src].append({"type": "arrow", "id": arrow_id})
             bound[edge.dst].append({"type": "arrow", "id": arrow_id})
@@ -143,15 +182,15 @@ def _to_excalidraw(nodes: list[_Node], edges: list[_Edge]) -> dict:
     seed = 1
     for node in nodes:
         x, y = positions[node.id]
-        rect_id = f"rect-{_safe_id(node.id)}"
-        text_id = f"text-{_safe_id(node.id)}"
+        rect_id = f"rect-{id_map[node.id]}"
+        text_id = f"text-{id_map[node.id]}"
         stroke, bg = _STATUS_STYLE.get(node.status, _STATUS_STYLE[_DEFAULT_STATUS])
         node_bound = [{"type": "text", "id": text_id}, *bound[node.id]]
         elements.append(_rect(rect_id, x, y, stroke, bg, node_bound, seed))
         elements.append(_text(text_id, node.label, x, y, rect_id, seed + 1))
         seed += 2
 
-    rect_of = {node.id: (f"rect-{_safe_id(node.id)}", positions[node.id]) for node in nodes}
+    rect_of = {node.id: (f"rect-{id_map[node.id]}", positions[node.id]) for node in nodes}
     for arrow_id, edge in arrows:
         src_rect, (sx, sy) = rect_of[edge.src]
         dst_rect, (dx, dy) = rect_of[edge.dst]
@@ -283,19 +322,28 @@ def _arrow(
     start_y = sy + _BOX_H // 2
     end_x = dx
     end_y = dy + _BOX_H // 2
+    rel_x = end_x - start_x
+    rel_y = end_y - start_y
+    # Orthogonal elbow: out to the mid-x, down/up to the target row, then in.
+    mid_x = rel_x // 2
+    points = (
+        [[0, 0], [rel_x, 0]]
+        if rel_y == 0
+        else [[0, 0], [mid_x, 0], [mid_x, rel_y], [rel_x, rel_y]]
+    )
     return {
         **_base(arrow_id, seed),
         "type": "arrow",
         "x": start_x,
         "y": start_y,
-        "width": abs(end_x - start_x),
-        "height": abs(end_y - start_y),
+        "width": abs(rel_x),
+        "height": abs(rel_y),
         "strokeColor": "#495057",
         "backgroundColor": "transparent",
         "fillStyle": "solid",
         "roundness": None,
         "elbowed": True,
-        "points": [[0, 0], [end_x - start_x, end_y - start_y]],
+        "points": points,
         "lastCommittedPoint": None,
         "startBinding": {"elementId": src_rect, "focus": 0, "gap": 4},
         "endBinding": {"elementId": dst_rect, "focus": 0, "gap": 4},

@@ -106,6 +106,47 @@ def test_excalidraw_is_deterministic() -> None:
     assert a == b
 
 
+def test_punctuation_colliding_ids_do_not_merge() -> None:
+    # 'a-b' and 'a.b' both sanitize to 'a_b'; they must stay distinct.
+    amap = GoalArchitectureMap(
+        title="t",
+        overview="o",
+        nodes=[
+            ArchitectureNode(node_id="a-b", label="dash", plain_summary="x"),
+            ArchitectureNode(node_id="a.b", label="dot", plain_summary="x"),
+        ],
+        edges=[ArchitectureEdge(from_node="a-b", to_node="a.b", relation="to")],
+    )
+    doc = json.loads(render_architecture(amap, fmt="excalidraw"))
+    rect_ids = [e["id"] for e in doc["elements"] if e["type"] == "rectangle"]
+    assert len(rect_ids) == len(set(rect_ids)) == 2  # no duplicate/merged ids
+    mermaid = render_architecture(amap, fmt="mermaid")
+    assert mermaid.count('["dash"]') == 1 and mermaid.count('["dot"]') == 1
+
+
+def test_mermaid_collapses_newlines_and_semicolons() -> None:
+    amap = GoalArchitectureMap(
+        title="t",
+        overview="o",
+        nodes=[ArchitectureNode(node_id="n", label="line1\nline2; tail", plain_summary="x")],
+        edges=[],
+    )
+    out = render_architecture(amap, fmt="mermaid")
+    assert "\n" not in out.split('["', 1)[1].split('"]', 1)[0]  # label has no raw newline
+    assert ";" not in out.split('["', 1)[1].split('"]', 1)[0]  # no statement separator in label
+
+
+def test_excalidraw_elbow_arrow_points_are_orthogonal_across_rows() -> None:
+    # ui->api->db places db a row below api: the api->db arrow must elbow, not go diagonal.
+    doc = json.loads(render_architecture(_map(), fmt="excalidraw"))
+    arrows = [e for e in doc["elements"] if e["type"] == "arrow"]
+    for arrow in arrows:
+        pts = arrow["points"]
+        # consecutive segments are axis-aligned (only one of dx/dy nonzero each)
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            assert x0 == x1 or y0 == y1
+
+
 def test_empty_map_does_not_crash() -> None:
     empty = GoalArchitectureMap(title="t", overview="o", nodes=[], edges=[])
     assert "flowchart TD" in render_architecture(empty, fmt="mermaid")
