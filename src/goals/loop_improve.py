@@ -201,19 +201,27 @@ def log_phase_regression(cwd: Path, snapshot: GoalSnapshot, phase_id: str) -> Re
         save_memory(cwd, memory, snapshot)
     surfaced = [f for f in findings if f.routing == "improve_now"]
     deferred = [f for f in findings if f.routing == "defer"]
+    already_known = len(findings) - added
     if not findings:
         summary = f"No regressions detected for {phase_id}."
     else:
+        provenance = (
+            f"{added} newly recorded, {already_known} already known"
+            if added and already_known
+            else f"{added} newly recorded"
+            if added
+            else "all already recorded"
+        )
         summary = (
-            f"{len(findings)} regression(s) recorded for {phase_id}: "
-            f"{len(surfaced)} need attention now, {len(deferred)} deferred."
+            f"{len(findings)} regression(s) for {phase_id} "
+            f"({len(surfaced)} need attention now, {len(deferred)} deferred; {provenance})."
         )
     return RegressionReport(
         goal_id=snapshot.goal_id,
         phase_id=phase_id,
         surfaced=surfaced,
         deferred=deferred,
-        recorded=len(findings),
+        recorded=added,
         summary=summary,
     )
 

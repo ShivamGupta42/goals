@@ -244,6 +244,16 @@ def test_add_rejects_empty_title(tmp_path: Path) -> None:
     assert session.design.phases == []
 
 
+def test_html_export_never_leaks_an_absolute_home_path(tmp_path: Path) -> None:
+    # The export lands in committable, path-free .goals/loop.html, so the
+    # Claude-only install hint must use ~/.codex/skills, not the expanded home.
+    session = _session(tmp_path)
+    _drive(session, "add Plan", "attach goals-decision-explainer")
+    html = render_loop_html(session.design, skills=_skills())
+    assert str(Path.home()) not in html
+    assert "~/.codex/skills" in html
+
+
 def test_unknown_command_is_reported(tmp_path: Path) -> None:
     session = _session(tmp_path)
     response = apply_command(session, "frobnicate everything")

@@ -124,10 +124,14 @@ def test_logging_is_idempotent(tmp_path: Path) -> None:
         evidence=Evidence(acceptance_not_met=["x"], confidence=0.3),
     )
     snapshot = _snapshot(tmp_path, phase)
-    log_phase_regression(tmp_path, snapshot, "P1")
+    first_report = log_phase_regression(tmp_path, snapshot, "P1")
     first = len(load_memory(tmp_path, snapshot).entries)
-    log_phase_regression(tmp_path, snapshot, "P1")
+    second_report = log_phase_regression(tmp_path, snapshot, "P1")
     assert len(load_memory(tmp_path, snapshot).entries) == first
+    # recorded reflects only what was newly written, not all findings.
+    assert first_report.recorded >= 1
+    assert second_report.recorded == 0
+    assert "already recorded" in second_report.summary
 
 
 # --- improvement loop ------------------------------------------------------ #

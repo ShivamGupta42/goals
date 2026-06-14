@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from goals.git_ops import slugify
 from goals.models import GoalSnapshot, Phase, WorktreeLease, utc_now
 from goals.portability import build_portable_state, render_goal_markdown
-from goals.skill_discovery import CODEX_SKILLS_DIR, DiscoveredSkill, discover_skills
+from goals.skill_discovery import DiscoveredSkill, discover_skills
 from goals.storage import GoalsError, atomic_write_text
 
 #: Bumped independently of the portable spec: this is the builder's own design
@@ -669,11 +669,13 @@ def _agents_label(skill: DiscoveredSkill) -> str:
 def _install_hint(skill: DiscoveredSkill) -> str:
     """Suggest installing into ~/.codex/skills when a skill is Claude-only.
 
-    Keeps the loop runnable under both Claude and Codex.
+    Keeps the loop runnable under both Claude and Codex. Uses the ``~``-relative
+    form (not the expanded absolute home path) so the hint is safe to embed in
+    the committable, path-free ``.goals/loop.html`` export.
     """
     if "claude" in skill.agents and "codex" not in skill.agents:
         return (
-            f"Suggestion: install {skill.name} into {CODEX_SKILLS_DIR} so the loop "
+            f"Suggestion: install {skill.name} into ~/.codex/skills so the loop "
             f"runs under Codex too (`goals skills install --target codex` for "
             "bundled skills, or copy the skill dir)."
         )
