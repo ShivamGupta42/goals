@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from goals.skill_discovery import DiscoveredSkill, discover_skills
+from goals.skill_discovery import (
+    DiscoveredSkill,
+    discover_skills,
+    install_bundled_skills,
+    render_skills_list,
+)
 
 
 def _write_skill(root: Path, name: str, description: str = "Does a thing.") -> Path:
@@ -109,3 +114,73 @@ def test_results_are_deterministically_sorted(tmp_path: Path) -> None:
     names = [s.name for s in _discover(tmp_path)]
 
     assert names == ["alpha", "mango", "zebra"]
+
+
+def _bundled_with(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
+    bundled = tmp_path / "bundled"
+    _write_skill(bundled, "goals-x", "Bundled skill.")
+    dirs = {"claude": tmp_path / "claude", "codex": tmp_path / "codex"}
+    return bundled, dirs
+
+
+def test_install_writes_skill(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+
+    report = install_bundled_skills(["claude"], bundled_dir=bundled, target_dirs=dirs)
+
+    assert (dirs["claude"] / "goals-x" / "SKILL.md").is_file()
+    assert [r.status for r in report.results] == ["installed"]
+
+
+def test_install_is_idempotent(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+    install_bundled_skills(["claude"], bundled_dir=bundled, target_dirs=dirs)
+
+    report = install_bundled_skills(["claude"], bundled_dir=bundled, target_dirs=dirs)
+
+    assert [r.status for r in report.results] == ["current"]
+
+
+def test_install_refuses_to_clobber_differing_skill(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+    # A user's own, different skill already sits at the same name.
+    _write_skill(dirs["claude"], "goals-x", "User's own different skill.")
+
+    report = install_bundled_skills(["claude"], bundled_dir=bundled, target_dirs=dirs)
+
+    assert [r.status for r in report.results] == ["blocked"]
+    assert "User's own" in (dirs["claude"] / "goals-x" / "SKILL.md").read_text()
+
+
+def test_install_force_overwrites_differing_skill(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+    _write_skill(dirs["claude"], "goals-x", "User's own different skill.")
+
+    report = install_bundled_skills(["claude"], force=True, bundled_dir=bundled, target_dirs=dirs)
+
+    assert [r.status for r in report.results] == ["overwritten"]
+    assert "Bundled skill" in (dirs["claude"] / "goals-x" / "SKILL.md").read_text()
+
+
+def test_install_both_targets(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+
+    report = install_bundled_skills(["claude", "codex"], bundled_dir=bundled, target_dirs=dirs)
+
+    assert sorted(r.target for r in report.results) == ["claude", "codex"]
+    assert (dirs["claude"] / "goals-x" / "SKILL.md").is_file()
+    assert (dirs["codex"] / "goals-x" / "SKILL.md").is_file()
+
+
+def test_render_marks_uninstalled_bundled_and_truncates(tmp_path: Path) -> None:
+    long_desc = "x" * 300
+    out = render_skills_list(
+        [
+            DiscoveredSkill(
+                name="goals-x", description=long_desc, sources=["bundled"], agents=[], path="/p"
+            )
+        ]
+    )
+
+    assert "not installed (bundled)" in out
+    assert "…" in out and len(out) < 200

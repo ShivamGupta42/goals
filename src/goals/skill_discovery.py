@@ -8,6 +8,7 @@ single source of truth for "what skills exist," replacing the old static
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import yaml
@@ -15,6 +16,12 @@ from pydantic import BaseModel, ConfigDict
 
 CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
 CODEX_SKILLS_DIR = Path.home() / ".codex" / "skills"
+
+# Install targets — where the optional `goals skills install` copies bundled
+# skills so a native agent can invoke them directly.
+TARGET_DIRS = {"claude": CLAUDE_SKILLS_DIR, "codex": CODEX_SKILLS_DIR}
+
+_MAX_DESCRIPTION = 120
 
 # Source labels and their precedence when the same skill appears in several
 # places (lowest wins for the displayed description/path).
@@ -40,6 +47,28 @@ class DiscoveredSkill(BaseModel):
     sources: list[str]
     agents: list[str]
     path: str
+
+
+class SkillInstallResult(BaseModel):
+    """Outcome of installing one bundled skill into one target dir.
+
+    ``status`` is one of: ``installed`` (newly copied), ``current`` (already
+    present and identical), ``overwritten`` (replaced under ``--force``), or
+    ``blocked`` (a differing same-named skill exists; left untouched to avoid
+    clobbering something we did not create).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    target: str
+    status: str
+
+
+class SkillInstallReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[SkillInstallResult]
 
 
 def bundled_skills_root() -> Path:
@@ -143,3 +172,82 @@ def _parse_skill_md(path: Path) -> tuple[str, str] | None:
     if not isinstance(description, str):
         description = str(description)
     return name.strip(), description.strip()
+
+
+def install_bundled_skills(
+    targets: list[str],
+    *,
+    force: bool = False,
+    bundled_dir: Path | None = None,
+    target_dirs: dict[str, Path] | None = None,
+) -> SkillInstallReport:
+    """Copy goals' bundled skills into the chosen agent dir(s).
+
+    Collision-safe: a same-named skill that already exists and differs is left
+    untouched (``blocked``) unless ``force`` is set — overwriting a user's own
+    skill would be data loss. Assumes an unpacked install (the module already
+    relies on a filesystem layout via ``Path(__file__)``), which is always the
+    case for ``uv``/``pip`` installs.
+    """
+    bundled = bundled_dir if bundled_dir is not None else bundled_skills_root()
+    dirs = target_dirs if target_dirs is not None else TARGET_DIRS
+    src_skills = (
+        sorted(p for p in bundled.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
+        if bundled.is_dir()
+        else []
+    )
+
+    results: list[SkillInstallResult] = []
+    for target in targets:
+        root = dirs[target]
+        for src in src_skills:
+            dest = root / src.name
+            if not dest.exists():
+                root.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(src, dest)
+                status = "installed"
+            elif _same_tree(src, dest):
+                status = "current"
+            elif force:
+                shutil.rmtree(dest)
+                shutil.copytree(src, dest)
+                status = "overwritten"
+            else:
+                status = "blocked"
+            results.append(SkillInstallResult(name=src.name, target=target, status=status))
+    return SkillInstallReport(results=results)
+
+
+def render_skills_list(skills: list[DiscoveredSkill]) -> str:
+    if not skills:
+        return "No skills discovered in ~/.claude/skills, ~/.codex/skills, or bundled."
+    lines = []
+    for skill in skills:
+        agents = ", ".join(skill.agents) if skill.agents else "not installed (bundled)"
+        description = skill.description
+        if len(description) > _MAX_DESCRIPTION:
+            description = description[: _MAX_DESCRIPTION - 1].rstrip() + "…"
+        lines.append(f"- {skill.name} [{agents}] — {description}")
+    return "\n".join(lines)
+
+
+def render_install_report(report: SkillInstallReport) -> str:
+    if not report.results:
+        return "No bundled skills to install."
+    lines = [f"- {r.target}: {r.name} — {r.status}" for r in report.results]
+    blocked = [r for r in report.results if r.status == "blocked"]
+    if blocked:
+        lines.append(
+            "Note: blocked skills already exist and differ from goals' copy; "
+            "rerun with --force to overwrite (this replaces your version)."
+        )
+    return "\n".join(lines)
+
+
+def _same_tree(left: Path, right: Path) -> bool:
+    """True if two skill directories have identical files and content."""
+    left_files = {p.relative_to(left) for p in left.rglob("*") if p.is_file()}
+    right_files = {p.relative_to(right) for p in right.rglob("*") if p.is_file()}
+    if left_files != right_files:
+        return False
+    return all((left / rel).read_bytes() == (right / rel).read_bytes() for rel in left_files)

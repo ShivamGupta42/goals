@@ -88,6 +88,12 @@ from goals.portability import (
     render_native_goal_emission,
     sync_context_files,
 )
+from goals.skill_discovery import (
+    discover_skills,
+    install_bundled_skills,
+    render_install_report,
+    render_skills_list,
+)
 from goals.storage import EventStore, GoalsError, atomic_write_text
 from goals.workflows import (
     check_workflow,
@@ -109,6 +115,7 @@ ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
+skills_app = typer.Typer(help="Discover and install skills from agent dirs.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 
 
@@ -267,6 +274,7 @@ app.add_typer(ecosystem_app, name="ecosystem", rich_help_panel="Advanced buildin
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
+app.add_typer(skills_app, name="skills", rich_help_panel="Portability")
 app.add_typer(source_app, name="source", rich_help_panel="Advanced building blocks")
 
 
@@ -1230,6 +1238,50 @@ def phase_accept(phase_id: str) -> None:
     def run():
         transition_phase(Path.cwd(), phase_id, "accept")
         typer.echo(f"Accepted phase {phase_id}")
+
+    _handle(run)
+
+
+@skills_app.command("list")
+def skills_list(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """List skills discovered in ~/.claude/skills, ~/.codex/skills, and bundled."""
+
+    def run():
+        skills = discover_skills()
+        if json_output:
+            typer.echo(json.dumps([skill.model_dump() for skill in skills], indent=2))
+        else:
+            typer.echo(render_skills_list(skills))
+
+    _handle(run)
+
+
+@skills_app.command("install")
+def skills_install(
+    target: str = typer.Option(
+        ...,
+        "--target",
+        help="Where to install goals' bundled skills: claude, codex, or both.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite an existing differing same-named skill (replaces your version).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Optionally install goals' bundled skills into an agent's skill dir."""
+
+    def run():
+        choice = _validate_choice(target, {"claude", "codex", "both"}, "target")
+        targets = ["claude", "codex"] if choice == "both" else [choice]
+        report = install_bundled_skills(targets, force=force)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_install_report(report))
 
     _handle(run)
 
