@@ -116,19 +116,20 @@ Acceptance criteria:
 
 Required loop:
 1. Read `goal.json` before each turn and work only on the current phase.
-2. Make reversible progress without changing unrelated files.
-3. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
-4. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
-5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
-6. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
-7. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
-8. If `goals brief` says `Waiting on: you`, or `goals issues` lists anything under `Needs The User`, ask exactly one plain-language question using the brief wording, then stop. Do not run review or accept until the user answers and the answer is recorded.
-9. Run `goals checkpoint current` to confirm the current checkpoint, unresolved proof, and next safe step.
-10. Run `goals architecture check --strict` to catch changed code files missing from the architecture map or stale architecture evidence.
-11. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
-12. Run `goals phase review {plan.current_phase}`.
-13. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-14. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
+3. Make reversible progress without changing unrelated files.
+4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
+5. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
+6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
+7. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
+8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
+9. If `goals brief` says `Waiting on: you`, or `goals issues` lists anything under `Needs The User`, ask exactly one plain-language question using the brief wording, then stop. Do not run review or accept until the user answers and the answer is recorded.
+10. Run `goals checkpoint current` to confirm the current checkpoint, unresolved proof, and next safe step.
+11. Run `goals architecture check --strict` to catch changed code files missing from the architecture map or stale architecture evidence.
+12. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
+13. Run `goals phase review {plan.current_phase}`.
+14. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+15. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Parallel worktree merge gate:
 - `goals merge-check` scans sibling worktrees when Git exposes them, then reports dirty worktrees, branch drift, file overlap, and migration-ordering risk as agent repair actions unless an explicit high-risk user approval is missing.

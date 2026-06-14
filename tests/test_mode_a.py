@@ -46,6 +46,10 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert plan.adapter_ready is True
     assert "Claude Mode A notes" in plan.prompt
     assert "goals phase evidence P1 --file" in plan.prompt
+    # The PACERS Assess step is wired into the CLI handoff, not just the Claude
+    # skill, so a CLI-driven agent also populates the building journey.
+    assert "goals assess assume" in plan.prompt
+    assert "goals assess breakdown" in plan.prompt
     assert "goals issues" in plan.prompt
     assert "goals brief" in plan.prompt
     assert "Waiting on: you" in plan.prompt
