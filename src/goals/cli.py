@@ -34,6 +34,14 @@ from goals.memory import (
     render_memory_sync_plan,
     render_memory_suggestions,
 )
+from goals.loop_builder import (
+    load_design,
+    new_session,
+    render_loop_html,
+    run_builder,
+    run_script,
+    save_design,
+)
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
@@ -103,6 +111,7 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
+loop_app = typer.Typer(help="Visually build, check, and improve goal loops.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
@@ -261,6 +270,7 @@ app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced b
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
+app.add_typer(loop_app, name="loop", rich_help_panel="Simple workflow")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
@@ -1163,6 +1173,64 @@ def skills_install(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_install_report(report))
+
+    _handle(run)
+
+
+def _default_loop_out(out: Optional[Path]) -> Path:
+    return out.expanduser() if out is not None else Path.cwd() / ".goals"
+
+
+@loop_app.command("build")
+def loop_build(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory to save the loop into (default: ./.goals)."
+    ),
+    script: Optional[Path] = typer.Option(
+        None, "--script", help="Run builder commands from a file instead of prompting."
+    ),
+) -> None:
+    """Interactively compose a goal loop (or replay a command script)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        session = new_session(out_dir)
+        design_file = out_dir / "loop-design.json"
+        if design_file.exists():
+            session.design = load_design(design_file)
+            typer.echo(f"Loaded existing design from {design_file}")
+        if script is not None:
+            if not script.exists():
+                raise GoalsError(f"Script not found: {script}")
+            commands = script.read_text(encoding="utf-8").splitlines()
+            run_script(session, commands, write=typer.echo)
+        else:
+            run_builder(session, write=typer.echo)
+
+    _handle(run)
+
+
+@loop_app.command("export")
+def loop_export(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+    html_only: bool = typer.Option(
+        False, "--html-only", help="Only re-render the HTML, not the portable spec."
+    ),
+) -> None:
+    """Re-render a saved loop design to HTML (and the portable spec)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        design = load_design(out_dir)
+        if html_only:
+            html_path = out_dir / "loop.html"
+            atomic_write_text(html_path, render_loop_html(design))
+            typer.echo(f"Wrote {html_path}")
+        else:
+            result = save_design(design, out_dir)
+            typer.echo(f"Wrote {result.html_path}, {result.state_path}, {result.markdown_path}")
 
     _handle(run)
 
