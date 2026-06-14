@@ -80,6 +80,7 @@ from goals.models import (
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
+from goals.setup import render_setup_report, setup_agents
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -1430,6 +1431,22 @@ def hooks_session_start() -> None:
 def hooks_stop() -> None:
     """Emit the Stop payload (opt-in phase gate via GOALS_ENFORCE)."""
     typer.echo(stop_payload(Path.cwd()), nl=False)
+
+
+@app.command(rich_help_panel="Portability")
+def setup(
+    agent: str = typer.Option(..., "--agent", help="Wire up: claude, codex, or both."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying."),
+) -> None:
+    """One command to make goals work inside Claude Code and/or Codex."""
+
+    def run():
+        choice = _validate_choice(agent, {"claude", "codex", "both"}, "agent")
+        targets = ["claude", "codex"] if choice == "both" else [choice]
+        report = setup_agents(targets, dry_run=dry_run)
+        typer.echo(render_setup_report(report))
+
+    _handle(run)
 
 
 @app.command(rich_help_panel="Simple workflow")
