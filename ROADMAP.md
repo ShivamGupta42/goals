@@ -1,347 +1,160 @@
 # Roadmap
 
 This file tracks larger product directions that are intentionally not being built
-yet. Roadmap entries should explain the user value, the likely shape, and the
-questions to resolve before implementation.
+yet. Each entry explains the user value, the likely shape, and the questions to
+resolve before implementation. It is honest about what already exists in the
+simplified tool versus what is still ahead.
 
-## Decision Explainer V2
+The spine of the roadmap is the **portability layer**: native agents own the
+inner loop, but their goal/task primitives are vendor-locked and short-lived.
+Goals owns the durable, portable, evidence-backed goal state in your repo. The
+directions below deepen that durable value rather than chase parity with native
+loops.
 
-**Status:** Partially implemented. Basic/Detailed/Technical rendering, active
-goal history context, and a compact `goals decision brief` read model exist;
-richer memory limits are still planned. The dashboard now filters routine
-decisions, shows a non-technical decision brief, and shows important user-facing
-decision cards with recommendation, options, risk, reversibility, confidence,
-known context, uncertainty, and technical evidence.
+## Portable goal-state spec v2
 
-Goals should help agents explain technical decisions in a way non-technical users
-can understand, while still giving technical users enough detail to challenge the
-work. Some decisions cannot be explained from the current prompt alone; the agent
-may need to understand what has already happened in the project.
+**Status:** Forward-looking. v1 exists today. `goals export` writes
+`.goals/GOAL.md` plus `.goals/goal-state.json` — a sanitized, committable,
+vendor-neutral portable goal spec (the "AGENTS.md for task state"), versioned by
+`PORTABLE_SPEC_VERSION` (currently 1). `goals view` runs it automatically.
 
-### Direction
-
-- Use project history as context: prior goal events, accepted phases, evidence,
-  decisions, blockers, learnings, changed files, and dashboard summaries.
-- Add a "what we know so far" section to each decision explanation.
-- Keep a compact decision brief for non-technical users before deeper detail.
-- Keep three levels: Basic, Detailed, and Technical.
-- Include recommendation, options, tradeoffs, risks, reversibility, confidence,
-  and suggested replies or commands.
-- Make the explainer clear about which facts came from project history and which
-  are current agent judgment.
-
-### Open Questions
-
-- How much history should an agent read before a decision becomes too expensive?
-- Should decision context come from raw events, derived snapshots, or a separate
-  decision read model?
-- How should Goals show uncertainty when project history is incomplete or stale?
-
-## Goal Architecture Map
-
-**Status:** Implemented as a first vertical slice. Goals now renders a default phase-derived
-`architecture.md`, accepts a typed project-specific architecture map, includes it
-in Mode A handoffs, exposes a compact `goals architecture brief`, and shows an
-Architecture section in the dashboard. `goals architecture check` compares
-recorded changed code files and architecture evidence refs with the worktree so
-agents can catch stale map evidence and code changes that are not represented in
-the map. Parallel-worktree merge behavior is handled separately by
-`goals merge-check`.
-
-For larger goals, technical users need a way to inspect what is being built,
-what is not built yet, and how each phase changes the project. Goals should
-optionally maintain a goal-level architecture map alongside the normal progress
-state.
+The v1 spec is an export-only snapshot. v2 should make it a richer, round-trip
+format so a portable goal can move between tools and repos without losing intent.
 
 ### Direction
 
-- Maintain an optional Markdown artifact at
-  `.agent-workflow/goals/<goal-id>/architecture.md`.
-- Let agents record one typed architecture diagram for the entire goal, updated
-  as the goal evolves.
-- Prefer Mermaid in Markdown for portability, with room for generated HTML later.
-- Track modules, files, data flow, external systems, and status labels such as
-  planned, in progress, built, deferred, or removed.
-- Link each architecture node to phases, decisions, evidence, or changed files
-  when possible.
-- Keep a compact architecture brief with status counts, evidence gaps, open
-  questions, and review focus.
-- Run code-derived checks before phase acceptance so changed files and
-  architecture evidence stay aligned.
-- Render this in the dashboard as an Architecture view beside Progress,
-  Decisions, Evidence, and Technical Details.
-
-### Why It Matters
-
-- Non-technical users can see a simple "what is happening" view.
-- Technical users can question whether the architecture matches the goal.
-- Coordinators can detect mismatches between the goal, phase evidence, and actual
-  implementation.
-- Reviewers can see what is explicitly not built, reducing false confidence.
+- Richer schema: phases, acceptance criteria, evidence refs, decisions, and
+  blockers expressed in a stable, documented shape.
+- Round-trip import: read an existing `.goals/goal-state.json` back into live
+  goal state, not just write it out.
+- Import an existing AGENTS.md / CLAUDE.md goal block as a starting goal so users
+  can adopt Goals without restarting their work.
+- Consider a JSON-LD / linked-data framing so the spec is interoperable and
+  self-describing for other tools.
 
 ### Open Questions
 
-- Should deeper architecture extraction infer relationships between modules, or
-  only verify that recorded maps mention changed code?
-- Should code-derived architecture checks become blocking for technical goals by
-  default, or stay as a strict-mode gate chosen by the agent?
-- How should conflicting diagrams from parallel worktrees be merged?
+- How much of the append-only event log belongs in the portable spec versus a
+  derived snapshot?
+- What is the compatibility contract when `PORTABLE_SPEC_VERSION` increments?
+- Should import be strict (reject unknown fields) or lenient (preserve and warn)?
 
-## Dashboard Views
+## Native loop adapters
 
-**Status:** Partially implemented. The dashboard now includes Goal Brief, Progress, Issues,
-Decisions, Skills & Plugins, Memory, Architecture, Evidence, Sources, and
-Technical Details as read-only views.
+**Status:** Forward-looking. `goals emit --agent claude|codex` exists today and
+emits a transcript-verifiable native stop-condition derived from the current
+phase's acceptance criteria, ready to paste into Claude `/goal` or Codex.
+`goals context sync [--target agents|claude|both]` keeps a managed
+`<!-- goals:context:start -->`…`end` block current in AGENTS.md and CLAUDE.md
+while preserving human-written content. `goals adapter check` reports adapter
+availability.
 
-The dashboard is still a single read-only HTML file. Future dashboard work
-should deepen those views without making it a control plane.
+The next frontier is emitting acceptance gates for more native loops so durable
+goal state can drive each tool's own stop condition.
 
-Likely views:
+### Direction
 
-- Progress: phases, current step, waiting-on, blockers, and completion.
-- Goal Brief: plain-language summary of what needs the user, what the agent can
-  do next, and what proof exists.
-- Issues: blockers, missing proof, unresolved claims, failed gates, and state
-  mismatches.
-- Decisions: explanations, recommended option, alternatives, risk, and suggested
-  reply.
-- Architecture: optional goal architecture map and build status.
-- Evidence: checks, acceptance criteria, known gaps, and proof.
+- Aider commit gate: emit a check that gates an Aider commit on phase acceptance
+  criteria.
+- OpenHands check: emit a stop/verify condition OpenHands can read.
+- Keep each adapter emit transcript-verifiable: the native tool should be able to
+  confirm the condition from its own output, not trust a flag.
+- Keep emitted conditions derived from recorded acceptance criteria so they stay
+  in sync with the goal.
+
+### Open Questions
+
+- Which tools expose a stable enough stop-condition hook to target?
+- How should emit degrade when a tool has no native gate (instructions only)?
+- Should context sync support tool-specific block formats beyond AGENTS/CLAUDE?
+
+## Evidence ledger
+
+**Status:** Forward-looking. The goal state is already an append-only event log,
+and `goals phase evidence` records proof against acceptance criteria. The
+direction here is to make captured evidence stronger and harder to fake.
+
+### Direction
+
+- Append-only run capture: record command runs with their output as evidence
+  events.
+- Artifact hashes: hash referenced files/outputs so "done" is backed by content
+  identity, not just a path.
+- Keep the ledger portable and committable so the proof travels with the repo.
+
+### Open Questions
+
+- What should be hashed by default versus on request (cost and noise)?
+- How large can captured run output get before it should be summarized or
+  externalized?
+- Should hashed artifacts be verified at review time, acceptance time, or both?
+
+## Architecture map
+
+**Status:** Implemented (vertical slice). `goals architecture show|brief|check|update`
+exists. Goals renders a default phase-derived architecture map, accepts a typed
+project-specific map, exposes a compact `architecture brief`, shows it in the
+dashboard, and `architecture check` compares recorded changed files and evidence
+refs against the worktree to catch stale maps.
+
+Future depth should improve relationship inference and how conflicting maps from
+parallel worktrees reconcile, without turning the map into a control plane.
+
+### Open Questions
+
+- Should the check infer module relationships, or only verify that recorded maps
+  mention changed code?
+- Should code-derived checks be blocking for technical goals by default?
+
+## Decision brief
+
+**Status:** Implemented (vertical slice). `goals decision brief` and
+`goals decision explain` exist. The brief shows only choices that need the user,
+the recommended reply, what happens after, and how many routine choices can stay
+with the agent. The explainer renders Basic / Detailed / Technical levels using
+active goal history.
+
+Future depth should refine how much project history is read per decision and how
+uncertainty is shown when history is incomplete or stale.
+
+## Dashboard depth
+
+**Status:** Partially implemented. The dashboard is a single read-only HTML file
+with Goal Brief, Progress, Issues, Decisions, Memory, Architecture, Evidence,
+Sources, and Technical Details views.
+
+Future dashboard work should deepen those views without making the dashboard a
+control plane.
+
+### Direction
+
+- Progress: phases, current step, waiting-on, blockers, completion.
+- Issues: blockers, missing proof, failed gates, state mismatches.
+- Decisions: recommendation, options, risk, reversibility, suggested reply.
+- Evidence: checks, acceptance criteria, known gaps, proof, and artifact hashes
+  once the evidence ledger lands.
 - Logs: event timeline and review attempts.
-- Technical Details: goal id, event offset, source commit, paths, and adapter.
-
-## Ecosystem Routing
-
-**Status:** Partially implemented. Goals can recommend skills and plugins from
-portable YAML registries, includes those recommendations in Mode A handoffs and
-the dashboard, can discover local skills/plugins/adapters with `goals ecosystem
-discover`, and can plan/apply reviewed registry additions with `goals ecosystem
-sync`. It can audit registries with `goals ecosystem audit` to catch vague
-routing, weak descriptions, unsafe approval policy, non-portable command hints,
-and missing validation hints. It now also has a permission policy registry and
-`goals permission check`, so agents can tell whether a tool or action stays with
-the agent, needs the user, or is unsafe without explicit approval. Plugin
-discovery reads common bundle metadata such as `.codex-plugin/plugin.json`,
-`manifest.json`, and `package.json`, then proposes conservative portable entries
-that require review.
-
-### Direction
-
-- Keep registry entries portable and public-safe.
-- Score skills/plugins from the objective, current phase, acceptance criteria,
-  decisions, project signals, and profile hints.
-- Clearly label recommendations as suggestions, not automatic external actions.
-- Mark tools that need user approval because they may change remote state, cost
-  money, or touch private data.
-- Keep permission policies human-readable and project-overridable so
-  non-technical users can understand why an agent is asking.
-- Expand local discovery adapters as Claude/Codex and local AI toolchains add
-  new plugin metadata formats.
-- Suggest portable registry additions for local tools that are missing from the
-  repo registries.
-- Keep registry sync as a dry run by default, with explicit `--apply` after
-  review.
-- Use SkillOpt-style validation gates for deeper future skill improvement:
-  collect scored rollouts, propose bounded edits, and accept only improvements
-  that pass held-out validation.
 
 ### Open Questions
 
-- How should conflicting skill recommendations from different agents be merged?
-- How much should Goals learn from repeated recommendation misses across goals?
-- Which plugin metadata files should Goals trust across Claude, Codex, and local
-  AI toolchains?
+- How much detail belongs in a read-only artifact before it needs interactivity?
+- Should the dashboard read the portable spec so it works without live state?
 
-## Self-Evolution Memory
+## Mode B standalone runner
 
-**Status:** Partially implemented. Goals now stores local self-evolution memory
-under `.agent-workflow/self-evolution/memory.json`, derives suggestions from
-repeated friction or high-severity gaps, includes those suggestions in Mode A
-handoffs, shows visible suggestions in the dashboard, and can run a synthetic
-dogfood report across personal, technical, business, self-evolution, and
-ecosystem goal types. It also has a broader use-case coverage matrix for
-personal, technical, business, research, creative, operations, high-stakes,
-ecosystem, and self-evolution goals. Lifecycle rehearsal now creates temporary
-Git repositories and drives representative goals through evidence, issue
-discovery, review, acceptance, and dashboard rendering. Issue stress evaluation
-now injects broken goal states to verify missing proof, failed gates, source
-gaps, unsafe reviews, merge-readiness risks, and user-decision filtering. The
-self-check roll-up now runs the evaluation matrix across Claude and Codex
-adapter shapes and summarizes recommended next product slices. Goals can now
-turn those slices into a dry-run `ROADMAP.md` update plan with `goals roadmap
-suggest`, and `--apply` updates only a generated roadmap block. Merge readiness
-now includes a parallel worktree scan that reports dirty sibling worktrees,
-branch drift, overlapping files, and parallel migration-ordering risk. Ecosystem
-routing can now merge multiple agents' tool recommendations into one coordinator
-view with consensus ranking, conflict notes, and approval-required user
-questions. Permission policy checks now give Mode A agents a simple
-registry-backed way to keep local/reversible choices moving while escalating
-external, costly, destructive, or production-affecting actions. Cross-project
-memory sync can now inspect another Goals project or memory file, dry-run
-sanitized lesson imports, and apply them to the current project's local memory
-only when requested. Professional boundary templates now give Mode A agents
-plain-language wording for medical, legal, financial, safety, and general
-high-stakes goals, including what the agent can do, what needs the user or a
-qualified professional, expected evidence, and safe next steps. Mandatory
-external review gates now let Mode A agents record required, requested, passed,
-failed, blocked, or waived external review so missing review proof stays with
-the agent while failed, blocked, waived, or reviewer-selection decisions remain
-visible to the user.
+**Status:** Forward-looking. Today Goals is primarily a Mode A layer: it provides
+durable state, evidence, registries, and native-condition emit while a native
+agent owns the inner loop. A Mode B standalone runner would let Goals drive a
+goal end to end on its own for environments without a native loop.
 
 ### Direction
 
-- Record friction, gaps, learnings, and successes by area: phase, skill, gate,
-  decision, dashboard, safety, docs, tests, ecosystem, and more.
-- Derive suggestions only when the issue is repeated or high severity.
-- Keep the memory local and ignored by default because it can include project
-  history and private context.
-- Use memory to recommend small improvements to skills, phases, gates, docs, or
-  registries after dogfood runs.
-- Use `goals memory sync PATH` when a similar Goals project already learned a
-  relevant lesson; keep it dry-run-first and import sanitized suggestions only.
-- Use coverage reports to spot goal families that need new scenarios, gates, or
-  public product boundaries.
-- Use `goals eval self-check` as the default self-evolution health report before
-  and after product changes.
-- Use `goals roadmap suggest` to turn self-check gaps into a reviewed, bounded
-  roadmap update instead of asking agents to edit planning notes by hand.
-- Use `goals ecosystem merge` when Claude, Codex, workers, or specialist agents
-  recommend different tools; keep routine routing with the coordinator and only
-  ask the user about approval-required tools.
-- Use `goals permission check` before external connectors, destructive commands,
-  paid tools, or production-affecting actions; keep the report understandable to
-  non-technical users.
-- Use `goals boundary explain --domain auto` before high-stakes medical, legal,
-  financial, safety, or professional-judgment guidance.
-- Use `goals external-review check --strict` before accepting high-stakes,
-  regulated, security, privacy, production, public-claim, or irreversible
-  phases.
-- Keep temporary lifecycle rehearsal in the merge checklist so runtime behavior
-  is tested, not only described.
-- Keep issue stress evaluation in the merge checklist so Goals proves it can
-  find bad states and avoid unnecessary user interruptions.
-- Keep `goals merge-check` in coordinator merge flows so migration ordering,
-  branch drift, dirty sibling worktrees, file overlap, parallel migration risk,
-  and parallel-worktree reconciliation are checked before humans are asked to
-  resolve only genuinely high-risk choices.
+- Run phases against recorded acceptance criteria without a host agent.
+- Reuse the same evidence, checkpoint, and decision rules as Mode A.
+- Keep Mode B optional so Mode A stays the primary, lock-in-free integration.
 
 ### Open Questions
 
-- How should parallel worktree memories be reconciled?
-- When should a memory suggestion become a blocking user decision instead of an
-  agent-handled improvement?
-- Should Goals add a separate user-wide memory registry, or keep cross-project
-  sync explicit and project-selected?
-
-## Source Evidence
-
-**Status:** Partially implemented. Goals can record source evidence and
-source-backed claims as append-only goal events, includes source prompts in Mode
-A handoffs, and renders sources in the dashboard. Business scenario evaluation
-now treats source evidence as a current capability. Goals can also run
-`goals source citations` to check claim traceability and qualification, and
-`goals source freshness` to check recorded source age against simple
-type-specific freshness windows. Routine citation and freshness cleanup stays
-with the agent as repair work, while weak or stale high-stakes evidence can
-become a user-facing decision.
-
-### Direction
-
-- Record sources for research, business, customer, market, migration, safety, and
-  architecture claims.
-- Keep source evidence readable for non-technical users: title, locator, type,
-  summary, credibility, claim, and confidence.
-- Check citation quality before relying on claims: missing source ids, missing
-  locators or summaries, low-confidence claims, absolute wording, and
-  high-confidence claims backed only by low-credibility sources.
-- Let phase evidence reference `source_ids` so proof and claims connect.
-- Later, add richer provenance and optional external source refresh adapters.
-
-### Open Questions
-
-- Should external URLs be fetched and archived, or kept as user-provided
-  locators only?
-- Which projects need stricter source freshness windows than the built-in
-  defaults?
-- Should business/research goals have a stronger source gate than code goals?
-- Should citation quality thresholds be configurable by project or goal domain?
-
-## Asset Provenance
-
-**Status:** First vertical slices implemented. Goals can record generated,
-external, stock, derived, user-provided, or other assets as append-only goal
-events, include asset summaries in Mode A handoffs, check provenance with
-`goals asset provenance`, compare creative directions with
-`goals creative compare`, add findings to `goals issues`, and render recorded
-assets and variants in the dashboard.
-
-### Direction
-
-- Keep creative and publishing workflows safe without making every taste choice
-  a user decision.
-- Treat missing asset metadata as agent repair work: stable locator, generation
-  tool, sanitized prompt, source ids, license, and usage-rights status.
-- Surface restricted or blocked usage rights as plain-language user questions.
-- Keep provenance portable by rejecting local machine paths in asset locators.
-- Next, add richer source-to-asset lineage and optional external rights
-  verification adapters.
-
-### Open Questions
-
-- Should Goals provide project-specific asset type presets for design, video,
-  research data, and document workflows?
-- Should generated prompts be stored verbatim, summarized, or policy-sanitized
-  by default?
-- When should asset provenance become a blocking gate instead of an issue report?
-
-## Handoff Owner Registry
-
-**Status:** First vertical slice implemented. Goals can record phase, review,
-follow-up, rollout, and process owners as append-only goal events, include
-handoff summaries in Mode A prompts, check owner clarity with `goals handoff
-check`, add handoff findings to `goals issues`, and render handoff owners in
-the dashboard.
-
-### Direction
-
-- Make ownership visible without asking users to route every routine follow-up.
-- Treat missing roles, responsibilities, phase ids, duplicate labels, and
-  escalation paths as agent repair work.
-- Surface only material accountability questions: blocked owners or owners
-  explicitly marked `confirmation: needs_user`.
-- Keep owner labels portable and non-sensitive by default.
-- Next, connect recurring goal templates to handoff owners without storing
-  private routines by default.
-
-### Open Questions
-
-- Should handoff owners be reusable templates across goals, or stay goal-local
-  unless a user imports them?
-- Should team/external owners require an escalation path before a phase can be
-  accepted?
-- How should Mode B runner handoffs differ from Mode A native-agent handoffs?
-
-<!-- goals:self-check-roadmap:start -->
-## Goals Self-Check Suggestions
-
-This generated section is safe to refresh. It turns self-check findings into roadmap candidates without changing human-written roadmap notes.
-
-- **Private Memory Boundary** (`p1`)
-  - Source: self-check
-  - Capability: `private_memory_boundary`
-  - Why: Self-check recommends private memory boundary as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible private memory boundary slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[0]`, `self-check.summary`
-- **Recurring Goal Templates** (`p2`)
-  - Source: self-check
-  - Capability: `recurring_goal_templates`
-  - Why: Self-check recommends recurring goal templates as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible recurring goal templates slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[2]`, `self-check.summary`
-- **Spaced Recall Outputs** (`p2`)
-  - Source: self-check
-  - Capability: `spaced_recall_outputs`
-  - Why: Self-check recommends spaced recall outputs as a next product capability that would make Goals better at finishing broad goals.
-  - Recommended change: Define the smallest user-visible spaced recall outputs slice, add self-check coverage, and keep any write behavior dry-run-first until reviewed.
-  - Evidence: `self-check.next_slices[3]`, `self-check.summary`
-<!-- goals:self-check-roadmap:end -->
+- How should a standalone runner execute checks safely across project types?
+- How do Mode B handoffs differ from Mode A native-agent handoffs?
+- Where is the line between "runner" and "yet another agent framework"?

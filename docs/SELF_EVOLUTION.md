@@ -1,106 +1,67 @@
-# Self-Evolution
+# How Goals Stays Indispensable
 
-Goals should improve by running itself against different kinds of goals and
-turning repeated friction into product changes. This document defines the
-current loop.
+Native agents own the inner loop. Claude Code, Codex, Cursor, and Windsurf all
+ship fast, capable goal/task primitives — but those primitives are
+vendor-locked and short-lived:
 
-## Evaluation Scenarios
+- Claude `/goal` is session-scoped and dies on `/clear`. Its checker reads only
+  the transcript, so "done" is asserted, not proven.
+- TodoWrite is per-session scratch state.
+- AGENTS.md is static instructions with no task state.
+- Cursor/Windsurf memories are proprietary and non-portable.
 
-Run the built-in scenario evaluator:
+No vendor will build a portable, durable, out-of-tool goal + acceptance +
+evidence ledger — it fights their lock-in. **Goals fills exactly that gap.** Its
+durable value is:
 
-```bash
-uv run goals eval scenarios --adapter claude
-uv run goals eval scenarios --adapter codex
-uv run goals eval dogfood --adapter claude
-uv run goals eval coverage --adapter claude
-uv run goals eval rehearsal --adapter claude
-uv run goals eval issue-stress --adapter claude
-uv run goals eval self-check
-uv run goals roadmap suggest
-```
+- **Ownership and durability of state** — the goal lives in your repo, not a
+  vendor's session.
+- **Evidence-based "done"** — acceptance is backed by recorded proof, not a
+  transcript claim.
+- **Vendor-neutral handoff** — the same goal moves between Claude, Codex, and any
+  other tool.
+- **An auditable append-only event log** — every change is recorded and
+  inspectable.
 
-The evaluator dry-runs Goals against five scenario families:
+This document describes how Goals delivers that durable value and how it fits
+alongside native loops without trying to replace them.
 
-- Personal: private, reversible life goals where the agent should surface only
-  safety or preference decisions that matter.
-- Technical: repository changes where worktrees, evidence, checks, and review
-  gates matter.
-- Business: research and planning goals where source evidence and audience
-  decisions matter.
-- Self-evolution: Goals improving itself after dogfood runs.
-- Ecosystem: Claude/Codex skills, plugins, adapters, and registries helping the
-  agent choose tools without making the user manually route every step.
+## Portability Layer
 
-Each scenario has required current capabilities and planned future capabilities.
-The command fails when current capabilities are missing, but planned
-capabilities remain visible as the next frontier.
-
-`eval dogfood` uses the same scenarios to produce a plain-language report. It
-checks whether each synthetic goal keeps user decisions small, documents what
-the agent can decide without interrupting the user, and names the proof required
-to accept the goal. This is the quick self-evolution check before and after
-larger product changes.
-
-`eval coverage` checks a wider matrix of representative goal families:
-personal, technical, business, research, creative, operations, high-stakes,
-ecosystem, and self-evolution. It shows which current capabilities cover each
-family and which planned capabilities should become future product work.
-
-`eval rehearsal` creates temporary Git repositories and actually runs
-representative Goals lifecycles. It records evidence, checks issues, reviews and
-accepts phases, and renders dashboards so self-evolution work is tested against
-runtime behavior, not only static scenario descriptions.
-
-`eval issue-stress` injects broken goal states and checks whether Goals catches
-missing proof, failed gates, unresolved source claims, architecture questions,
-unsafe reviews, and high-impact user decisions. It also verifies that routine
-repair work stays with the agent instead of becoming unnecessary user prompts.
-
-`eval self-check` runs the full matrix for Claude and Codex adapter shapes and
-summarizes whether Goals is meeting its original promise. It is the first
-command to run during self-evolution work; the individual eval commands are
-drill-down views when the roll-up finds a gap or a promising next slice.
-
-`roadmap suggest` turns the self-check's next slices into a dry-run roadmap
-update plan. It is safe for agents to run before asking the user what to build
-next: the default output is a preview, and `--apply` only updates a bounded
-generated block in `ROADMAP.md`.
-
-## Ecosystem Discovery
-
-Goals can inspect local skill roots, plugin roots, and adapter executables:
+The portability layer is the clearest expression of the durable-value thesis. It
+turns live goal state into something that outlives any single session or tool.
 
 ```bash
-uv run goals ecosystem recommend
-uv run goals ecosystem merge
-uv run goals ecosystem discover
-uv run goals ecosystem sync
-uv run goals ecosystem audit
-uv run goals permission check github --kind plugin --action "inspect a remote issue"
+uv run goals export
+uv run goals context sync --target both
+uv run goals emit --agent claude
+uv run goals emit --agent codex
 ```
 
-`recommend` uses portable registries to route the current phase. `merge`
-combines recommendations from multiple agents or adapter shapes into one
-coordinator view. It ranks consensus, records command-hint disagreements as
-agent-side routing work, and only asks the user about approval-required tools.
-`discover` looks at local `SKILL.md` files, common plugin metadata files, and
-Claude/Codex adapter availability, then suggests registry additions for tools
-that are present locally but missing from the repo. Discovery output is sanitized
-by default; it labels sources without printing local filesystem paths. `sync`
-turns those suggestions into a reviewed registry update plan; it is a dry run
-unless `--apply` is passed. `audit` checks whether registry entries are specific
-enough to route, safe enough for handoff prompts, and ready for validation-gated
-self-evolution.
+`export` writes `.goals/GOAL.md` plus `.goals/goal-state.json` — a sanitized,
+committable, vendor-neutral portable goal spec (the "AGENTS.md for task state").
+It is versioned by `PORTABLE_SPEC_VERSION` (currently 1) and safe to commit so
+the goal travels with the repo. `goals view` runs `export` automatically, so the
+portable spec stays current as you work. Implementation lives in
+`src/goals/portability.py`.
 
-`permission check` answers a narrower question before the agent uses a tool or
-action: can this stay with the agent, should the user approve it, or is it unsafe
-without explicit approval? Project policies live in `registries/permissions.yml`;
-without a project policy, Goals uses built-in conservative defaults for local,
-external, destructive, costly, and production-affecting work.
+`context sync` writes a managed
+`<!-- goals:context:start -->`…`<!-- goals:context:end -->` block into AGENTS.md
+and CLAUDE.md, preserving everything a human wrote outside the block. Use
+`--target agents`, `--target claude`, or `--target both` to choose where the
+block goes. This keeps a native agent's static instructions pointed at the
+current goal without overwriting human-authored content.
+
+`emit` produces a transcript-verifiable native stop-condition derived from the
+current phase's acceptance criteria, ready to paste into Claude `/goal` or Codex.
+The native loop runs fast and owns execution; the emitted condition makes its
+stop point answerable from recorded acceptance criteria instead of a vague
+transcript judgment.
 
 ## Memory Loop
 
-Goals can record repeated friction and derive improvement suggestions:
+Goals can record repeated friction and derive improvement suggestions, then sync
+sanitized lessons across similar projects:
 
 ```bash
 uv run goals memory record "Repeated setup confusion" --area skill --kind friction
@@ -111,250 +72,20 @@ uv run goals memory sync ../similar-goals-project
 
 Use `record` when an agent notices a reusable issue during work. Use `absorb`
 after a goal has evidence, blockers, failed reviews, or learnings that should
-become reusable memory. Suggestions are surfaced when a pattern repeats or a gap
-is high severity.
+become reusable memory. `suggest` surfaces an improvement only when a pattern
+repeats or a gap is high severity.
 
-Use `memory sync` when another Goals project has already exposed useful
-friction. It is a dry run by default and imports only sanitized suggestions with
-`--apply`; raw source summaries and evidence refs stay out unless
-`--include-private` is explicitly used.
+Use `memory sync` when another Goals project has already exposed a useful lesson.
+It is a dry run by default and imports only sanitized suggestions; raw source
+summaries and evidence refs stay out unless explicitly requested.
 
 Memory is local generated state under `.agent-workflow/self-evolution/`. It is
 not meant for public commits.
 
-## Professional Boundaries
-
-High-stakes goals need clear limits in plain language. Agents can run:
-
-```bash
-uv run goals boundary explain --domain auto
-```
-
-The report explains what the agent can safely do, what needs the user or a
-qualified professional, what evidence should be recorded, and suggested wording
-for medical, legal, financial, safety, or general professional judgment
-boundaries.
-
-## External Review Gate
-
-Boundaries explain safe language; external reviews prove that high-risk work was
-actually reviewed or that the user consciously accepted the risk. Agents can
-record review requirements and outcomes:
-
-```bash
-uv run goals external-review add "Security review" \
-  --reviewer "Security lead" \
-  --reviewer-type security \
-  --risk-domain security \
-  --status passed \
-  --phase-id P2 \
-  --scope "Prompt injection checks" \
-  --summary "Security lead approved the mitigation." \
-  --evidence evidence:P2
-uv run goals external-review check
-uv run goals external-review list
-```
-
-Mode A prompts include an external review block. The check keeps missing scope,
-summary, phase ids, and evidence refs as agent-side repair work. It surfaces
-only material user decisions: no review path for a high-stakes goal, a reviewer
-that must be chosen, a blocked or failed review, or a high-stakes waiver. The
-dashboard shows an External Reviews view so non-technical users can see whether
-review is still waiting, passed, blocked, failed, or waived.
-
-## Source Evidence
-
-Research and business goals need proof that is easy to inspect. Agents can
-record sources and source-backed claims:
-
-```bash
-uv run goals source add "Customer interview" \
-  --locator "interview-001" \
-  --source-type interview \
-  --claim "Users need plain-language progress." \
-  --confidence 0.8
-uv run goals source citations
-uv run goals source freshness
-uv run goals source list
-```
-
-Mode A prompts include source summaries and ask agents to record sources when a
-phase makes customer, market, research, architecture, migration, or safety
-claims. `source citations` checks whether source-backed claims are traceable and
-appropriately qualified: source ids exist, cited sources have stable locators
-and summaries, confidence matches source strength, and absolute wording does not
-overstate the evidence. Most citation cleanup is agent repair work. Weak
-citation evidence for a high-stakes claim can become a user-facing decision
-because proceeding changes risk. `source freshness` checks source age against
-simple, type-specific freshness windows before an agent relies on claims. The
-dashboard shows recorded sources, claims, citation quality, and freshness status
-separately from code checks.
-
-## Asset Provenance
-
-Creative, product, data, and publishing goals often create or reuse assets. The
-agent should record each important asset before it appears in a deliverable:
-
-```bash
-uv run goals asset add "Hero image" \
-  --locator "assets/hero.png" \
-  --asset-type image \
-  --origin generated \
-  --creator-tool image-model \
-  --usage-rights allowed \
-  --prompt "Simple product hero"
-uv run goals asset provenance
-uv run goals asset list
-```
-
-Mode A prompts now include an asset provenance block. The check keeps ordinary
-cleanup with the agent: add missing locators, remove local machine paths, record
-the generation tool and prompt, attach source ids, and fill in license or rights
-details. Restricted or blocked usage rights are user-facing because they can
-change whether the project is allowed to use the asset at all.
-
-The dashboard shows recorded assets and provenance findings beside sources and
-architecture. Non-technical users see whether an asset is safe to rely on;
-technical users can still inspect the event log and source ids when they need
-the deeper trail.
-
-## Creative Variant Comparison
-
-Creative work should allow exploration without making every preference a user
-interruption. Goals now lets agents record creative directions, score them
-against simple criteria, and compare them before asking the user:
-
-```bash
-uv run goals creative variant add "Calm launch" \
-  --summary "Plain, trust-building direction." \
-  --best-for "non-technical buyers" \
-  --asset-id AST-example \
-  --score "brand_fit=5:Matches the product tone" \
-  --score "clarity=5:Easy to understand"
-uv run goals creative compare
-uv run goals creative variants
-```
-
-Mode A prompts include a creative variant block. The check keeps missing
-summaries, missing comparison scores, stale asset ids, and ordinary shortlist
-work with the agent. It surfaces only decisions that materially change the
-outcome: brand direction, publishing approval, or restricted/blocked asset
-rights. The dashboard shows a Creative Variants view so non-technical users can
-see the recommended direction and why it is safe enough to continue.
-
-## Handoff Owners
-
-Operations and cross-agent goals often fail because nobody knows who owns the
-next review, follow-up, rollout, or recurring process step. Goals now lets
-agents record that ownership in the goal state:
-
-```bash
-uv run goals handoff owner add "Support lead" \
-  --role reviewer \
-  --responsibility "Review the rollout checklist." \
-  --owner-type team \
-  --phase-id P2 \
-  --decision-scope "checklist rollout" \
-  --escalation-path "Create a follow-up task for the coordinator." \
-  --confirmation agent_confirmed
-uv run goals handoff check
-uv run goals handoff owners
-```
-
-Mode A prompts include a handoff owner block. The check keeps missing roles,
-responsibilities, stale phase ids, duplicate labels, and missing escalation
-paths as agent-side repair work. It surfaces only material accountability
-questions: a blocked owner or an owner explicitly marked `confirmation:
-needs_user`. The dashboard shows a Handoff Owners view so non-technical users
-can see who owns what without reading the event log.
-
-## End-User Experience
-
-The decision layer and visualization layer should be judged from the user's
-point of view, not from the storage model.
-
-Agents should run the issue report before escalating:
-
-```bash
-uv run goals brief
-uv run goals issues
-uv run goals merge-check
-```
-
-The brief is the non-technical first pass: what is happening, what needs the
-user, what the agent can do next, and what proof exists. Agents should use this
-wording when they interrupt the user. The issue report separates important user
-questions from agent-side repair actions. It is meant to help agents discover
-blockers, missing proof, failed reviews, unresolved source claims, and state
-mismatches before asking the user for help. The issue stress evaluator keeps
-this promise honest by testing both sides: what should be surfaced to the user
-and what the agent should repair itself.
-
-`merge-check` is the coordinator pass before merging. It is designed for
-technical users and non-technical project owners: it explains whether migration
-ordering, branch drift, parallel worktree reconciliation, dirty sibling
-worktrees, overlapping files, parallel migration changes, or high-risk merge
-approval is still unresolved, and it keeps routine repair work with the agent.
-
-Decision experience means:
-
-- only blocking or high-risk choices are surfaced to the user,
-- the question is plain-language,
-- options are clear,
-- the reason for asking is visible,
-- reversible choices can be made by the agent and recorded as assumptions.
-
-Agents can generate a user-ready explanation from the active goal history:
-
-```bash
-uv run goals decision brief
-uv run goals decision explain --file decision.json --level basic
-uv run goals decision explain --file decision.json --level detailed
-uv run goals decision explain --file decision.json --level technical
-```
-
-`decision brief` is the non-technical first pass: it shows only choices that
-need the user, the recommended reply, what happens after the reply, and how many
-routine choices can stay with the agent.
-
-The explainer should include what Goals already knows from accepted phases,
-evidence, checks, changed files, blockers, learnings, and prior decisions. It
-should be clear about whether the user really needs to be interrupted.
-The dashboard shows the same principle as readable decision cards: important
-choices include recommendation, options, risk, reversibility, confidence, known
-context, uncertainty, and a suggested reply, while routine reversible choices
-stay with the agent.
-
-Checkpoints apply the same idea to phase progress. `goals checkpoint current`
-shows the current validation point in plain language: what is being checked, who
-is waiting, what proof exists, what remains unresolved, and the next safe step.
-Required checkpoints must pass or be waived before a phase can be reviewed or
-accepted. This lets the agent keep working on repairable gaps while stopping
-only for approvals, validation, or understanding that genuinely needs the user.
-
-Visualization experience means:
-
-- the user can see what is happening,
-- the user can see whether the goal is blocked,
-- the user can see the current checkpoint and next safe step,
-- the user can see what issue needs attention,
-- the user can see what proof exists,
-- technical users can inspect details without forcing non-technical users to
-  read raw JSON.
-
-The architecture view extends this principle: the dashboard gives a simple map
-and a compact architecture brief, while `architecture.md` gives technical users
-a Markdown/Mermaid diagram they can question. It should show what is built,
-planned, blocked, deferred, missing, and not yet backed by evidence while
-keeping the default view simple. `goals architecture check` adds a code-derived
-review pass: changed code files should be represented in the map, and
-architecture evidence paths should still exist in the worktree. The check keeps
-ordinary map cleanup with the agent.
-
 ## Decision Rule
 
-Goals should not ask the user about every choice. The scenario evaluator treats
-only `blocking` decisions as user-facing by default.
+Goals should not ask the user about every choice. Only **blocking** decisions are
+user-facing by default.
 
 The agent can decide reversible or low-risk details itself when it records:
 
@@ -367,36 +98,67 @@ The user should see a simple question only when the answer changes safety,
 privacy, cost, external side effects, data migration, or the core direction of
 the goal.
 
+Agents can generate a user-ready explanation from the active goal history:
+
+```bash
+uv run goals decision brief
+uv run goals decision explain --file decision.json --level basic
+uv run goals decision explain --file decision.json --level detailed
+uv run goals decision explain --file decision.json --level technical
+```
+
+`decision brief` is the non-technical first pass: it shows only choices that need
+the user, the recommended reply, what happens after, and how many routine choices
+can stay with the agent. The explainer is clear about which facts came from
+project history and which are current agent judgment, so the user can tell
+whether they really need to be interrupted.
+
+Checkpoints apply the same idea to phase progress. `goals checkpoint current`
+shows the current validation point in plain language: what is being checked, who
+is waiting, what proof exists, what remains unresolved, and the next safe step.
+Required checkpoints must pass or be waived before a phase can be reviewed or
+accepted, so the agent keeps working on repairable gaps and stops only for
+approvals or understanding that genuinely needs the user.
+
 ## Ecosystem Fit
 
 Claude Code and Codex already provide native loops, skills, plugins, tools, and
-permissions. Goals should not replace them. Its unique value is to provide:
+permissions. **Goals does not replace them.** Its job is the durable layer
+underneath the native inner loop. Goals provides:
 
-- durable goal state across turns,
-- phase evidence and review gates,
-- adapter-aware native `/goal` instructions,
-- registries for skills, gates, agents, profiles, and adapters,
-- permission policies that keep routine tool choices with agents while surfacing
-  external, costly, or destructive actions,
-- source freshness checks that keep stale evidence as agent repair work unless
-  a high-stakes claim really needs the user,
-- citation quality review that keeps missing citation metadata with the agent
-  while surfacing weak high-stakes evidence,
-- asset provenance checks that keep missing metadata with the agent while
-  surfacing blocked or restricted usage rights,
-- code-derived architecture checks that compare changed files and evidence refs
-  with the goal architecture map,
-- checkpoints that make phase validation, approvals, and user-needed pauses
-  explicit,
-- a dashboard that makes progress and blockers visible,
-- decision explanations that non-technical users can understand.
+- durable goal state across turns, sessions, and `/clear`,
+- phase evidence and review gates so "done" is proven,
+- a portable, committable goal spec (`goals export`) that any tool can read,
+- adapter-aware native stop-conditions (`goals emit`) and synced context blocks
+  (`goals context sync`),
+- registries for skills, plugins, and adapters with `goals ecosystem recommend`
+  and a coordinator merge view with `goals ecosystem merge`,
+- a permission policy (`goals permission check`) that keeps routine tool choices
+  with the agent while surfacing external, costly, or destructive actions,
+- source evidence (`goals source add|freshness|list`) so research and business
+  claims are inspectable and stale evidence becomes agent repair work unless a
+  high-stakes claim needs the user,
+- code-derived architecture checks (`goals architecture check`) that compare
+  changed files and evidence refs with the goal architecture map,
+- a read-only dashboard that makes progress and blockers visible,
+- decision explanations non-technical users can understand.
 
-Future work should connect scenario results to automatic skill/plugin selection,
-and the first registry-backed version now recommends skills/plugins in Mode A
-handoffs and the dashboard. Local discovery can compare installed skills,
-plugins, and adapters with portable registries. Self-evolution memory records
-repeated friction and turns it into improvement suggestions. Source evidence
-records what claims are backed by which sources. Goals must still always know
-what phase it is in, what evidence exists, what remains uncertain, whether a
-decision really needs the user, and whether an external tool needs approval
-before use.
+Before escalating to the user, agents should run the issue report:
+
+```bash
+uv run goals brief
+uv run goals issues
+uv run goals merge-check
+```
+
+`brief` is the non-technical first pass: what is happening, what needs the user,
+what the agent can do next, and what proof exists. `issues` separates important
+user questions from agent-side repair actions. `merge-check` is the coordinator
+pass before merging: it explains whether migration ordering, branch drift, dirty
+sibling worktrees, overlapping files, or high-risk approval is still unresolved,
+and keeps routine repair work with the agent.
+
+Goals must always know what phase it is in, what evidence exists, what remains
+uncertain, whether a decision really needs the user, and whether an external tool
+needs approval before use. Native loops handle the fast execution; Goals keeps
+the durable, portable, evidence-backed record of what was actually achieved.

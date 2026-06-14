@@ -3,179 +3,157 @@
 Goals helps Codex, Claude Code, and other local agents finish bigger repo tasks
 without losing the thread.
 
-It does not replace the native agent. It gives the agent a durable workflow
-layer: a goal worktree, phase state, evidence, checks, decisions, handoffs, and
-a dashboard a human can read.
+It does not replace the native agent. It is the **durable, vendor-neutral layer
+around the work**: a goal worktree, phase state, evidence, acceptance checks,
+decisions, and a dashboard a human can read — plus a portable goal spec any agent
+can pick up.
 
-## The Simple Command Set
+## Why Goals stays useful even as Claude Code and Codex evolve
 
-Most users should only need these four commands:
+Native agents keep getting better at the *inner loop* (write code, run tests).
+But the loop primitives they ship are, by design, vendor-locked and short-lived:
 
-| Command | What it combines |
+- Claude Code's `/goal` is **session-scoped** — it disappears on `/clear`, and
+  its checker only reads the transcript, never the proof.
+- `TodoWrite` lives and dies inside one session.
+- `AGENTS.md` (the cross-vendor standard) is **static instructions only** — no
+  task state, no "done" semantics, no evidence.
+- Cursor/Windsurf memories are proprietary and IDE-bound.
+
+No vendor will build a portable, durable, *out-of-their-tool* goal+acceptance+
+evidence ledger, because that works against their lock-in. That gap is what Goals
+fills, and it is the part that survives any single tool evolving:
+
+1. **Ownership & durability** — goal, acceptance criteria, and evidence are plain
+   files in your repo that survive `/clear`, crashes, and switching agents.
+2. **Evidence-based "done"** — captured checks and acceptance state, not
+   transcript-skimming.
+3. **Vendor-neutral handoff** — one goal state read by Claude *and* Codex *and*
+   the next tool you try.
+4. **Auditable history** — an append-only event log independent of any
+   proprietary store.
+
+## The simple command set
+
+Most users only need these four:
+
+| Command | What it does |
 | --- | --- |
-| `goals start` | Creates the goal worktree, goal state, dashboard, and first agent handoff instructions. |
+| `goals start` | Creates the goal worktree, goal state, dashboard, and first agent handoff. |
 | `goals next` | Refreshes generated files and prints the paste-ready `/goal` handoff for Codex or Claude. |
-| `goals check` | Combines the brief, checkpoint, issues, merge readiness, architecture check, and registry validation into one status view. |
-| `goals view` | Refreshes the dashboard and architecture map, then prints their file paths. |
+| `goals check` | Combines brief, checkpoint, issues, merge readiness, and architecture into one status view. |
+| `goals view` | Refreshes the dashboard, architecture map, and portable `.goals/` spec, then prints their paths. |
 
-The lower-level commands still exist as advanced building blocks, but the daily
-loop should feel like: start, paste, check, view.
+## Portability: the part native tools won't build
+
+Three commands turn the internal goal into artifacts any agent can use:
+
+| Command | What it does |
+| --- | --- |
+| `goals export` | Writes `.goals/GOAL.md` + `.goals/goal-state.json` — a sanitized, **committable** portable spec (the "AGENTS.md for task state"). |
+| `goals context sync` | Syncs a managed goal block into `AGENTS.md` and `CLAUDE.md`, preserving your hand-written content, so a team using both Claude and Codex never drifts. |
+| `goals emit --agent claude\|codex` | Emits a transcript-verifiable native stop-condition from the current phase's acceptance criteria — paste it straight into Claude Code's `/goal` or Codex. |
+
+`goals view` runs `export` for you, so the portable spec stays fresh as part of
+the normal loop. Unlike `.agent-workflow/` (local run state, git-ignored, may
+contain machine paths), everything under `.goals/` is path-free and safe to
+commit.
 
 ## Install
 
-From this repository:
+From this repository (puts `goals` on your PATH):
 
 ```bash
 uv tool install --editable .
 ```
 
-That puts `goals` on your PATH so the generated handoff can tell Codex or Claude
-to run plain `goals ...` commands inside your project.
+> Prerequisite: [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+> On macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 
-For development inside this repository, use:
+For development inside this repository:
 
 ```bash
 uv sync
 uv run pytest -q
 ```
 
-## Use With Codex
+## Use with Codex or Claude Code
 
-Run this inside a clean git repo with at least one commit:
+Run inside a clean git repo with at least one commit:
 
 ```bash
-goals start "Ship the onboarding cleanup" --agent codex
+goals start "Ship the onboarding cleanup" --agent codex   # or --agent claude
 cd <worktree printed by goals>
-goals next --agent codex | pbcopy
+goals next --agent codex                                   # paste the output into the agent
 ```
 
-Paste the copied output into Codex. If the Codex native `/goal` feature is not
-enabled locally, the generated prompt still works: paste it into the current
-Codex thread and let Goals remain the state layer.
+Copy the handoff to your clipboard with your platform's clipboard tool
+(`pbcopy` on macOS, `xclip`/`wl-copy` on Linux, `clip` on Windows), e.g.
+`goals next --agent codex | pbcopy`.
+
+If the native `/goal` feature is not enabled locally, the generated prompt still
+works: paste it into the current session and let Goals remain the state layer.
 
 During the run:
 
 ```bash
-goals check
-goals view
-goals next --agent codex | pbcopy
+goals check                  # one-screen health view
+goals view                   # refresh dashboard + portable spec
+goals next --agent codex     # next paste-ready handoff
 ```
 
-## Use With Claude Code
-
-The Claude flow is the same, with a different handoff adapter:
-
-```bash
-goals start "Ship the onboarding cleanup" --agent claude
-cd <worktree printed by goals>
-goals next --agent claude | pbcopy
-```
-
-Paste the copied output into Claude Code. If Claude is not installed or not on
-PATH, Goals still generates a Claude-shaped handoff that you can copy manually.
-
-During the run:
-
-```bash
-goals check
-goals view
-goals next --agent claude | pbcopy
-```
-
-## Screenshots
-
-These screenshots were generated from a fresh temporary git repo after an
-editable `uv tool install`, using the same commands shown above.
-
-### Four-command help surface
-
-![Goals help showing the simple workflow](docs/screenshots/goals-help.png)
-
-### Start a Codex goal
-
-![goals start for Codex](docs/screenshots/goals-start-codex.png)
-
-### Paste-ready Codex handoff
-
-![goals next for Codex](docs/screenshots/goals-next-codex.png)
-
-### Paste-ready Claude handoff
-
-![goals next for Claude](docs/screenshots/goals-next-claude.png)
-
-### Combined goal check
-
-![goals check output](docs/screenshots/goals-check.png)
-
-### Dashboard
-
-![Goals dashboard](docs/screenshots/goals-dashboard.png)
-
-## How It Works
+## How it works
 
 `goals start` creates a git worktree and writes generated state under:
 
 ```text
-.agent-workflow/goals/<goal-id>/
+.agent-workflow/goals/<goal-id>/   # local run state, git-ignored
+.goals/                            # portable, committable goal spec
 ```
-
-That state is ignored by git by default because it can contain local paths and
-private run history. The generated dashboard lives in the same directory.
 
 The native agent owns the work. Goals owns the structure around the work:
 
 - phases and acceptance criteria
 - proof and evidence
 - user-facing decisions
-- source, asset, and review records
-- merge-readiness checks
+- merge-readiness and architecture checks
 - a dashboard for humans
+- the portable goal spec other agents can read
 
 ## Extending Goals
 
-Goals is intentionally built as a small workflow layer over composable
-primitives.
+Goals is a small workflow layer over composable primitives.
 
-- Add or change high-level user workflows in `src/goals/workflows.py`.
-- Keep `src/goals/cli.py` thin: CLI commands should mostly call workflow helpers
-  or existing domain modules.
+- Add or change high-level workflows in `src/goals/workflows.py`.
+- Keep `src/goals/cli.py` thin: commands mostly call workflow helpers or domain
+  modules.
 - Add reusable capabilities as focused modules under `src/goals/`.
-- Add portable tool, skill, plugin, permission, and adapter metadata under
+- Add portable skill, plugin, permission, and adapter metadata under
   `registries/*.yml`.
-- Keep advanced commands available for agents and scripts, but prefer a small
-  memorable top-level command set for humans.
 
-The current advanced building blocks include:
+Advanced building blocks still available for agents and scripts:
 
 ```bash
-goals phase evidence
-goals phase review
-goals phase accept
+goals phase evidence | review | accept
 goals brief
 goals issues
 goals merge-check
 goals checkpoint current
-goals source citations
-goals asset provenance
-goals creative compare
-goals external-review check
-goals handoff check
-goals ecosystem recommend
+goals decision brief
+goals source add | freshness | list
+goals architecture check
+goals ecosystem recommend | merge
 goals permission check
-goals safety-check --mode local .
+goals validate | doctor | repair
 ```
 
 ## Status
 
-This repository is an early MVP.
-
-Mode A is implemented:
+Early MVP. Mode A is implemented:
 
 - Codex or Claude owns the native goal loop.
-- Goals owns project-local state, evidence, checks, and dashboard output.
-- The CLI does not launch or control Codex or Claude processes.
-
-Mode B, a standalone runner for local AI or schedulers, is represented by
-runtime interfaces but is not complete yet.
+- Goals owns project-local state, evidence, checks, dashboard, and the portable
+  spec.
+- The CLI does not launch or control agent processes.
 
 See [ROADMAP.md](ROADMAP.md) for planned directions.

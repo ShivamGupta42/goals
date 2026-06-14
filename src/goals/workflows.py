@@ -9,6 +9,7 @@ from goals.checkpoints import build_current_checkpoint_brief
 from goals.issues import analyze_goal_issues
 from goals.merge_readiness import analyze_merge_readiness
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
+from goals.portability import export_goal
 from goals.models import (
     ArchitectureCheckReport,
     CurrentCheckpointBrief,
@@ -57,6 +58,7 @@ class WorkflowView:
     snapshot: GoalSnapshot
     dashboard_path: Path
     architecture_path: Path
+    portable_path: Path
 
 
 def start_workflow(
@@ -104,11 +106,13 @@ def view_workflow(cwd: Path) -> WorkflowView:
     claim_worktree(cwd)
     dashboard_path = emit_dashboard(cwd)
     architecture_path = emit_architecture(cwd)
+    portable_path = Path(export_goal(cwd).markdown_path)
     snapshot = load_active_snapshot(cwd)
     return WorkflowView(
         snapshot=snapshot,
         dashboard_path=dashboard_path,
         architecture_path=architecture_path,
+        portable_path=portable_path,
     )
 
 
@@ -210,8 +214,11 @@ def render_view_workflow(report: WorkflowView) -> str:
             f"Goal: {report.snapshot.objective}",
             f"Dashboard: `{report.dashboard_path}`",
             f"Architecture map: `{report.architecture_path}`",
+            f"Portable goal spec: `{report.portable_path}`",
             "",
             "Open the dashboard file in a browser for the user-friendly status page.",
+            "The portable spec (`.goals/`) is sanitized and safe to commit so any",
+            "agent can resume this goal.",
         ]
     ) + "\n"
 
