@@ -154,6 +154,36 @@ def test_detects_missing_evidence_requirement() -> None:
     assert "vague-acceptance" not in codes
 
 
+def test_evidence_signal_uses_word_boundaries_not_substrings() -> None:
+    # "checkout" must not satisfy the evidence requirement via the "check" stem.
+    design = LoopDesign(
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="P",
+                acceptance_criteria=["The checkout page loads for the user."],
+                termination_conditions=["Done."],
+            )
+        ]
+    )
+    assert "no-evidence-requirement" in _codes(design, skills=_skills())
+
+
+def test_vague_check_does_not_fire_on_innocent_substrings() -> None:
+    # "fetch" contains "etc"; a real, testable criterion must not be flagged.
+    design = LoopDesign(
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="P",
+                acceptance_criteria=["The CSV is sorted and a test fetches the rows."],
+                termination_conditions=["Done."],
+            )
+        ]
+    )
+    assert "vague-acceptance" not in _codes(design, skills=_skills())
+
+
 # --- auto-fix -------------------------------------------------------------- #
 def test_fix_adds_termination_and_evidence() -> None:
     design = LoopDesign(

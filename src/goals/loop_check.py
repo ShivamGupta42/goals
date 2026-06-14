@@ -10,6 +10,7 @@ fixture is flagged the same way every run and a healthy loop passes clean.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,9 +25,10 @@ DEFAULT_TERMINATION = "All acceptance criteria for the final phase are met."
 #: A default evidence requirement `--fix` adds to a phase that lacks one.
 DEFAULT_EVIDENCE_CRITERION = "Evidence is recorded (tests or checks run)."
 
-# Phrases that make an acceptance criterion untestable, and concrete signals
-# that make it verifiable. A criterion is vague if it uses a vague phrase, or if
-# it carries no concrete signal at all.
+# A criterion is flagged vague only on a high-precision signal: a multi-word
+# hedge phrase, or a single hedge word. Matching is token-based for the single
+# words so "etc" never matches inside "fetch" and "properly" never matches a
+# longer token. Precision over recall: a linter that cries wolf gets ignored.
 _VAGUE_PHRASES = (
     "works correctly",
     "works well",
@@ -34,43 +36,41 @@ _VAGUE_PHRASES = (
     "looks good",
     "make it work",
     "as needed",
-    "properly",
-    "somehow",
-    " etc",
-    "etc.",
+    "kind of",
+    "sort of",
+    "and so on",
 )
-_CONCRETE_SIGNALS = (
-    "test",
-    "pass",
-    "fail",
-    "render",
-    "return",
-    "visible",
-    "exist",
-    "record",
-    "file",
-    "command",
-    "output",
-    "error",
-    "check",
-    "verif",
-    "measur",
-    "count",
-    "match",
-    "equal",
-    "empty",
-    "zero",
-    "no ",
+_VAGUE_WORDS = frozenset(
+    {"properly", "somehow", "etc", "fine", "ok", "okay", "nice", "stuff", "robust", "seamless"}
 )
-_EVIDENCE_SIGNALS = (
-    "test",
-    "check",
-    "evidence",
-    "proof",
-    "verif",
-    "measur",
-    "record",
+# Whole words (not substrings) that show a criterion requires real verification.
+# Exact-token matching keeps "checkout" from counting as a "check".
+_EVIDENCE_WORDS = frozenset(
+    {
+        "test",
+        "tests",
+        "tested",
+        "check",
+        "checks",
+        "checked",
+        "evidence",
+        "proof",
+        "proofs",
+        "verify",
+        "verified",
+        "verifies",
+        "verification",
+        "measure",
+        "measured",
+        "measurement",
+        "record",
+        "recorded",
+        "records",
+        "assert",
+        "asserts",
+    }
 )
+_WORD_RE = re.compile(r"[a-z]+")
 
 
 class LoopCheckFinding(BaseModel):
@@ -358,14 +358,11 @@ def _is_vague(criterion: str) -> bool:
     lowered = criterion.lower()
     if any(phrase in lowered for phrase in _VAGUE_PHRASES):
         return True
-    if any(char.isdigit() for char in lowered):
-        return False
-    return not any(signal in lowered for signal in _CONCRETE_SIGNALS)
+    return bool(set(_WORD_RE.findall(lowered)) & _VAGUE_WORDS)
 
 
 def _mentions_evidence(criterion: str) -> bool:
-    lowered = criterion.lower()
-    return any(signal in lowered for signal in _EVIDENCE_SIGNALS)
+    return bool(set(_WORD_RE.findall(criterion.lower())) & _EVIDENCE_WORDS)
 
 
 def _phase(design: LoopDesign, phase_id: str) -> LoopPhase | None:
