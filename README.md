@@ -46,6 +46,10 @@ uv sync
 uv run pytest -q
 ```
 
+The usage examples below pipe to `pbcopy`, which is macOS-only. On Linux use
+`| xclip -selection clipboard` or `| wl-copy`; on Windows use `| clip`. Or run the
+`goals next` command without the pipe and copy the output manually.
+
 ## Use With Codex
 
 Run this inside a clean git repo with at least one commit:
@@ -59,9 +63,6 @@ goals next --agent codex | pbcopy
 Paste the copied output into Codex. If the Codex native `/goal` feature is not
 enabled locally, the generated prompt still works: paste it into the current
 Codex thread and let Goals remain the state layer.
-
-`pbcopy` is macOS-only. On Linux use `| xclip -selection clipboard` or `| wl-copy`;
-on Windows use `| clip`. Or just run `goals next --agent codex` and copy manually.
 
 During the run:
 
@@ -83,9 +84,6 @@ goals next --agent claude | pbcopy
 
 Paste the copied output into Claude Code. If Claude is not installed or not on
 PATH, Goals still generates a Claude-shaped handoff that you can copy manually.
-
-`pbcopy` is macOS-only. On Linux use `| xclip -selection clipboard` or `| wl-copy`;
-on Windows use `| clip`. Or just run `goals next --agent claude` and copy manually.
 
 During the run:
 
