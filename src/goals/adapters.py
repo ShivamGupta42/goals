@@ -28,8 +28,11 @@ def adapter_check(name: str) -> tuple[bool, str]:
         if result.returncode != 0:
             return False, result.stderr.strip()
         for line in result.stdout.splitlines():
-            if line.startswith("goals"):
-                return "true" in line.split(), line.strip()
+            parts = line.split()
+            if parts and parts[0] == "goals":
+                enabled = parts[-1].lower() == "true"
+                state = " ".join(parts[1:-1]) or "unknown"
+                return enabled, f"Codex goals feature: {state} (enabled={'true' if enabled else 'false'})"
         return False, "Codex goals feature not found."
     return False, f"Unknown adapter: {name}"
 

@@ -21,6 +21,13 @@ Most users should only need these four commands:
 The lower-level commands still exist as advanced building blocks, but the daily
 loop should feel like: start, paste, check, view.
 
+## Prerequisites
+
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — used for every
+  install and command below. `uv` also auto-provisions Python 3.11+, so you do not need
+  to install Python separately.
+- `git` — `goals start` operates on a clean git repository with at least one commit.
+
 ## Install
 
 From this repository:
@@ -53,6 +60,9 @@ Paste the copied output into Codex. If the Codex native `/goal` feature is not
 enabled locally, the generated prompt still works: paste it into the current
 Codex thread and let Goals remain the state layer.
 
+`pbcopy` is macOS-only. On Linux use `| xclip -selection clipboard` or `| wl-copy`;
+on Windows use `| clip`. Or just run `goals next --agent codex` and copy manually.
+
 During the run:
 
 ```bash
@@ -73,6 +83,9 @@ goals next --agent claude | pbcopy
 
 Paste the copied output into Claude Code. If Claude is not installed or not on
 PATH, Goals still generates a Claude-shaped handoff that you can copy manually.
+
+`pbcopy` is macOS-only. On Linux use `| xclip -selection clipboard` or `| wl-copy`;
+on Windows use `| clip`. Or just run `goals next --agent claude` and copy manually.
 
 During the run:
 
