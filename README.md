@@ -59,6 +59,14 @@ the normal loop. Unlike `.agent-workflow/` (local run state, git-ignored, may
 contain machine paths), everything under `.goals/` is path-free and safe to
 commit.
 
+## Prerequisites
+
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — used for every
+  install and command below. `uv` also auto-provisions Python 3.11+, so you do not need
+  to install Python separately. On macOS/Linux:
+  `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+- `git` — `goals start` operates on a clean git repository with at least one commit.
+
 ## Install
 
 From this repository (puts `goals` on your PATH):
@@ -66,9 +74,6 @@ From this repository (puts `goals` on your PATH):
 ```bash
 uv tool install --editable .
 ```
-
-> Prerequisite: [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
-> On macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 
 For development inside this repository:
 
