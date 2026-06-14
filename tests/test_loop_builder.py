@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from goals.loop_builder import (
+    LoopPhase,
     BuilderSession,
     LoopDesign,
     apply_command,
@@ -14,6 +17,7 @@ from goals.loop_builder import (
     to_snapshot,
 )
 from goals.skill_discovery import DiscoveredSkill
+from goals.storage import GoalsError
 
 
 def _skills() -> list[DiscoveredSkill]:
@@ -213,6 +217,31 @@ def test_html_shows_attached_skill_availability(tmp_path: Path) -> None:
     assert "shared-skill" in html
     # The Claude-only skill surfaces the codex install hint in the HTML too.
     assert ".codex/skills" in html
+
+
+def test_next_phase_id_never_collides_with_custom_ids(tmp_path: Path) -> None:
+    # A custom/hand-edited id that has no trailing number must not reset the
+    # counter back to P1 and collide with an existing P1.
+    design = LoopDesign(phases=[LoopPhase(phase_id="P1", title="One")])
+    session = BuilderSession(design=design, out_dir=tmp_path, skills=[])
+    _drive(session, "add setup-phase", "add Another")
+    ids = [p.phase_id for p in session.design.phases]
+    assert len(ids) == len(set(ids))  # all unique
+
+
+def test_to_snapshot_rejects_duplicate_phase_ids(tmp_path: Path) -> None:
+    design = LoopDesign(
+        phases=[LoopPhase(phase_id="P1", title="A"), LoopPhase(phase_id="P1", title="B")]
+    )
+    with pytest.raises(GoalsError, match="Duplicate phase ids"):
+        to_snapshot(design)
+
+
+def test_add_rejects_empty_title(tmp_path: Path) -> None:
+    session = _session(tmp_path)
+    out = _drive(session, "add :: just a goal")
+    assert "needs a title" in out[-1]
+    assert session.design.phases == []
 
 
 def test_unknown_command_is_reported(tmp_path: Path) -> None:

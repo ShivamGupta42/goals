@@ -47,7 +47,7 @@ LOOP_DESIGN_VERSION = 1
 TERMINATE_PREFIX = "Terminate when: "
 SKILL_PREFIX = "Use skill: "
 
-_PHASE_ID_RE = re.compile(r"P(\d+)$")
+_TRAILING_NUM_RE = re.compile(r"(\d+)$")
 
 
 # --------------------------------------------------------------------------- #
@@ -155,6 +155,13 @@ def to_snapshot(design: LoopDesign) -> GoalSnapshot:
     portable spec is path-sanitized and only reads ``topology.branch``.
     """
     slug = slugify(design.objective) if design.objective else "loop"
+    ids = [phase.phase_id for phase in design.phases]
+    duplicates = sorted({pid for pid in ids if ids.count(pid) > 1})
+    if duplicates:
+        # A hand-edited loop-design.json could collide ids; the portable spec
+        # treats phase_id as identity, so fail loud instead of emitting a spec
+        # where two phases share an id.
+        raise GoalsError(f"Duplicate phase ids in loop design: {', '.join(duplicates)}")
     phases = [
         Phase(
             phase_id=phase.phase_id,
@@ -284,9 +291,12 @@ def _cmd_add(session: BuilderSession, rest: str) -> BuilderResponse:
     if not rest:
         return BuilderResponse("Usage: add <title>[ :: <goal>]")
     title, _, goal = rest.partition("::")
+    title = title.strip()
+    if not title:
+        return BuilderResponse("A phase needs a title. Usage: add <title>[ :: <goal>]")
     phase = LoopPhase(
         phase_id=_next_phase_id(session.design),
-        title=title.strip(),
+        title=title,
         goal=goal.strip(),
     )
     session.design.phases.append(phase)
@@ -609,12 +619,22 @@ def _attached_skill_html(name: str, skill: DiscoveredSkill | None) -> str:
 # helpers
 # --------------------------------------------------------------------------- #
 def _next_phase_id(design: LoopDesign) -> str:
+    """Next ``P<n>`` id that does not collide with any existing phase id.
+
+    Scans the trailing integer of every id (not just well-formed ``P<n>`` ones)
+    so a hand-edited or custom id never makes the counter restart at ``P1`` and
+    silently collide.
+    """
     nums = [
         int(match.group(1))
         for phase in design.phases
-        if (match := _PHASE_ID_RE.fullmatch(phase.phase_id))
+        if (match := _TRAILING_NUM_RE.search(phase.phase_id))
     ]
-    return f"P{(max(nums) + 1) if nums else 1}"
+    candidate = (max(nums) + 1) if nums else 1
+    existing = {phase.phase_id for phase in design.phases}
+    while f"P{candidate}" in existing:
+        candidate += 1
+    return f"P{candidate}"
 
 
 def _find(design: LoopDesign, phase_id: str) -> LoopPhase | None:
