@@ -82,6 +82,15 @@ summaries and evidence refs stay out unless explicitly requested.
 Memory is local generated state under `.agent-workflow/self-evolution/`. It is
 not meant for public commits.
 
+The visual loop builder feeds the same memory loop. After a phase is accepted,
+`goals loop detect <phase>` inspects its evidence and review for regressions and
+records each one *with evidence refs* back to the phase, routing it the same way
+the decision rule does — **improve-now** (blocking, surfaced) vs **defer**
+(recorded, no interruption, awaiting approval). `goals loop improve` then turns
+that accumulated, evidence-backed memory into a concrete, reviewable change set
+targeting either task execution or the loop design, and `--apply` enacts only the
+safe, reversible loop-design fixes. Deferred items never auto-apply.
+
 ## Decision Rule
 
 Goals should not ask the user about every choice. Only **blocking** decisions are
@@ -134,6 +143,9 @@ underneath the native inner loop. Goals provides:
 - live skill discovery (`goals skills list`) that reads `~/.claude/skills`,
   `~/.codex/skills`, and goals' own bundled skills with no registry to maintain,
   plus optional install into an agent's dir (`goals skills install`),
+- a visual loop builder (`goals loop build|check|improve`) that composes goal
+  loops in a text TUI, lints them, exports standalone HTML, and feeds per-phase
+  regressions back into the memory loop above,
 - a permission policy (`goals permission check`) that keeps routine tool choices
   with the agent while surfacing external, costly, or destructive actions,
 - source evidence (`goals source add|freshness|list`) so research and business

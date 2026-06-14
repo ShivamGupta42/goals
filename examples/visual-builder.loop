@@ -1,0 +1,24 @@
+# Dogfood: this builder reproduces its own goal spec.
+# Replay with:  goals loop build --script examples/visual-builder.loop --out .goals
+# The result passes `goals loop check` clean.
+
+objective Build a visual goal-loop builder for this repo, dogfooded with the repo's own primitives
+why A visual, dogfooded builder makes goal loops easy to compose, lint, and improve across Claude and Codex
+dod goals loop build, check, and improve all ship and pass tests
+
+add Visual loop builder :: compose phases, conditions, and attached skills in a text TUI, export standalone HTML
+accept A user can build a loop end to end and the written spec round-trips into goals (a test verifies it).
+accept The exported HTML renders the same loop and opens standalone with no server.
+terminate The builder writes a valid portable spec and the HTML export renders it.
+
+add Loop evaluation :: lint a designed loop for issues and offer safe auto-fixes
+accept Each defect class has a failing fixture the checker flags and a healthy fixture it passes clean (tests verify).
+accept The --fix pass is idempotent and never edits a loop that already passes (a test verifies it).
+terminate goals loop check reports a clean healthy fixture and flags every defect fixture.
+
+add Self-improvement loop :: detect per-phase regressions with evidence and propose focused improvements
+accept A simulated failed phase produces an evidence-backed memory record (a test verifies it).
+accept goals loop improve turns recorded suggestions into a reviewable change set and is a no-op when nothing is approved (tests verify).
+terminate Blocking vs deferred routing is verified and deferred items never auto-apply.
+
+save

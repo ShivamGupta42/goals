@@ -34,6 +34,27 @@ from goals.memory import (
     render_memory_sync_plan,
     render_memory_suggestions,
 )
+from goals.loop_builder import (
+    load_design,
+    new_session,
+    render_loop_html,
+    run_builder,
+    run_script,
+    save_design,
+)
+from goals.loop_check import (
+    apply_fixes,
+    check_loop,
+    render_fix_summary,
+    render_loop_check_report,
+)
+from goals.loop_improve import (
+    apply_loop_improvements,
+    log_phase_regression,
+    plan_loop_improvements,
+    render_loop_improvement_plan,
+    render_regression_report,
+)
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
@@ -103,6 +124,7 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
+loop_app = typer.Typer(help="Visually build, check, and improve goal loops.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
@@ -261,6 +283,7 @@ app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced b
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
+app.add_typer(loop_app, name="loop", rich_help_panel="Simple workflow")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
@@ -1163,6 +1186,136 @@ def skills_install(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_install_report(report))
+
+    _handle(run)
+
+
+def _default_loop_out(out: Optional[Path]) -> Path:
+    return out.expanduser() if out is not None else Path.cwd() / ".goals"
+
+
+@loop_app.command("build")
+def loop_build(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory to save the loop into (default: ./.goals)."
+    ),
+    script: Optional[Path] = typer.Option(
+        None, "--script", help="Run builder commands from a file instead of prompting."
+    ),
+) -> None:
+    """Interactively compose a goal loop (or replay a command script)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        session = new_session(out_dir)
+        design_file = out_dir / "loop-design.json"
+        if design_file.exists():
+            session.design = load_design(design_file)
+            typer.echo(f"Loaded existing design from {design_file}")
+        if script is not None:
+            if not script.exists():
+                raise GoalsError(f"Script not found: {script}")
+            commands = script.read_text(encoding="utf-8").splitlines()
+            run_script(session, commands, write=typer.echo)
+        else:
+            run_builder(session, write=typer.echo)
+
+    _handle(run)
+
+
+@loop_app.command("export")
+def loop_export(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+    html_only: bool = typer.Option(
+        False, "--html-only", help="Only re-render the HTML, not the portable spec."
+    ),
+) -> None:
+    """Re-render a saved loop design to HTML (and the portable spec)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        design = load_design(out_dir)
+        if html_only:
+            html_path = out_dir / "loop.html"
+            atomic_write_text(html_path, render_loop_html(design))
+            typer.echo(f"Wrote {html_path}")
+        else:
+            result = save_design(design, out_dir)
+            typer.echo(f"Wrote {result.html_path}, {result.state_path}, {result.markdown_path}")
+
+    _handle(run)
+
+
+@loop_app.command("check")
+def loop_check(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+    fix: bool = typer.Option(
+        False, "--fix", help="Apply safe, reversible fixes and re-save the design."
+    ),
+) -> None:
+    """Lint a designed loop for issues (and optionally auto-fix the safe ones)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        design = load_design(out_dir)
+        if fix:
+            fixed, changes = apply_fixes(design)
+            if changes:
+                save_design(fixed, out_dir)
+            typer.echo(render_fix_summary(changes))
+            design = fixed
+        report = check_loop(design)
+        typer.echo(render_loop_check_report(report))
+        if report.has_blocking:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@loop_app.command("detect")
+def loop_detect(phase_id: str) -> None:
+    """Detect and log regressions for a phase (run after it is accepted)."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = log_phase_regression(Path.cwd(), snapshot, phase_id)
+        typer.echo(render_regression_report(report))
+
+    _handle(run)
+
+
+@loop_app.command("improve")
+def loop_improve(
+    apply: bool = typer.Option(
+        False, "--apply", help="Apply the safe, reversible loop-design fixes (approval)."
+    ),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+) -> None:
+    """Turn accumulated, evidence-backed memory into a reviewable change set."""
+
+    def run():
+        # Snapshot is optional: the design-first flow (a saved loop, no active
+        # goal yet) can still surface and apply the safe loop-design fixes.
+        snapshot = _optional_snapshot(Path.cwd())
+        design_dir = _default_loop_out(out)
+        if not (design_dir / "loop-design.json").exists():
+            design_dir = None
+        if snapshot is None and design_dir is None:
+            raise GoalsError(
+                "Nothing to improve: no active goal and no loop-design.json found. "
+                "Run `goals loop build` or `goals start` first."
+            )
+        if apply:
+            plan = apply_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
+        else:
+            plan = plan_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
+        typer.echo(render_loop_improvement_plan(plan))
 
     _handle(run)
 
