@@ -24,6 +24,7 @@ from goals.decisions import (
     render_decision_brief,
     render_decision_explanation,
 )
+from goals.demo import render_demo_report, run_demo
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
     absorb_goal_memory,
@@ -266,6 +267,36 @@ def check(
             typer.echo(render_check_workflow(report))
         if strict and not report.passed:
             raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def demo(
+    out: Optional[Path] = typer.Option(
+        None,
+        "--out",
+        help="Directory for the standalone demo workspace (default: unique temp dir).",
+    ),
+    open_browser: bool = typer.Option(
+        False,
+        "--open",
+        help="Open the demo dashboard in the default browser.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Create a standalone evidence-backed demo goal."""
+
+    def run():
+        report = run_demo(out)
+        if open_browser:
+            import webbrowser
+
+            webbrowser.open(report.dashboard_path.resolve().as_uri())
+        if json_output:
+            typer.echo(json.dumps(report.json_dict(), indent=2))
+        else:
+            typer.echo(render_demo_report(report))
 
     _handle(run)
 
