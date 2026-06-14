@@ -1300,10 +1300,17 @@ def loop_improve(
     """Turn accumulated, evidence-backed memory into a reviewable change set."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
+        # Snapshot is optional: the design-first flow (a saved loop, no active
+        # goal yet) can still surface and apply the safe loop-design fixes.
+        snapshot = _optional_snapshot(Path.cwd())
         design_dir = _default_loop_out(out)
         if not (design_dir / "loop-design.json").exists():
             design_dir = None
+        if snapshot is None and design_dir is None:
+            raise GoalsError(
+                "Nothing to improve: no active goal and no loop-design.json found. "
+                "Run `goals loop build` or `goals start` first."
+            )
         if apply:
             plan = apply_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
         else:

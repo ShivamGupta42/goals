@@ -222,13 +222,15 @@ def log_phase_regression(cwd: Path, snapshot: GoalSnapshot, phase_id: str) -> Re
 # Improvement loop
 # --------------------------------------------------------------------------- #
 def plan_loop_improvements(
-    cwd: Path, snapshot: GoalSnapshot, *, design_dir: Path | None = None
+    cwd: Path, snapshot: GoalSnapshot | None = None, *, design_dir: Path | None = None
 ) -> LoopImprovementPlan:
     """Build a reviewable change set from accumulated memory + loop-design fixes.
 
     Memory-derived improvements are advisory (``auto_applicable=False``). The
     only directly-applicable improvements are the safe loop-design fixes from the
-    Phase-2 linter, included when a saved design is found.
+    Phase-2 linter, included when a saved design is found. ``snapshot`` is
+    optional so the design-first flow (a saved loop with no active goal yet) can
+    still surface loop-design fixes.
     """
     improvements = _memory_improvements(cwd, snapshot)
     improvements += _loop_design_improvements(design_dir)
@@ -241,12 +243,15 @@ def plan_loop_improvements(
             "Re-run with --apply to apply the safe loop-design fixes."
         )
     return LoopImprovementPlan(
-        goal_id=snapshot.goal_id, dry_run=True, summary=summary, improvements=improvements
+        goal_id=snapshot.goal_id if snapshot else "",
+        dry_run=True,
+        summary=summary,
+        improvements=improvements,
     )
 
 
 def apply_loop_improvements(
-    cwd: Path, snapshot: GoalSnapshot, *, design_dir: Path | None = None
+    cwd: Path, snapshot: GoalSnapshot | None = None, *, design_dir: Path | None = None
 ) -> LoopImprovementPlan:
     """Apply only the safe, reversible loop-design fixes; a no-op otherwise."""
     plan = plan_loop_improvements(cwd, snapshot, design_dir=design_dir)
@@ -265,7 +270,7 @@ def apply_loop_improvements(
     return plan.model_copy(update={"dry_run": False, "applied": applied, "summary": summary})
 
 
-def _memory_improvements(cwd: Path, snapshot: GoalSnapshot) -> list[LoopImprovement]:
+def _memory_improvements(cwd: Path, snapshot: GoalSnapshot | None) -> list[LoopImprovement]:
     suggestions = derive_memory_suggestions(load_memory(cwd, snapshot))
     improvements: list[LoopImprovement] = []
     for suggestion in suggestions:

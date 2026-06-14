@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from goals.loop_builder import load_design, new_session, run_script
@@ -167,6 +168,25 @@ def test_deferred_items_do_not_auto_apply(tmp_path: Path) -> None:
     plan = apply_loop_improvements(tmp_path, snapshot, design_dir=None)
     assert plan.applied == []
     assert plan.dry_run is False
+
+
+def test_improve_works_design_first_without_an_active_goal(tmp_path: Path) -> None:
+    # Design-first flow: a saved loop with no snapshot still surfaces and applies
+    # the safe loop-design fixes. The builder always runs inside a git repo, so
+    # memory resolution (which falls back to git_root when there is no snapshot)
+    # has a root to find.
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    session = new_session(tmp_path, skills=[])
+    run_script(
+        session,
+        ["objective Fixme", "add Plan", "accept The dashboard renders.", "save"],
+        write=lambda _msg: None,
+    )
+    plan = plan_loop_improvements(tmp_path, None, design_dir=tmp_path)
+    assert any(imp.auto_applicable for imp in plan.improvements)
+    applied = apply_loop_improvements(tmp_path, None, design_dir=tmp_path)
+    assert applied.applied
+    assert check_loop(load_design(tmp_path)).has_blocking is False
 
 
 def test_improve_applies_safe_loop_design_fixes_on_approval(tmp_path: Path) -> None:
