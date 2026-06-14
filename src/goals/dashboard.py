@@ -162,7 +162,7 @@ def render_dashboard(
     <p class="why">{escape(snapshot.why or "A long-running task, kept understandable and resumable.")}</p>
 
     <div class="meter"><span class="big">{accepted} of {total}</span><span class="small">steps accepted · {escape(brief.progress)}</span></div>
-    <div class="rule"><i style="width:{pct}%"></i></div>
+    <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
     <p class="facts">
       <span>Waiting on</span> <b>{escape(brief.waiting_on)}</b> &nbsp;·&nbsp;
       <span>Proof</span> <b>{proof} / {total} steps</b> &nbsp;·&nbsp;
@@ -330,7 +330,9 @@ def _architecture_svg(architecture: GoalArchitectureMap) -> str:
     ids = {node.node_id for node in nodes}
     adjacency: dict[str, list[str]] = {node.node_id: [] for node in nodes}
     for edge in architecture.edges:
-        if edge.from_node in ids and edge.to_node in ids:
+        # Skip self-loops: a node pointing at itself would keep relaxing its own
+        # layer on every pass, pushing it off the canvas.
+        if edge.from_node in ids and edge.to_node in ids and edge.from_node != edge.to_node:
             adjacency[edge.from_node].append(edge.to_node)
     layer = {node.node_id: 0 for node in nodes}
     for _ in range(len(nodes)):
@@ -342,9 +344,12 @@ def _architecture_svg(architecture: GoalArchitectureMap) -> str:
                     changed = True
         if not changed:
             break
+    # Clamp the column count so a cyclic graph (where relaxation never settles)
+    # still lays out in a bounded, readable width instead of one column per node.
+    max_col = min(len(nodes), 5)
     columns: dict[int, list] = {}
     for node in nodes:
-        columns.setdefault(layer[node.node_id], []).append(node)
+        columns.setdefault(min(layer[node.node_id], max_col - 1), []).append(node)
 
     box_w, box_h, h_gap, v_gap, pad = 168, 54, 50, 20, 12
     col_keys = sorted(columns)
@@ -362,7 +367,11 @@ def _architecture_svg(architecture: GoalArchitectureMap) -> str:
 
     edge_paths = []
     for edge in architecture.edges:
-        if edge.from_node in position and edge.to_node in position:
+        if (
+            edge.from_node in position
+            and edge.to_node in position
+            and edge.from_node != edge.to_node
+        ):
             x1, y1 = position[edge.from_node]
             x2, y2 = position[edge.to_node]
             edge_paths.append(

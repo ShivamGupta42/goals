@@ -4,8 +4,11 @@ import pytest
 
 from goals.dashboard import render_dashboard
 from goals.models import (
+    ArchitectureEdge,
+    ArchitectureNode,
     CheckpointStatus,
     Evidence,
+    GoalArchitectureMap,
     GoalSnapshot,
     JudgementRecord,
     Phase,
@@ -151,3 +154,46 @@ def test_dashboard_shows_decision_log_not_solicitation(tmp_path: Path) -> None:
     assert "Decision Brief" not in text
     assert "Recommended option" not in text
     assert "Suggested reply" not in text
+
+
+def test_dashboard_renders_architecture_svg(tmp_path: Path) -> None:
+    architecture = GoalArchitectureMap(
+        title="Map",
+        overview="How the parts connect.",
+        nodes=[
+            ArchitectureNode(
+                node_id="gen", label="Generator", plain_summary="Builds the HTML.", status="built"
+            ),
+            ArchitectureNode(
+                node_id="snap",
+                label="<x>Snapshot</x>",
+                plain_summary="Holds state.",
+                status="in_progress",
+            ),
+        ],
+        edges=[
+            ArchitectureEdge(from_node="snap", to_node="gen"),
+            # A self-loop must not break layout or draw a degenerate arrow.
+            ArchitectureEdge(from_node="gen", to_node="gen"),
+        ],
+    )
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+
+    render_dashboard(snapshot, output, architecture=architecture)
+    text = output.read_text()
+
+    # The diagram renders as inline SVG with a clean node and an arrow marker.
+    assert "<svg viewBox" in text
+    assert 'marker id="ah"' in text
+    assert "Generator" in text
+
+    # Node labels are escaped inside the SVG.
+    assert "<x>Snapshot</x>" not in text
+    assert "&lt;x&gt;Snapshot&lt;/x&gt;" in text
