@@ -58,18 +58,22 @@ def test_dashboard_escapes_html_and_shows_overview(tmp_path: Path) -> None:
     assert '<main id="main"' in text
     assert '<html lang="en">' in text
 
-    # The overview structure: steps + collapsible detail.
+    # The three-tier overview structure.
+    assert "Read-only snapshot" in text  # orientation line
+    assert "What happened" in text
     assert "The steps" in text
-    assert "Detail" in text
+    assert "Checks &amp; references" in text
     assert "Proof &amp; evidence" in text
-    assert "Architecture map" in text
-    assert "Decisions" in text
-    assert "Sources" in text
     assert "Technical details" in text
     assert "Goal ID:" in text
     assert "Source commit:" in text
     assert "P1 has no evidence yet." in text
-    assert "No decisions recorded yet." in text
+
+    # Empty sections are hidden, not shown as "none yet" collapsibles.
+    assert "Architecture map" not in text  # no recorded map → hidden
+    assert "Decisions" not in text  # no judgements → hidden
+    assert "Sources" not in text  # no sources → hidden
+    assert "No decisions recorded yet." not in text
 
     # Skills and self-evolution memory are no longer part of the overview.
     assert "<h2>Skills</h2>" not in text
@@ -154,6 +158,59 @@ def test_dashboard_shows_decision_log_not_solicitation(tmp_path: Path) -> None:
     assert "Decision Brief" not in text
     assert "Recommended option" not in text
     assert "Suggested reply" not in text
+
+
+def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship it",
+        topology=_lease(tmp_path),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Build the thing",
+                goal="Build it.",
+                status=PhaseStatus.ACCEPTED,
+                evidence=Evidence(
+                    checks_run=["pytest"],
+                    confidence=0.9,
+                    notes="Done.",
+                    changed_files=["src/app.py"],
+                ),
+            )
+        ],
+        current_phase="P1",
+        last_updated="2026-06-14T17:40:19.526012+00:00",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    # Friendly, human-readable timestamp — not the raw ISO string.
+    assert "Jun 14, 2026" in text
+    assert "5:40 PM" in text
+    assert "2026-06-14T17:40:19.526012+00:00" not in text
+
+    # Always-on plain-language status banner.
+    assert "<h2>Status</h2>" in text
+
+    # "Waiting on" is mapped to plain language, never the raw token.
+    assert "Agent (working)" in text
+
+
+def test_friendly_timestamp_only_states_what_it_carries() -> None:
+    from goals.dashboard import _friendly_timestamp
+
+    # Malformed input is returned untouched.
+    assert _friendly_timestamp("not-a-date") == "not-a-date"
+    # Timezone-aware UTC keeps its zone label.
+    assert _friendly_timestamp("2026-06-14T17:40:19+00:00") == "Jun 14, 2026 · 5:40 PM UTC"
+    # Naive timestamp renders without an invented zone.
+    assert _friendly_timestamp("2026-06-14T17:40:19") == "Jun 14, 2026 · 5:40 PM"
+    # Date-only input renders without an invented time.
+    assert _friendly_timestamp("2026-06-14") == "Jun 14, 2026"
+    # A real midnight still shows its time (not mistaken for date-only).
+    assert _friendly_timestamp("2026-06-14T00:00:00+00:00") == "Jun 14, 2026 · 12:00 AM UTC"
 
 
 def test_dashboard_renders_architecture_svg(tmp_path: Path) -> None:

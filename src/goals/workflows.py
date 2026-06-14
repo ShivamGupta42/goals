@@ -171,7 +171,7 @@ def render_start_workflow(report: WorkflowStart) -> str:
             "",
             f"Goal: {snapshot.objective}",
             location,
-            f"Dashboard: `{report.dashboard_path}`",
+            f"Dashboard: {_dashboard_link(report.dashboard_path)} (click to open)",
             f"Agent: {agent_label}",
             "",
             notice,
@@ -199,7 +199,7 @@ def render_check_workflow(report: WorkflowCheck) -> str:
         f"Current phase: {report.snapshot.current_phase or 'none'}",
         f"Waiting on: {brief.waiting_on}",
         f"Overall: {'pass' if report.passed else 'needs attention'}",
-        f"Dashboard: `{report.dashboard_path}`",
+        f"Dashboard: {_dashboard_link(report.dashboard_path)} (click to open)",
         "",
         "## Plain-Language Brief",
         brief.summary,
@@ -255,7 +255,7 @@ def render_view_workflow(report: WorkflowView) -> str:
             "# Goal View",
             "",
             f"Goal: {report.snapshot.objective}",
-            f"Dashboard: `{report.dashboard_path}`",
+            f"Dashboard: {_dashboard_link(report.dashboard_path)} (click to open)",
             f"Architecture map: `{report.architecture_path}`",
             f"Portable goal spec: `{report.portable_path}`",
             "",
@@ -264,6 +264,16 @@ def render_view_workflow(report: WorkflowView) -> str:
             "agent can resume this goal.",
         ]
     ) + "\n"
+
+
+def _dashboard_link(path: Path) -> str:
+    """Render the dashboard path as a bare, clickable file:// URL.
+
+    Terminals linkify a bare URL but not a backtick-wrapped path, and `as_uri`
+    encodes spaces correctly (worktree dirs can contain them). Matches the
+    pattern already used for `goals view --open` (cli.py).
+    """
+    return path.resolve().as_uri()
 
 
 def _agent_label(plan: ModeAPlan) -> str:

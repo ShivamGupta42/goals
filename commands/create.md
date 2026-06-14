@@ -18,3 +18,15 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
 
 Keep going phase by phase until `goals check` reports the goal complete. Use
 `/goals:check` anytime for status and `/goals:diagram` to visualize it.
+
+**Keep the goal pinned.** End every turn while this goal is active with a short
+pin block, so the dashboard link and status are always the last thing on screen.
+Pull the values from the latest `goals check` output (re-run it if unsure — it's
+read-only) and never invent them. Keep it to ~4 lines:
+
+```
+---
+📌 **<goal objective>** · Phase <current>/<total> (<n> accepted)
+Waiting on: <"you — <one-line ask>" or "nothing — agent is working">
+Dashboard: <file:// link from goals check, click to open>   ·   Next: `goals next --agent claude`
+```
