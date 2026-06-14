@@ -172,6 +172,30 @@ def test_install_both_targets(tmp_path: Path) -> None:
     assert (dirs["codex"] / "goals-x" / "SKILL.md").is_file()
 
 
+def test_install_never_follows_or_deletes_a_symlinked_dest(tmp_path: Path) -> None:
+    bundled, dirs = _bundled_with(tmp_path)
+    # The user's skill slot is a symlink pointing at an external real directory.
+    external = tmp_path / "external-target"
+    external.mkdir()
+    (external / "SKILL.md").write_text("---\nname: goals-x\ndescription: user.\n---\n")
+    dirs["claude"].mkdir(parents=True)
+    link = dirs["claude"] / "goals-x"
+    link.symlink_to(external, target_is_directory=True)
+
+    # Without --force: blocked; the link and its target are untouched.
+    report = install_bundled_skills(["claude"], bundled_dir=bundled, target_dirs=dirs)
+    assert [r.status for r in report.results] == ["blocked"]
+    assert link.is_symlink()
+    assert "user." in (external / "SKILL.md").read_text()
+
+    # With --force: the link is replaced by a real dir; the external target survives.
+    forced = install_bundled_skills(["claude"], force=True, bundled_dir=bundled, target_dirs=dirs)
+    assert [r.status for r in forced.results] == ["overwritten"]
+    assert not link.is_symlink()
+    assert "Bundled skill" in (link / "SKILL.md").read_text()
+    assert "user." in (external / "SKILL.md").read_text()
+
+
 def test_render_marks_uninstalled_bundled_and_truncates(tmp_path: Path) -> None:
     long_desc = "x" * 300
     out = render_skills_list(

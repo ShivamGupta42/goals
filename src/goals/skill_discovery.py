@@ -201,21 +201,32 @@ def install_bundled_skills(
     for target in targets:
         root = dirs[target]
         for src in src_skills:
-            dest = root / src.name
-            if not dest.exists():
-                root.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(src, dest)
-                status = "installed"
-            elif _same_tree(src, dest):
-                status = "current"
-            elif force:
-                shutil.rmtree(dest)
-                shutil.copytree(src, dest)
-                status = "overwritten"
-            else:
-                status = "blocked"
+            status = _install_one(src, root / src.name, force=force)
             results.append(SkillInstallResult(name=src.name, target=target, status=status))
     return SkillInstallReport(results=results)
+
+
+def _install_one(src: Path, dest: Path, *, force: bool) -> str:
+    # A symlinked dest is never goals' own. Never follow or delete its target:
+    # under --force we unlink only the link itself, otherwise we leave it alone.
+    if dest.is_symlink():
+        if not force:
+            return "blocked"
+        dest.unlink()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dest)
+        return "overwritten"
+    if not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dest)
+        return "installed"
+    if _same_tree(src, dest):
+        return "current"
+    if force:
+        shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        return "overwritten"
+    return "blocked"
 
 
 def render_skills_list(skills: list[DiscoveredSkill]) -> str:
@@ -245,9 +256,23 @@ def render_install_report(report: SkillInstallReport) -> str:
 
 
 def _same_tree(left: Path, right: Path) -> bool:
-    """True if two skill directories have identical files and content."""
-    left_files = {p.relative_to(left) for p in left.rglob("*") if p.is_file()}
-    right_files = {p.relative_to(right) for p in right.rglob("*") if p.is_file()}
-    if left_files != right_files:
+    """True if two skill directories have identical files and content.
+
+    Returns False if either tree contains a symlink — we cannot safely confirm
+    equality against an out-of-tree target, so the caller treats it as differing.
+    """
+
+    def files(root: Path) -> set[Path] | None:
+        collected: set[Path] = set()
+        for path in root.rglob("*"):
+            if path.is_symlink():
+                return None
+            if path.is_file():
+                collected.add(path.relative_to(root))
+        return collected
+
+    left_files = files(left)
+    right_files = files(right)
+    if left_files is None or right_files is None or left_files != right_files:
         return False
     return all((left / rel).read_bytes() == (right / rel).read_bytes() for rel in left_files)
