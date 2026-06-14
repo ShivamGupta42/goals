@@ -120,8 +120,7 @@ portable spec any agent can pick up. On `main` it works in an isolated git workt
 your checkout stays clean. `goals check --json` gives agents a machine-readable view.
 
 Note: `goals start` runs in a git project (it makes a safe, isolated copy to work in).
-Full CLI, portability commands, and the visual loop builder are documented in
-[docs/](docs/) and `goals --help`.
+Run `goals --help` for the full CLI, portability commands, and the visual loop builder.
 
 ## Contributing
 
