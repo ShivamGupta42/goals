@@ -1,6 +1,6 @@
 {
   "name": "goals",
-  "description": "Durable, reviewable goal loops inside Claude Code — phases, evidence, review gates, diagrams, and a portable spec any agent can resume.",
+  "description": "A no-nonsense goal workflow engine for Claude Code and Codex: turn a plain-English goal into tracked steps with plain-language decisions and evidence-based done.",
   "version": "0.1.0",
   "author": { "name": "Shivam Gupta" },
   "homepage": "https://github.com/ShivamGupta42/goals",

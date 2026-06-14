@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "goals",
-      "description": "Durable, reviewable goal loops inside Claude Code — phases, evidence, review gates, diagrams.",
+      "description": "A no-nonsense goal workflow engine for Claude Code and Codex: turn a plain-English goal into tracked steps with plain-language decisions and evidence-based done.",
       "source": "./",
       "category": "productivity"
     }

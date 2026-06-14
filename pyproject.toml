@@ -1,7 +1,7 @@
 [project]
 name = "goals"
 version = "0.1.0"
-description = "Goals helps AI agents finish bigger tasks without losing track."
+description = "A no-nonsense goal workflow engine: plain-English goals to tracked steps, with plain-language decisions and evidence-based done."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
