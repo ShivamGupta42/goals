@@ -5,12 +5,9 @@ import pytest
 from goals.dashboard import render_dashboard
 from goals.models import (
     CheckpointStatus,
-    Decision,
-    DecisionOption,
     Evidence,
-    GateResult,
-    GateVerdict,
     GoalSnapshot,
+    JudgementRecord,
     Phase,
     PhaseCheckpoint,
     PhaseStatus,
@@ -21,6 +18,15 @@ from goals.runtime import default_phases
 from goals.storage import GoalsError
 
 
+def _lease(tmp_path: Path) -> WorktreeLease:
+    return WorktreeLease(
+        base_repo=str(tmp_path),
+        base_branch="main",
+        worktree_path=str(tmp_path),
+        branch="goal/demo",
+    )
+
+
 def test_registry_rejects_unknown_critical_field(tmp_path: Path) -> None:
     path = tmp_path / "bad.yml"
     path.write_text("version: 1\nkind: gates\nsurprise: true\n")
@@ -28,57 +34,50 @@ def test_registry_rejects_unknown_critical_field(tmp_path: Path) -> None:
         validate_registry_file(path)
 
 
-def test_dashboard_escapes_html(tmp_path: Path) -> None:
+def test_dashboard_escapes_html_and_shows_overview(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",
         objective="<script>alert(1)</script>",
-        topology=WorktreeLease(
-            base_repo=str(tmp_path),
-            base_branch="main",
-            worktree_path=str(tmp_path),
-            branch="goal/demo",
-        ),
+        topology=_lease(tmp_path),
         phases=default_phases("Demo"),
         current_phase="P1",
     )
     output = tmp_path / "dashboard.html"
     render_dashboard(snapshot, output)
     text = output.read_text()
+
+    # XSS escaping holds.
     assert "<script>alert(1)</script>" not in text
     assert "&lt;script&gt;" in text
-    assert "Goal Brief" in text
-    assert "Current Checkpoint" in text
-    assert "What Needs Your Answer" in text
-    assert "What the Agent Can Do Next" in text
-    assert "Progress" in text
-    assert "Issues" in text
-    assert "Decisions Needed" in text
-    assert "<h2>Skills</h2>" in text
-    assert "Self-Evolution Memory" in text
-    assert "Architecture Map" in text
-    assert "Architecture Brief" in text
-    assert "Code-Derived Check" in text
-    assert "Review focus" in text
-    assert "Evidence gaps and open questions" in text
+
+    # Accessibility scaffolding.
+    assert 'class="skip-link"' in text
+    assert '<main id="main"' in text
+    assert '<html lang="en">' in text
+
+    # The overview structure: steps + collapsible detail.
+    assert "The steps" in text
+    assert "Detail" in text
+    assert "Proof &amp; evidence" in text
+    assert "Architecture map" in text
+    assert "Decisions" in text
     assert "Sources" in text
-    assert "Freshness" in text
-    assert "No decisions are waiting on you." in text
-    assert "P1 has no evidence yet." in text
+    assert "Technical details" in text
     assert "Goal ID:" in text
-    assert "Event offset:" in text
     assert "Source commit:" in text
+    assert "P1 has no evidence yet." in text
+    assert "No decisions recorded yet." in text
+
+    # Skills and self-evolution memory are no longer part of the overview.
+    assert "<h2>Skills</h2>" not in text
+    assert "Self-Evolution Memory" not in text
 
 
 def test_dashboard_renders_current_checkpoint_safely(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",
         objective="Plan launch",
-        topology=WorktreeLease(
-            base_repo=str(tmp_path),
-            base_branch="main",
-            worktree_path=str(tmp_path),
-            branch="goal/demo",
-        ),
+        topology=_lease(tmp_path),
         phases=[
             Phase(
                 phase_id="P1",
@@ -103,91 +102,35 @@ def test_dashboard_renders_current_checkpoint_safely(tmp_path: Path) -> None:
     render_dashboard(snapshot, output)
     text = output.read_text()
 
-    assert "Current Checkpoint" in text
     assert "<b>Approve launch</b>" not in text
     assert "&lt;b&gt;Approve launch&lt;/b&gt;" in text
-    assert "Waiting on: you" in text
     assert "brief:P1" in text
+    assert "Waiting on" in text
 
 
-def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:
+def test_dashboard_shows_decision_log_not_solicitation(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",
-        objective="Add tags to tasks",
-        topology=WorktreeLease(
-            base_repo=str(tmp_path),
-            base_branch="main",
-            worktree_path=str(tmp_path),
-            branch="goal/demo",
-        ),
+        objective="Add sessions",
+        topology=_lease(tmp_path),
         phases=[
             Phase(
                 phase_id="P1",
                 title="Inspect storage",
                 goal="Find the storage shape",
                 status=PhaseStatus.ACCEPTED,
-                evidence=Evidence(
-                    changed_files=["src/db.py"],
-                    checks_run=["pytest"],
-                    known_gaps=["Migration order is unclear."],
-                    acceptance_met=["Storage inspected."],
-                    confidence=0.8,
-                    notes="Storage is file-backed today.",
-                ),
-                reviews=[
-                    GateResult(
-                        gate_id="phase-review",
-                        verdict=GateVerdict.PASS,
-                        summary="ok",
-                    )
-                ],
+                evidence=Evidence(checks_run=["pytest"], confidence=0.8, notes="Done."),
             )
         ],
-        current_phase="P1",
-        decisions=[
-            Decision(
-                title="Choose tag storage",
-                plain_summary="Pick where task tags should live.",
-                why_it_matters="This affects migration risk.",
-                recommendation="Store tags in the existing task file",
-                options=[
-                    DecisionOption(
-                        label="Existing file",
-                        explanation="No migration needed.",
-                        tradeoffs=["Less scalable."],
-                        reversible=True,
-                        reversal_plan="Move tags later with a storage adapter.",
-                        risk="low",
-                    ),
-                    DecisionOption(
-                        label="New migration",
-                        explanation="<script>structured storage</script>",
-                        tradeoffs=["Migration ordering risk."],
-                        reversible=False,
-                        risk="high",
-                    ),
-                ],
-                confidence=0.74,
-                priority="blocking",
-                suggested_reply="Use the existing task file.",
-                technical_details="Migration order has to be coordinated.",
-            ),
-            Decision(
-                title="Dashboard label wording",
-                plain_summary="Choose label wording for the dashboard.",
-                why_it_matters="It affects presentation only.",
-                recommendation="Use the shorter label.",
-                options=[
-                    DecisionOption(
-                        label="Short label",
-                        explanation="Easy to scan.",
-                        reversible=True,
-                        risk="low",
-                    )
-                ],
-                confidence=0.9,
-                priority="later",
-            ),
+        current_phase=None,
+        judgements=[
+            JudgementRecord(
+                question="Where should sessions live?",
+                choice="Redis",
+                rationale="<b>fast</b> and shared across nodes",
+                decided_by="user",
+                reversible=True,
+            )
         ],
     )
     output = tmp_path / "dashboard.html"
@@ -195,25 +138,16 @@ def test_dashboard_explains_only_important_decisions(tmp_path: Path) -> None:
     render_dashboard(snapshot, output)
     text = output.read_text()
 
-    assert "Choose tag storage" in text
-    assert "Decision Brief" in text
-    assert "What Needs Your Answer" in text
-    assert "What the Agent Can Handle" in text
-    assert "What happens next" in text
-    assert "1 routine/reversible choice(s) can stay with the agent." in text
-    assert "Why this needs you" in text
-    assert "Recommended option" in text
-    assert "Store tags in the existing task file" in text
-    assert "Risk: low" in text
-    assert "Risk: high" in text
-    assert "Reversible: yes" in text
-    assert "Reversible: not clearly" in text
-    assert "Changed files: src/db.py" in text
-    assert "Checks run: pytest" in text
-    assert "Migration order is unclear." in text
-    assert "Migration order has to be coordinated." in text
-    assert "Use the existing task file." in text
-    assert "<script>structured storage</script>" not in text
-    assert "&lt;script&gt;structured storage&lt;/script&gt;" in text
-    assert "Choose label wording for the dashboard." not in text
-    assert "Dashboard label wording" not in text
+    # The judgement log renders what was decided.
+    assert "Where should sessions live?" in text
+    assert "Chose: Redis" in text
+    assert "user" in text
+
+    # Judgement content is escaped.
+    assert "<b>fast</b>" not in text
+    assert "&lt;b&gt;fast&lt;/b&gt;" in text
+
+    # Decision *solicitation* UI is gone from the dashboard.
+    assert "Decision Brief" not in text
+    assert "Recommended option" not in text
+    assert "Suggested reply" not in text
