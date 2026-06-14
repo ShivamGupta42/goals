@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
@@ -63,6 +64,10 @@ def render_dashboard(
     interactive surface. Decisions are made in the agent conversation and shown
     here as a judgement log; the page never asks the user to act on it directly.
     """
+    # An architecture map is "recorded" when an agent supplied one — either via
+    # the explicit arg (callers/tests) or stored on the snapshot. Otherwise the
+    # map is a phase-derived placeholder we hide as noise.
+    has_recorded_architecture = architecture is not None or snapshot.architecture is not None
     architecture = architecture or architecture_for_snapshot(snapshot)
     brief = build_goal_brief(snapshot)
     checkpoint = build_current_checkpoint_brief(snapshot)
@@ -74,13 +79,16 @@ def render_dashboard(
     pct = round(accepted / total * 100) if total else 0
     open_questions = _open_questions(snapshot, issue_report)
 
-    needs_you = _needs_you_html(brief, open_questions)
+    status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
+    produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
+    decisions_teaser = _decisions_teaser_html(snapshot)
+    issues_section = _issues_section_html(issue_report)
     evidence = _evidence_detail_html(snapshot, checkpoint)
-    arch_html = _architecture_detail_html(snapshot, architecture, architecture_path)
-    decisions = _decisions_log_html(snapshot)
-    issues = _issues_html(issue_report)
-    sources = _sources_html(snapshot)
+    architecture_section = _architecture_section_html(
+        snapshot, architecture, architecture_path, has_recorded_architecture
+    )
+    sources_section = _sources_section_html(snapshot)
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -110,7 +118,8 @@ def render_dashboard(
       margin:0 0 1.3rem; display:flex; align-items:center; gap:.55rem; }}
     .kicker .dot {{ width:7px; height:7px; border-radius:50%; background:var(--sage); box-shadow:0 0 0 4px rgba(95,114,86,.15); }}
     h1 {{ font-weight:800; font-size:clamp(1.9rem,5.2vw,2.9rem); line-height:1.09; letter-spacing:-.02em; margin:0 0 .8rem; overflow-wrap:anywhere; }}
-    .why {{ font-size:1.08rem; color:var(--soft); max-width:52ch; margin:0 0 2.2rem; }}
+    .why {{ font-size:1.08rem; color:var(--soft); max-width:52ch; margin:0 0 .6rem; }}
+    .orient {{ font-size:.86rem; color:var(--soft); margin:0 0 2.1rem; opacity:.85; }}
     .meter {{ display:flex; align-items:baseline; gap:.9rem; margin:0 0 .5rem; }}
     .meter .big {{ font-size:1.6rem; font-weight:800; letter-spacing:-.01em; }}
     .meter .small {{ color:var(--soft); font-size:.92rem; }}
@@ -122,7 +131,15 @@ def render_dashboard(
     .note {{ border-left:3px solid var(--clay); background:var(--card); padding:1.1rem 1.35rem; border-radius:0 12px 12px 0; margin:0 0 1rem; }}
     .note h2 {{ font-size:1.08rem; font-weight:700; margin:0 0 .45rem; }}
     .note p {{ margin:.3rem 0; }} .note .ask {{ color:var(--clay); font-size:.92rem; }}
+    .note.ok {{ border-left-color:var(--sage); }} .note.ok h2 {{ color:var(--ink); }}
+    .produced {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.95rem 1.2rem; margin:0 0 1rem; font-size:1rem; }}
+    .produced b {{ color:var(--sage); }}
     h2.sec {{ font-size:.74rem; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); font-weight:700; margin:2.6rem 0 1.1rem; }}
+    h3.subsec {{ font-size:.96rem; font-weight:700; margin:1.4rem 0 .3rem; }}
+    .teaser {{ margin:.6rem 0 .4rem; }}
+    .teaser .lead {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.8rem 1.1rem; margin:.2rem 0 .4rem; }}
+    .teaser .lead .q {{ font-weight:700; }}
+    .meta.red {{ color:#b42318; }} .meta.amber {{ color:var(--clay); }} .meta.muted {{ color:var(--soft); }}
     .steps {{ list-style:none; margin:0; padding:0; }}
     .steps li {{ display:grid; grid-template-columns:auto 1fr auto; gap:1rem; align-items:baseline; padding:.95rem 0; border-bottom:1px solid var(--hair); }}
     .steps .mark {{ font-weight:800; width:1.5rem; font-size:1.05rem; }}
@@ -160,37 +177,32 @@ def render_dashboard(
     <p class="kicker"><span class="dot"></span>Goal · {escape(snapshot.status)}</p>
     <h1>{escape(snapshot.objective)}</h1>
     <p class="why">{escape(snapshot.why or "A long-running task, kept understandable and resumable.")}</p>
+    <p class="orient">Read-only snapshot — the agent updates this as it works. Sections below expand for detail.</p>
 
     <div class="meter"><span class="big">{accepted} of {total}</span><span class="small">steps accepted · {escape(brief.progress)}</span></div>
     <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
     <p class="facts">
-      <span>Waiting on</span> <b>{escape(brief.waiting_on)}</b> &nbsp;·&nbsp;
+      <span>Waiting on</span> <b>{escape(_waiting_label(brief.waiting_on))}</b> &nbsp;·&nbsp;
       <span>Proof</span> <b>{proof} / {total} steps</b> &nbsp;·&nbsp;
-      <span>Updated</span> <b>{escape(snapshot.last_updated)}</b>
+      <span>Updated</span> <b>{escape(_friendly_timestamp(snapshot.last_updated))}</b>
     </p>
 
     <main id="main" tabindex="-1">
-    {needs_you}
+    {status_banner}
+    {produced}
 
-    <h2 class="sec">The steps</h2>
+    <h2 class="sec">What happened</h2>
+    <h3 class="subsec">The steps</h3>
     <ul class="steps">{steps}</ul>
+    {decisions_teaser}
 
-    <h2 class="sec">Detail</h2>
+    <h2 class="sec">Checks &amp; references</h2>
+    {issues_section}
     <details><summary>Proof &amp; evidence<span class="meta">{proof} of {total} recorded</span></summary>
       <div class="body">{evidence}</div>
     </details>
-    <details><summary>Architecture map<span class="meta">{_arch_meta(architecture)}</span></summary>
-      <div class="body">{arch_html}</div>
-    </details>
-    <details><summary>Decisions<span class="meta">{_decisions_meta(snapshot)}</span></summary>
-      <div class="body">{decisions}</div>
-    </details>
-    <details><summary>Issues<span class="meta">{_issues_meta(issue_report)}</span></summary>
-      <div class="body">{issues}</div>
-    </details>
-    <details><summary>Sources<span class="meta">{_sources_meta(snapshot)}</span></summary>
-      <div class="body">{sources}</div>
-    </details>
+    {architecture_section}
+    {sources_section}
     <details><summary>Technical details</summary>
       <div class="body">
         <p>Goal ID: <code>{escape(snapshot.goal_id)}</code> · Event offset: <code>{snapshot.event_count}</code> ·
@@ -225,6 +237,141 @@ def _needs_you_html(brief, open_questions: list[str]) -> str:
         '<div class="note"><h2>Waiting on you</h2>'
         f'<p class="ask">Open question(s) — answer in the conversation; the agent records the call here.</p>'
         f"{body}</div>"
+    )
+
+
+# One plain-language sentence per goal status — what's happening and whether the
+# viewer needs to act. {step} is filled with the current step when active.
+_STATUS_MESSAGES = {
+    "active": "The agent is working{step}. Nothing is needed from you right now.",
+    "complete": "This goal is complete. See what was produced below.",
+    "blocked": "Blocked — see Issues below for what's in the way.",
+    "paused": "Paused — resume in your agent when you're ready.",
+    "failed": "This goal stopped before finishing — see Issues below.",
+}
+
+
+def _status_banner_html(snapshot: GoalSnapshot, brief, checkpoint, open_questions: list[str]) -> str:
+    """Always render one status sentence at the top.
+
+    If the user needs to act, the amber "Waiting on you" note wins. Otherwise a
+    calm banner states what's happening, keyed on the goal status.
+    """
+    needs_you = _needs_you_html(brief, open_questions)
+    if needs_you:
+        return needs_you
+    status = str(snapshot.status)
+    step = ""
+    if status == "active" and checkpoint and checkpoint.phase_title:
+        step = f" on {escape(checkpoint.phase_title)}"
+    message = _STATUS_MESSAGES.get(status, "Tracking progress.").format(step=step)
+    return f'<div class="note ok"><h2>Status</h2><p>{message}</p></div>'
+
+
+# what_changed fallbacks that carry no real deliverable — don't surface these.
+_NO_DELIVERABLE = {
+    "No current phase is selected.",
+    "No change summary has been recorded yet.",
+}
+
+
+def _produced_html(checkpoint) -> str:
+    """Surface the deliverable up front, when one has actually been recorded."""
+    if not checkpoint:
+        return ""
+    what = (checkpoint.what_changed or "").strip()
+    if not what or what in _NO_DELIVERABLE:
+        return ""
+    return f'<p class="produced"><b>What was produced</b> — {escape(what)}</p>'
+
+
+def _friendly_timestamp(iso: str) -> str:
+    """Turn an ISO timestamp into e.g. `Jun 14, 2026 · 5:40 PM UTC`.
+
+    Falls back to the raw string if it can't be parsed, so a malformed value
+    never breaks the page.
+    """
+    try:
+        moment = datetime.fromisoformat(iso)
+    except (ValueError, TypeError):
+        return iso
+    hour = moment.hour % 12 or 12
+    meridiem = "AM" if moment.hour < 12 else "PM"
+    zone = moment.tzname() or "UTC"
+    return f"{moment:%b} {moment.day}, {moment.year} · {hour}:{moment.minute:02d} {meridiem} {zone}"
+
+
+def _waiting_label(value: str) -> str:
+    return {
+        "you": "You",
+        "agent": "Agent (working)",
+        "no one": "No one — done",
+    }.get(str(value), str(value))
+
+
+def _decisions_teaser_html(snapshot: GoalSnapshot) -> str:
+    """Tier-2 decision log: latest call inline, full log behind expand.
+
+    Hidden entirely when no judgements have been recorded.
+    """
+    if not snapshot.judgements:
+        return ""
+    latest = snapshot.judgements[-1]
+    count = len(snapshot.judgements)
+    reversible = "reversible" if latest.reversible else "irreversible"
+    return (
+        '<div class="teaser">'
+        f'<h3 class="subsec">Decisions <span class="meta muted">{count} recorded</span></h3>'
+        '<div class="lead">'
+        f'<span class="q">{escape(latest.question)}</span><br>'
+        f'<span class="d">Chose: {escape(latest.choice)}'
+        f'<span class="chip">{escape(latest.decided_by)}</span>'
+        f'<span class="chip">{reversible}</span></span></div>'
+        f'<details><summary>See all {count} decisions</summary>'
+        f'<div class="body">{_decisions_log_html(snapshot)}</div></details>'
+        "</div>"
+    )
+
+
+def _issues_section_html(report) -> str:
+    """Collapsible Issues section, auto-opened and red when something blocks.
+
+    Hidden when there are no issues — the top banner already signals health.
+    """
+    if not report.issues:
+        return ""
+    has_blocking = any(issue.severity == "p0" for issue in report.issues)
+    has_important = any(issue.severity == "p1" for issue in report.issues)
+    tone = "red" if has_blocking else ("amber" if has_important else "muted")
+    open_attr = " open" if has_blocking else ""
+    return (
+        f"<details{open_attr}><summary>Issues"
+        f'<span class="meta {tone}">{_issues_meta(report)}</span></summary>'
+        f'<div class="body">{_issues_html(report)}</div></details>'
+    )
+
+
+def _architecture_section_html(
+    snapshot: GoalSnapshot, architecture, architecture_path, has_recorded: bool
+) -> str:
+    """Show the architecture map only when an agent recorded a real one."""
+    if not has_recorded:
+        return ""
+    return (
+        f'<details><summary>Architecture map<span class="meta">{_arch_meta(architecture)}</span>'
+        "</summary>"
+        f'<div class="body">{_architecture_detail_html(snapshot, architecture, architecture_path)}</div>'
+        "</details>"
+    )
+
+
+def _sources_section_html(snapshot: GoalSnapshot) -> str:
+    """Show Sources only when sources or claims exist."""
+    if not snapshot.sources and not snapshot.source_claims:
+        return ""
+    return (
+        f'<details><summary>Sources<span class="meta">{_sources_meta(snapshot)}</span></summary>'
+        f'<div class="body">{_sources_html(snapshot)}</div></details>'
     )
 
 
@@ -476,11 +623,6 @@ def _arch_meta(architecture: GoalArchitectureMap) -> str:
     if not counts:
         return "none yet"
     return " · ".join(f"{status.replace('_', ' ')} {count}" for status, count in sorted(counts.items()))
-
-
-def _decisions_meta(snapshot: GoalSnapshot) -> str:
-    count = len(snapshot.judgements)
-    return "none yet" if not count else f"{count} recorded"
 
 
 def _issues_meta(report) -> str:

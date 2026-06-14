@@ -14,3 +14,13 @@ Advance the active Goals goal.
 4. Run `goals check`. If it says you're waiting on the user, ask one
    plain-language question using its wording and stop. Otherwise continue to the
    next phase.
+
+End every turn with the goal pin (~4 lines), sourced from `goals check`, so the
+dashboard link and status stay on screen:
+
+```
+---
+📌 **<goal objective>** · Phase <current>/<total> (<n> accepted)
+Waiting on: <"you — <one-line ask>" or "nothing — agent is working">
+Dashboard: <file:// link from goals check, click to open>   ·   Next: `goals next --agent claude`
+```
