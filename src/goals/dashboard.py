@@ -79,6 +79,7 @@ def render_dashboard(
     pct = round(accepted / total * 100) if total else 0
     open_questions = _open_questions(snapshot, issue_report)
 
+    full_goal = _full_goal_html(snapshot.objective)
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
@@ -117,17 +118,27 @@ def render_dashboard(
     .kicker {{ font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--clay); font-weight:700;
       margin:0 0 1.3rem; display:flex; align-items:center; gap:.55rem; }}
     .kicker .dot {{ width:7px; height:7px; border-radius:50%; background:var(--sage); box-shadow:0 0 0 4px rgba(95,114,86,.15); }}
-    h1 {{ font-weight:800; font-size:clamp(1.9rem,5.2vw,2.9rem); line-height:1.09; letter-spacing:-.02em; margin:0 0 .8rem; overflow-wrap:anywhere; }}
-    .why {{ font-size:1.08rem; color:var(--soft); max-width:52ch; margin:0 0 .6rem; }}
+    h1 {{ font-weight:800; font-size:clamp(1.9rem,5.2vw,2.9rem); line-height:1.09; letter-spacing:-.02em; margin:0 0 .5rem; overflow-wrap:anywhere; }}
+    h1.title {{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+    .full-goal {{ margin:0 0 .9rem; }}
+    .full-goal summary {{ font-size:.84rem; font-weight:600; color:var(--clay); cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:.35rem; }}
+    .full-goal summary::-webkit-details-marker {{ display:none; }}
+    .full-goal summary::before {{ content:"▸"; font-size:.7rem; }}
+    .full-goal[open] summary::before {{ content:"▾"; }}
+    .full-goal p {{ font-size:1rem; color:var(--ink); margin:.55rem 0 0; max-width:60ch; overflow-wrap:anywhere; }}
+    .journey {{ font-size:1.06rem; color:var(--ink); opacity:.82; max-width:54ch; margin:0 0 .55rem; }}
     .orient {{ font-size:.86rem; color:var(--soft); margin:0 0 2.1rem; opacity:.85; }}
     .meter {{ display:flex; align-items:baseline; gap:.9rem; margin:0 0 .5rem; }}
     .meter .big {{ font-size:1.6rem; font-weight:800; letter-spacing:-.01em; }}
     .meter .small {{ color:var(--soft); font-size:.92rem; }}
     .rule {{ height:7px; border-radius:7px; background:var(--line); overflow:hidden; margin:.2rem 0 2.1rem; }}
     .rule > i {{ display:block; height:100%; background:linear-gradient(90deg,var(--sage),var(--gold)); }}
-    .facts {{ display:flex; flex-wrap:wrap; gap:.4rem 1.8rem; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
-      padding:.85rem 0; margin:0 0 2.4rem; font-size:.92rem; }}
-    .facts b {{ font-weight:700; }} .facts span {{ color:var(--soft); }}
+    .facts {{ display:flex; flex-wrap:wrap; gap:.5rem 1.6rem; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+      padding:.9rem 0; margin:0 0 2.4rem; font-size:.9rem; }}
+    .facts .fact {{ display:inline-flex; align-items:baseline; gap:.45rem; white-space:nowrap; }}
+    .facts .k {{ color:var(--soft); font-size:.7rem; letter-spacing:.09em; text-transform:uppercase; font-weight:600; }}
+    .facts .v {{ font-weight:700; }}
+    .facts .v.time {{ font-weight:600; color:var(--soft); }}
     .note {{ border-left:3px solid var(--clay); background:var(--card); padding:1.1rem 1.35rem; border-radius:0 12px 12px 0; margin:0 0 1rem; }}
     .note h2 {{ font-size:1.08rem; font-weight:700; margin:0 0 .45rem; }}
     .note p {{ margin:.3rem 0; }} .note .ask {{ color:var(--clay); font-size:.92rem; }}
@@ -174,17 +185,18 @@ def render_dashboard(
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="wrap">
-    <p class="kicker"><span class="dot"></span>Goal · {escape(snapshot.status)}</p>
-    <h1>{escape(snapshot.objective)}</h1>
-    <p class="why">{escape(snapshot.why or "A long-running task, kept understandable and resumable.")}</p>
+    <p class="kicker"><span class="dot"></span>The goal journey · {escape(snapshot.status)}</p>
+    <h1 class="title">{escape(snapshot.objective)}</h1>
+    {full_goal}
+    <p class="journey">From first intent to finished proof — every step, decision, and check along the way.</p>
     <p class="orient">Read-only snapshot — the agent updates this as it works. Sections below expand for detail.</p>
 
     <div class="meter"><span class="big">{accepted} of {total}</span><span class="small">steps accepted · {escape(brief.progress)}</span></div>
     <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
     <p class="facts">
-      <span>Waiting on</span> <b>{escape(_waiting_label(brief.waiting_on))}</b> &nbsp;·&nbsp;
-      <span>Proof</span> <b>{proof} / {total} steps</b> &nbsp;·&nbsp;
-      <span>Updated</span> <b>{escape(_friendly_timestamp(snapshot.last_updated))}</b>
+      <span class="fact"><span class="k">Waiting on</span> <span class="v">{escape(_waiting_label(brief.waiting_on))}</span></span>
+      <span class="fact"><span class="k">Proof</span> <span class="v">{proof}/{total} steps</span></span>
+      <span class="fact"><span class="k">Updated</span> <span class="v time">{escape(_friendly_timestamp(snapshot.last_updated))}</span></span>
     </p>
 
     <main id="main" tabindex="-1">
@@ -237,6 +249,22 @@ def _needs_you_html(brief, open_questions: list[str]) -> str:
         '<div class="note"><h2>Waiting on you</h2>'
         f'<p class="ask">Open question(s) — answer in the conversation; the agent records the call here.</p>'
         f"{body}</div>"
+    )
+
+
+# Objectives longer than this (roughly two lines at the title size) get a
+# "Read the full goal" expander; the clamped <h1> still carries the full text
+# for screen readers.
+_TITLE_CLAMP_CHARS = 90
+
+
+def _full_goal_html(objective: str) -> str:
+    """Reveal the complete objective below the clamped title, when it's long."""
+    if len(objective) <= _TITLE_CLAMP_CHARS:
+        return ""
+    return (
+        '<details class="full-goal"><summary>Read the full goal</summary>'
+        f"<p>{escape(objective)}</p></details>"
     )
 
 
