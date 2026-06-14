@@ -61,7 +61,9 @@ from goals.loop_improve import (
 )
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
+from goals.journey import render_journey_text
 from goals.models import (
+    Assumption,
     CheckpointKind,
     CheckpointStatus,
     Decision,
@@ -75,6 +77,7 @@ from goals.models import (
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
+    ProblemBreakdown,
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
@@ -143,6 +146,7 @@ from goals.workflows import (
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
+assess_app = typer.Typer(help="Record the building journey — assumptions and problem breakdowns.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
@@ -344,6 +348,7 @@ def context_sync(
 
 app.add_typer(adapter_app, name="adapter", rich_help_panel="Advanced building blocks")
 app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced building blocks")
+app.add_typer(assess_app, name="assess", rich_help_panel="Advanced building blocks")
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
@@ -1338,6 +1343,134 @@ def decision_brief(
             typer.echo(brief.model_dump_json(indent=2))
         else:
             typer.echo(render_decision_brief(brief))
+
+    _handle(run)
+
+
+@assess_app.command("assume")
+def assess_assume(
+    statement: str = typer.Argument(..., help="Plain-English assumption: 'I'm assuming X'."),
+    building: str = typer.Option("", "--building", help="What's being built (the X)."),
+    toward: str = typer.Option("", "--toward", help="The sub-problem this works toward (the Y)."),
+    depends: bool = typer.Option(
+        False,
+        "--depends/--no-depends",
+        help="Mark load-bearing: the solution depends on this assumption holding.",
+    ),
+    status: str = typer.Option(
+        "holding", "--status", help="holding, validated, or broken."
+    ),
+    phase: Optional[str] = typer.Option(None, "--phase", help="Phase this belongs to (e.g. P2)."),
+    college: str = typer.Option("", "--college", help="Optional richer framing for a college reader."),
+    hobbyist: str = typer.Option("", "--hobbyist", help="Optional framing for a hobbyist/tinkerer."),
+    reversible: bool = typer.Option(
+        True, "--reversible/--irreversible", help="Whether the assumption is cheap to revisit."
+    ),
+    assumption_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to update an existing assumption (e.g. flip to broken)."
+    ),
+    confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
+) -> None:
+    """Record (or update) an assumption the agent is leaning on while building.
+
+    This is PACERS' *Assess* — hunting the assumptions a plan depends on. The
+    ``statement`` should read at a high-school level; ``--college``/``--hobbyist``
+    only add framing for those readers. Re-run with the same ``--id`` to update an
+    assumption's status (e.g. ``--status broken``) without duplicating it.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        notes = {}
+        if college:
+            notes["college"] = college
+        if hobbyist:
+            notes["hobbyist"] = hobbyist
+        fields = dict(
+            statement=statement,
+            building=building,
+            toward=toward,
+            depends_on=depends,
+            status=_validate_choice(status, {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
+            confidence=confidence,
+            reversible=reversible,
+            phase_id=phase,
+            audience_notes=notes,
+        )
+        if assumption_id is not None:
+            fields["assumption_id"] = assumption_id
+        assumption = Assumption(**fields)
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.ASSUMPTION_RECORDED,
+                payload={"assumption": assumption.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded assumption: {assumption.assumption_id} ({assumption.status})")
+
+    _handle(run)
+
+
+@assess_app.command("breakdown")
+def assess_breakdown(
+    breakdown_json: Optional[str] = typer.Argument(None),
+    file: Optional[Path] = typer.Option(
+        None, "--file", "-f", help="Read the breakdown JSON from a file."
+    ),
+) -> None:
+    """Record how the agent broke a goal or phase into sub-problems.
+
+    Accepts a ProblemBreakdown JSON object (rephrased problem, 5-Whys, sub-problems
+    with tasks and open questions) inline or via ``--file``. This is the artifact
+    behind the building journey's "how the agent broke the problem down".
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if file is not None and breakdown_json is not None:
+            raise GoalsError("Provide the breakdown as inline JSON or --file, not both.")
+        if file is None and breakdown_json is None:
+            raise GoalsError("Provide the breakdown as inline JSON or --file.")
+        raw = file.read_text(encoding="utf-8") if file is not None else breakdown_json
+        breakdown = ProblemBreakdown.model_validate(json.loads(raw or "{}"))
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.BREAKDOWN_RECORDED,
+                payload={"breakdown": breakdown.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded breakdown: {breakdown.breakdown_id}")
+
+    _handle(run)
+
+
+@assess_app.command("journey")
+def assess_journey(
+    audience: str = typer.Option(
+        "high_school", "--audience", help="high_school, college, or hobbyist."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show the building journey in plain language at the chosen audience level."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        level = _validate_choice(
+            audience, {"high_school", "college", "hobbyist"}, "audience"
+        )
+        if json_output:
+            payload = {
+                "assumptions": [a.model_dump() for a in snapshot.assumptions],
+                "breakdowns": [b.model_dump() for b in snapshot.breakdowns],
+                "judgements": [j.model_dump() for j in snapshot.judgements],
+            }
+            typer.echo(json.dumps(payload, indent=2))
+        else:
+            typer.echo(render_journey_text(snapshot, level))  # type: ignore[arg-type]
 
     _handle(run)
 

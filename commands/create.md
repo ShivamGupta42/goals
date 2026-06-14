@@ -9,7 +9,13 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    an isolated worktree (it prints the path); on a feature branch it may work
    in place. **Do all work for this goal in the path it printed** — if it created
    a worktree, run commands and edit files there; the user never has to `cd`.
-2. Run `goals next --agent claude` (from that path) and follow the phase loop it
+2. **Pause + Assess the goal first** (PACERS — see `/goals-problem-solving`).
+   Rephrase "$ARGUMENTS" into a specific, testable problem; ask *why* until it
+   simplifies to the root; let the sub-problems become the phases. Record the
+   goal-level breakdown so the user can trace the framing:
+   `goals assess breakdown --file breakdown.json` (problem, whys, sub-problems).
+   Skip only if the goal is trivial and unambiguous.
+3. Run `goals next --agent claude` (from that path) and follow the phase loop it
    prints: work only the current phase, then record evidence with
    `goals phase evidence <PHASE> --file <evidence.json>`, run
    `goals phase review <PHASE>`, and once it passes, `goals phase accept <PHASE>`.

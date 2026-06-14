@@ -15,6 +15,7 @@ from goals.checkpoints import build_current_checkpoint_brief
 from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
+from goals.journey import sort_assumptions
 from goals.models import GoalArchitectureMap, GoalSnapshot
 from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
@@ -83,6 +84,7 @@ def render_dashboard(
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
+    journey_section = _journey_html(snapshot)
     decisions_teaser = _decisions_teaser_html(snapshot)
     issues_section = _issues_section_html(issue_report)
     evidence = _evidence_detail_html(snapshot, checkpoint)
@@ -179,6 +181,26 @@ def render_dashboard(
     .cap {{ color:var(--soft); font-size:.82rem; margin:.3rem 0 1rem; text-align:center; }}
     code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--chip); padding:.06rem .35rem; border-radius:5px; font-size:.85em; overflow-wrap:anywhere; }}
     svg text {{ font-family:"Hanken Grotesk",-apple-system,system-ui,sans-serif; }}
+    .bjourney {{ margin:.4rem 0 .6rem; }}
+    .aud-legend {{ font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); font-weight:700; margin-right:.55rem; }}
+    .bjourney > input {{ position:absolute; opacity:0; width:1px; height:1px; }}
+    .bjourney > input + label {{ font-size:.8rem; font-weight:600; color:var(--soft); background:var(--chip); border-radius:999px; padding:.22rem .7rem; margin-right:.3rem; cursor:pointer; }}
+    .bjourney > input:checked + label {{ background:var(--clay); color:var(--paper); }}
+    .bjourney > input:focus-visible + label {{ outline:3px solid var(--focus); outline-offset:2px; }}
+    .note-college, .note-hobbyist {{ display:none; color:var(--soft); }}
+    #aud-college:checked ~ .journey-body .note-college {{ display:inline; }}
+    #aud-hobbyist:checked ~ .journey-body .note-hobbyist {{ display:inline; }}
+    .journey-body {{ margin-top:.9rem; }}
+    .asm {{ list-style:none; padding:0; margin:.3rem 0 1rem; display:grid; gap:.5rem; }}
+    .asm li {{ border:1px solid var(--line); border-left-width:3px; border-radius:10px; padding:.6rem .85rem; background:var(--card); }}
+    .asm li.broken {{ border-left-color:#b42318; }}
+    .asm li.holding {{ border-left-color:var(--gold); }}
+    .asm li.validated {{ border-left-color:var(--sage); }}
+    .asm .stt {{ font-size:.68rem; letter-spacing:.04em; text-transform:uppercase; font-weight:700; margin-left:.4rem; }}
+    .asm .broken-t {{ color:#b42318; }} .asm .holding-t {{ color:var(--gold); }} .asm .validated-t {{ color:var(--sage); }}
+    .asm .lb {{ font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--clay); margin-left:.4rem; }}
+    .asm .toward {{ color:var(--soft); font-size:.85rem; display:block; margin-top:.2rem; }}
+    .oq {{ margin:.2rem 0 1rem 1.1rem; color:var(--soft); font-size:.9rem; }}
     footer {{ margin-top:2.8rem; color:var(--soft); font-size:.8rem; letter-spacing:.03em; }}
   </style>
 </head>
@@ -206,6 +228,7 @@ def render_dashboard(
     <h2 class="sec">What happened</h2>
     <h3 class="subsec">The steps</h3>
     <ul class="steps">{steps}</ul>
+    {journey_section}
     {decisions_teaser}
 
     <h2 class="sec">Checks &amp; references</h2>
@@ -344,6 +367,109 @@ def _waiting_label(value: str) -> str:
         "agent": "Agent",
         "no one": "No one",
     }.get(str(value), str(value))
+
+
+def _journey_html(snapshot: GoalSnapshot) -> str:
+    """The building journey — how the agent broke the problem down and what it assumed.
+
+    Renders nothing until the agent has recorded a breakdown or an assumption, so a
+    goal with no Assess trace looks exactly as before. The audience toggle is pure
+    CSS: three radios (high-school checked) precede the `.journey-body`, and the
+    `:checked ~ .journey-body .note-*` rules reveal the richer framings — no JS, and
+    keyboard/screen-reader operable as native radios.
+    """
+    if not snapshot.breakdowns and not snapshot.assumptions:
+        return ""
+    body = _breakdowns_html(snapshot) + _assumptions_html(snapshot)
+    return (
+        '<section class="bjourney" aria-label="The building journey">'
+        '<h3 class="subsec">The building journey</h3>'
+        '<span class="aud-legend">Explain it like</span>'
+        '<input type="radio" id="aud-hs" name="aud" checked>'
+        '<label for="aud-hs">High school</label>'
+        '<input type="radio" id="aud-college" name="aud">'
+        '<label for="aud-college">College</label>'
+        '<input type="radio" id="aud-hobbyist" name="aud">'
+        '<label for="aud-hobbyist">Hobbyist</label>'
+        f'<div class="journey-body">{body}</div>'
+        "</section>"
+    )
+
+
+def _breakdowns_html(snapshot: GoalSnapshot) -> str:
+    if not snapshot.breakdowns:
+        return ""
+    blocks = []
+    for breakdown in snapshot.breakdowns:
+        scope = (
+            f' <span class="meta muted">{escape(breakdown.phase_id)}</span>'
+            if breakdown.phase_id
+            else ""
+        )
+        pause = (
+            f'<p class="body">Paused to check: {escape(breakdown.pause_note)}</p>'
+            if breakdown.pause_note
+            else ""
+        )
+        subs = []
+        questions: list[str] = []
+        for sub in breakdown.subproblems:
+            tasks = (
+                f'<br><span class="d">Tasks: {escape(", ".join(sub.tasks))}</span>'
+                if sub.tasks
+                else ""
+            )
+            subs.append(
+                f'<li><span class="t">{escape(sub.statement)}</span>{tasks}</li>'
+            )
+            questions.extend(sub.open_questions)
+        subs_html = f'<ul class="kv">{"".join(subs)}</ul>' if subs else ""
+        oq_html = (
+            '<p class="d">Open questions</p><ul class="oq">'
+            + "".join(f"<li>{escape(q)}</li>" for q in questions)
+            + "</ul>"
+            if questions
+            else ""
+        )
+        system = (
+            f'<p class="d">What keeps feeding this: {escape(breakdown.system_view)}</p>'
+            if breakdown.system_view
+            else ""
+        )
+        blocks.append(
+            f'<h4 class="subsec">{escape(breakdown.problem)}{scope}</h4>'
+            f"{pause}{subs_html}{oq_html}{system}"
+        )
+    return "".join(blocks)
+
+
+def _assumptions_html(snapshot: GoalSnapshot) -> str:
+    if not snapshot.assumptions:
+        return ""
+    items = []
+    for assumption in sort_assumptions(snapshot.assumptions):
+        status = assumption.status
+        lb = '<span class="lb">load-bearing</span>' if assumption.depends_on else ""
+        college = assumption.audience_notes.get("college", "")
+        hobbyist = assumption.audience_notes.get("hobbyist", "")
+        college_html = (
+            f' <span class="note-college">{escape(college)}</span>' if college else ""
+        )
+        hobbyist_html = (
+            f' <span class="note-hobbyist">{escape(hobbyist)}</span>' if hobbyist else ""
+        )
+        toward = (
+            f'<span class="toward">toward: {escape(assumption.toward)}</span>'
+            if assumption.toward
+            else ""
+        )
+        items.append(
+            f'<li class="{escape(status)}"><span>{escape(assumption.statement)}</span>'
+            f"{college_html}{hobbyist_html}"
+            f'<span class="stt {escape(status)}-t">{escape(status)}</span>{lb}'
+            f"{toward}</li>"
+        )
+    return '<p class="d">What the agent assumed</p><ul class="asm">' + "".join(items) + "</ul>"
 
 
 def _decisions_teaser_html(snapshot: GoalSnapshot) -> str:
