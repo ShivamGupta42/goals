@@ -1064,7 +1064,8 @@ def _phase_or_error(snapshot, phase_id: str) -> Phase:
     for phase in snapshot.phases:
         if phase.phase_id == phase_id:
             return phase
-    raise GoalsError(f"Unknown phase id: {phase_id}")
+    valid = ", ".join(p.phase_id for p in snapshot.phases) or "none"
+    raise GoalsError(f"Unknown phase id: {phase_id}. Valid phases: {valid}.")
 
 
 def _checkpoint_or_none(phase: Phase, checkpoint_id: str) -> PhaseCheckpoint | None:

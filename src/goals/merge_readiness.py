@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-import subprocess
 
 from goals.decisions import should_surface_decision
-from goals.git_ops import run_git
+from goals.git_ops import list_worktrees, run_git
 from goals.models import (
     Evidence,
     GoalSnapshot,
@@ -470,32 +469,9 @@ def _covered_by_decision(snapshot: GoalSnapshot, risk_text: str) -> bool:
 
 
 def _git_worktrees(repo: Path) -> list[dict[str, str | Path]]:
-    try:
-        result = run_git(["worktree", "list", "--porcelain"], repo)
-    except (OSError, subprocess.CalledProcessError):
-        return []
-    records: list[dict[str, str | Path]] = []
-    current: dict[str, str | Path] = {}
-    for line in result.stdout.splitlines():
-        if not line:
-            if current:
-                records.append(_normalize_worktree_record(current))
-                current = {}
-            continue
-        key, _, value = line.partition(" ")
-        if key == "worktree":
-            if current:
-                records.append(_normalize_worktree_record(current))
-            current = {"path": Path(value)}
-        elif key == "HEAD":
-            current["head"] = value[:12]
-        elif key == "branch":
-            current["branch"] = value.removeprefix("refs/heads/")
-        elif key == "detached":
-            current["branch"] = "(detached)"
-    if current:
-        records.append(_normalize_worktree_record(current))
-    return records
+    # Enumeration lives in git_ops.list_worktrees (single source of truth); this
+    # only applies merge-readiness's normalization on top.
+    return [_normalize_worktree_record(record) for record in list_worktrees(repo)]
 
 
 def _normalize_worktree_record(record: dict[str, str | Path]) -> dict[str, str | Path]:
