@@ -72,9 +72,16 @@ def render_dashboard(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Goals Dashboard - {escape(snapshot.goal_id)}</title>
   <style>
-    :root {{ color-scheme: light; --ink: #172033; --muted: #5f6b7a; --line: #d8dee8; --soft: #f6f7f9; --green: #0f766e; --amber: #a16207; --red: #b42318; --blue: #1d4ed8; }}
+    :root {{ color-scheme: light dark; --ink: #172033; --muted: #5a6677; --line: #d8dee8; --soft: #f6f7f9; --bg: #ffffff; --card: #ffffff; --code-bg: #eef2ff; --green: #0f766e; --amber: #8a5a00; --red: #b42318; --blue: #1d4ed8; --focus: #1d4ed8; }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{ --ink: #e7ecf3; --muted: #aab4c2; --line: #2b3543; --soft: #161c25; --bg: #0e131a; --card: #131a23; --code-bg: #1c2533; --green: #5eead4; --amber: #fbbf24; --red: #fca5a5; --blue: #93c5fd; --focus: #93c5fd; }}
+    }}
     * {{ box-sizing: border-box; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; line-height: 1.45; color: var(--ink); background: #ffffff; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; line-height: 1.45; color: var(--ink); background: var(--bg); }}
+    .skip-link {{ position: absolute; left: -999px; top: 0; background: var(--ink); color: var(--bg); padding: .6rem 1rem; border-radius: 0 0 8px 0; z-index: 10; }}
+    .skip-link:focus {{ left: 0; }}
+    a:focus-visible, [tabindex]:focus-visible {{ outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }}
+    main:focus {{ outline: none; }}
     header, section, nav {{ max-width: 1080px; margin: 0 auto; padding: 1.25rem; }}
     header {{ padding-top: 2rem; }}
     h1 {{ font-size: clamp(1.7rem, 3vw, 2.6rem); line-height: 1.1; margin: 0 0 .6rem; letter-spacing: 0; }}
@@ -82,21 +89,27 @@ def render_dashboard(
     h3 {{ font-size: 1rem; margin: 0 0 .35rem; letter-spacing: 0; }}
     p {{ margin: .25rem 0 .75rem; }}
     nav {{ display: flex; gap: .5rem; flex-wrap: wrap; padding-top: 0; }}
-    nav a {{ border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: .35rem .65rem; text-decoration: none; background: #fff; }}
+    nav a {{ border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: .35rem .65rem; text-decoration: none; background: var(--card); }}
+    nav a:hover {{ border-color: var(--focus); }}
+    .eyebrow {{ display: inline-block; text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; font-weight: 700; color: var(--muted); margin: 0 0 .35rem; }}
+    progress {{ width: 100%; height: .55rem; margin-top: .4rem; accent-color: var(--green); }}
+    .legend {{ display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 0 0 .9rem; padding: 0; list-style: none; color: var(--muted); font-size: .85rem; }}
+    .legend li {{ display: flex; align-items: center; gap: .35rem; }}
+    .status-icon {{ font-weight: 700; }}
     .status {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .75rem; margin-top: 1rem; }}
     .tile {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; background: var(--soft); min-height: 5.25rem; }}
     .tile strong {{ display: block; color: var(--muted); font-size: .78rem; text-transform: uppercase; }}
     .tile span {{ display: block; font-size: 1.05rem; margin-top: .25rem; }}
     .plain {{ color: var(--muted); max-width: 760px; }}
     .panel {{ border-top: 1px solid var(--line); }}
-    .checkpoint {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; background: #fff; }}
+    .checkpoint {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; background: var(--card); }}
     .checkpoint-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; margin-top: .75rem; }}
     .decision {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: .75rem; }}
     .decision-brief {{ border: 1px solid var(--line); border-radius: 8px; padding: .9rem; margin-bottom: 1rem; background: var(--soft); }}
     .decision-brief .next {{ font-weight: 700; }}
     .decision .ask {{ color: var(--red); font-weight: 700; }}
     .decision-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem; margin-top: .75rem; }}
-    .decision-card {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: #fff; }}
+    .decision-card {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: var(--card); }}
     .decision-card p {{ margin-bottom: .35rem; }}
     .muted {{ color: var(--muted); }}
     .architecture-grid {{ display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 1rem; }}
@@ -104,21 +117,23 @@ def render_dashboard(
     .architecture-brief .review-focus {{ font-weight: 700; }}
     .node-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; list-style: none; padding: 0; }}
     .node-list li {{ border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }}
-    .diagram {{ overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: #fbfcfe; }}
-    .pill, .status-label {{ display: inline-block; border-radius: 999px; padding: .14rem .45rem; font-size: .78rem; border: 1px solid var(--line); background: #fff; }}
+    .diagram {{ overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; background: var(--card); }}
+    .pill, .status-label {{ display: inline-block; border-radius: 999px; padding: .14rem .45rem; font-size: .78rem; border: 1px solid var(--line); background: var(--card); }}
     .built {{ color: var(--green); }}
     .blocked {{ color: var(--red); }}
     .in-progress {{ color: var(--blue); }}
     .planned {{ color: var(--amber); }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ border-bottom: 1px solid var(--line); text-align: left; padding: .65rem; vertical-align: top; }}
-    code {{ background: #eef2ff; padding: .1rem .25rem; border-radius: 4px; }}
+    code {{ background: var(--code-bg); padding: .1rem .25rem; border-radius: 4px; }}
     ul {{ padding-left: 1.15rem; }}
     @media (max-width: 760px) {{ .architecture-grid {{ grid-template-columns: 1fr; }} table, thead, tbody, tr, th, td {{ display: block; }} th {{ display: none; }} td {{ border-bottom: 0; padding: .35rem 0; }} tr {{ border-bottom: 1px solid var(--line); padding: .6rem 0; display: block; }} }}
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header>
+    <p class="eyebrow">Goal dashboard</p>
     <h1>{escape(snapshot.objective)}</h1>
     <p class="plain">{escape(snapshot.why)}</p>
     <div class="status">
@@ -126,7 +141,8 @@ def render_dashboard(
       <div class="tile"><strong>Current step</strong><span>{current}</span></div>
       <div class="tile"><strong>Waiting on</strong><span>{escape(waiting_on)}</span></div>
       <div class="tile"><strong>Proof recorded</strong><span>{proof_count}/{total_count} phases</span></div>
-      <div class="tile"><strong>Progress</strong><span>{accepted_count}/{total_count} accepted</span></div>
+      <div class="tile"><strong>Progress</strong><span>{accepted_count}/{total_count} accepted</span>
+        <progress max="{total_count}" value="{accepted_count}" aria-label="{accepted_count} of {total_count} phases accepted"></progress></div>
       <div class="tile"><strong>Last updated</strong><span>{escape(snapshot.last_updated)}</span></div>
     </div>
   </header>
@@ -143,6 +159,7 @@ def render_dashboard(
     <a href="#sources">Sources</a>
     <a href="#technical">Technical Details</a>
   </nav>
+  <main id="main" tabindex="-1">
   <section id="brief" class="panel">
     <h2>Goal Brief</h2>
     {brief}
@@ -153,7 +170,18 @@ def render_dashboard(
   </section>
   <section id="progress" class="panel">
     <h2>Progress</h2>
-    <table><thead><tr><th>ID</th><th>Step</th><th>Status</th><th>Plain goal</th></tr></thead><tbody>{phase_rows}</tbody></table>
+    <p class="plain">Each row is one step toward the goal. Statuses mean:</p>
+    <ul class="legend">
+      <li><span class="status-icon built" aria-hidden="true">&#10003;</span> done / accepted</li>
+      <li><span class="status-icon in-progress" aria-hidden="true">&#8594;</span> in progress</li>
+      <li><span class="status-icon planned" aria-hidden="true">&#9675;</span> not started</li>
+      <li><span class="status-icon blocked" aria-hidden="true">&#9888;</span> blocked / needs attention</li>
+    </ul>
+    <table>
+      <caption class="muted">Goal phases and their current status</caption>
+      <thead><tr><th scope="col">ID</th><th scope="col">Step</th><th scope="col">Status</th><th scope="col">Plain goal</th></tr></thead>
+      <tbody>{phase_rows}</tbody>
+    </table>
   </section>
   <section id="issues" class="panel">
     <h2>Issues</h2>
@@ -190,6 +218,7 @@ def render_dashboard(
     <p>Source commit: <code>{escape(source_commit(Path(snapshot.topology.worktree_path)))}</code></p>
     <p>Generated by Goals from sanitized snapshot state. This page is read-only.</p>
   </section>
+  </main>
 </body>
 </html>
 """
@@ -307,7 +336,29 @@ def _current_checkpoint_html(brief) -> str:
 
 def _status_label(status: str) -> str:
     css = status.replace("_", "-")
-    return f'<span class="status-label {escape(css)}">{escape(status)}</span>'
+    icon = _status_icon(css)
+    return f'<span class="status-label {escape(css)}">{icon}{escape(status)}</span>'
+
+
+def _status_icon(css: str) -> str:
+    """A non-color cue so status is legible without relying on hue (WCAG 1.4.1)."""
+    symbols = {
+        "accepted": "✓",
+        "built": "✓",
+        "complete": "✓",
+        "resolved": "✓",
+        "in-progress": "→",
+        "active": "→",
+        "blocked": "⚠",
+        "high": "⚠",
+        "pending": "○",
+        "planned": "○",
+        "low": "○",
+    }
+    symbol = symbols.get(css)
+    if not symbol:
+        return ""
+    return f'<span class="status-icon" aria-hidden="true">{symbol}</span> '
 
 
 def _evidence_summary(notes: str) -> str:
