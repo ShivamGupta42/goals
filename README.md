@@ -59,6 +59,38 @@ the normal loop. Unlike `.agent-workflow/` (local run state, git-ignored, may
 contain machine paths), everything under `.goals/` is path-free and safe to
 commit.
 
+## Visual loop builder
+
+Compose, lint, and improve a goal loop without hand-writing the spec. The
+builder is a text-based terminal UI; the static HTML is an **export** of the same
+design, never a parallel artifact.
+
+| Command | What it does |
+| --- | --- |
+| `goals loop build` | Interactive builder: add/edit/reorder/delete phases, set acceptance and termination conditions, and attach skills discovered live from `~/.claude/skills` and `~/.codex/skills`. On `save` it writes the design, the portable spec (`goal-state.json` + `GOAL.md`), and a standalone `loop.html`. Use `--script FILE` to replay commands. |
+| `goals loop export` | Re-render a saved design to HTML (and the portable spec). |
+| `goals loop check [--fix]` | Lint the loop for issues — no termination condition, vague/untestable acceptance, duplicate or empty phases, unknown skill references, missing evidence requirements. `--fix` applies only the safe, reversible fixes and is idempotent. |
+| `goals loop detect <phase>` | After a phase is accepted, log any regressions (with evidence) into self-evolution memory, routing each as needs-attention-now or deferred. |
+| `goals loop improve [--apply]` | Turn accumulated, evidence-backed memory into a reviewable change set targeting task execution or the loop design; `--apply` applies only the safe loop-design fixes. |
+
+One source of truth: `LoopDesign` compiles to the existing portable spec (reusing
+the same `portability.py` `goals export` uses) and renders the HTML, so the two
+surfaces never drift. Skills are stored as name references; which agent has each
+one — and the suggestion to install a Claude-only skill into `~/.codex/skills` so
+the loop runs under both — is resolved live at render time.
+
+```bash
+goals loop build --script examples/visual-builder.loop --out .goals
+goals loop check --out .goals
+open .goals/loop.html
+```
+
+The builder dogfoods the repo: `examples/visual-builder.loop` reproduces this
+feature's own three-phase goal spec, and it lints clean.
+
+**Out of scope** (deliberately not built here): a web server or live multi-user
+editing; autonomous execution of the designed loop; non-Claude/Codex adapters.
+
 ## Prerequisites
 
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — used for every
