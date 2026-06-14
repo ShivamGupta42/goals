@@ -163,8 +163,5 @@ def render_setup_report(report: SetupReport) -> str:
     if report.dry_run:
         lines.append("\nRe-run without --dry-run to apply.")
     else:
-        lines.append(
-            "\nDone. Run `goals demo` for a quick proof, or `/goals:create \"<objective>\"` "
-            "in Claude Code to begin."
-        )
+        lines.append("\nDone. In Claude Code, run `/goals:create \"<objective>\"` to begin.")
     return "\n".join(lines)

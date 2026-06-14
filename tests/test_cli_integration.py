@@ -3,17 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from goals.models import (
-    Event,
-    EventType,
-    Evidence,
-    GateResult,
-    GateVerdict,
-    GoalSnapshot,
-    Phase,
-    PhaseStatus,
-    WorktreeLease,
-)
+from goals.models import Event, EventType, Evidence, GateResult, GateVerdict, GoalSnapshot, Phase, WorktreeLease
 from goals.storage import EventStore
 
 
@@ -361,89 +351,6 @@ def test_simple_workflow_commands(tmp_path: Path) -> None:
     assert "# Goal View" in viewed.stdout
     assert "Dashboard:" in viewed.stdout
     assert "Architecture map:" in viewed.stdout
-
-
-def test_demo_command_creates_verified_first_run(tmp_path: Path) -> None:
-    out = tmp_path / "first-run-demo"
-    result = run(
-        ["python", "-m", "goals.cli", "demo", "--out", str(out), "--json"],
-        tmp_path,
-    )
-    payload = json.loads(result.stdout)
-
-    assert payload["workspace_path"] == str(out.resolve())
-    assert payload["accepted_phase"] == "P1"
-    assert payload["current_phase"] == "P2"
-    assert Path(payload["dashboard_path"]).exists()
-    assert payload["dashboard_uri"].startswith("file://")
-    assert Path(payload["portable_goal_path"]).exists()
-    assert Path(payload["portable_state_path"]).exists()
-    assert payload["next_commands"] == [
-        f"cd {out.resolve()}",
-        "goals check",
-        "goals view --open",
-    ]
-    assert (out / ".goals" / "goal-state.json").exists()
-
-    goal_file = next((out / ".agent-workflow" / "goals").glob("*/goal.json"))
-    snapshot = GoalSnapshot.model_validate_json(goal_file.read_text())
-    p1 = next(phase for phase in snapshot.phases if phase.phase_id == "P1")
-    p2 = next(phase for phase in snapshot.phases if phase.phase_id == "P2")
-    assert p1.status == PhaseStatus.ACCEPTED
-    assert p1.evidence is not None
-    assert p1.evidence.confidence == 0.95
-    assert p2.status == PhaseStatus.PENDING
-    assert snapshot.current_phase == "P2"
-
-    architecture_path = goal_file.parent / "architecture.md"
-    assert architecture_path.exists()
-    readme = (out / "README.md").read_text()
-    assert "## What happened" in readme
-    assert "Accepted phase `P1` with recorded evidence." in readme
-    assert "Left phase `P2` as the next active phase." in readme
-    assert payload["dashboard_uri"] in readme
-
-    checked = run(["python", "-m", "goals.cli", "check"], out)
-    assert "P1 has no evidence yet." not in checked.stdout
-    assert "P2 has no evidence yet." in checked.stdout
-
-
-def test_demo_plain_output_points_to_dashboard_and_next_commands(tmp_path: Path) -> None:
-    out = tmp_path / "plain-demo"
-    result = run(["python", "-m", "goals.cli", "demo", "--out", str(out)], tmp_path)
-
-    assert "# Goals Demo Complete" in result.stdout
-    assert f"cd {out.resolve()}" in result.stdout
-    assert "Dashboard: file://" in result.stdout
-    assert "Portable state JSON:" in result.stdout
-    assert "goals check" in result.stdout
-    assert "goals view --open" in result.stdout
-
-
-def test_demo_refuses_existing_goal_state(tmp_path: Path) -> None:
-    out = tmp_path / "existing-goal"
-    goal_dir = out / ".agent-workflow" / "goals" / "demo"
-    goal_dir.mkdir(parents=True)
-    (goal_dir / "goal.json").write_text("{}")
-
-    result = run_unchecked(["python", "-m", "goals.cli", "demo", "--out", str(out)], tmp_path)
-
-    assert result.returncode == 1
-    assert "already contains active Goals state" in result.stdout
-
-
-def test_demo_refuses_output_inside_existing_git_repo(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    init_repo(repo)
-
-    result = run_unchecked(
-        ["python", "-m", "goals.cli", "demo", "--out", str(repo / "demo")],
-        tmp_path,
-    )
-
-    assert result.returncode == 1
-    assert "inside an existing git repo" in result.stdout
 
 
 def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:

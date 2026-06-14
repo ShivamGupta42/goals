@@ -62,17 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.sh
 irm https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.ps1 | iex
 ```
 
-**2. Try the proof path** — one local command, no agent setup needed:
-
-```bash
-goals demo
-```
-
-It creates a standalone demo workspace, accepts the first phase with recorded
-evidence, and gives you a dashboard link so you can see what "done with proof"
-looks like.
-
-**3. Connect your AI assistant** — one command, for Claude Code *and* Codex:
+**2. Connect your AI assistant** — one command, for Claude Code *and* Codex:
 
 ```bash
 goals setup --agent both        # or: --agent claude  |  --agent codex
@@ -117,7 +107,6 @@ Most people only need these:
 | Command | What it does |
 | --- | --- |
 | `goals start "add login and payments to my site"` | Turn a goal into a tracked plan and open a workspace for it |
-| `goals demo` | Create a standalone evidence-backed demo goal and dashboard |
 | `goals next` | Get the next step, ready to hand to your AI |
 | `goals check` | Plain-language status: progress, proof, and what needs you |
 | `goals view` | Open the dashboard — your goal at a glance, for humans |
