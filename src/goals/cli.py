@@ -42,6 +42,12 @@ from goals.loop_builder import (
     run_script,
     save_design,
 )
+from goals.loop_check import (
+    apply_fixes,
+    check_loop,
+    render_fix_summary,
+    render_loop_check_report,
+)
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
@@ -1231,6 +1237,34 @@ def loop_export(
         else:
             result = save_design(design, out_dir)
             typer.echo(f"Wrote {result.html_path}, {result.state_path}, {result.markdown_path}")
+
+    _handle(run)
+
+
+@loop_app.command("check")
+def loop_check(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+    fix: bool = typer.Option(
+        False, "--fix", help="Apply safe, reversible fixes and re-save the design."
+    ),
+) -> None:
+    """Lint a designed loop for issues (and optionally auto-fix the safe ones)."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        design = load_design(out_dir)
+        if fix:
+            fixed, changes = apply_fixes(design)
+            if changes:
+                save_design(fixed, out_dir)
+            typer.echo(render_fix_summary(changes))
+            design = fixed
+        report = check_loop(design)
+        typer.echo(render_loop_check_report(report))
+        if report.has_blocking:
+            raise typer.Exit(1)
 
     _handle(run)
 
