@@ -161,14 +161,23 @@ source_app = typer.Typer(help="Record and inspect source evidence.")
 user_app = typer.Typer(help="Record and inspect private global user memory.")
 
 
-def _load_json_model(raw: str | None, model):
-    """Parse a user-supplied JSON string into a model with clean errors.
+def _load_json_model(inline: str | None, file: Optional[Path], model):
+    """Read inline-or-``--file`` JSON into a model with clean errors.
 
-    CLI args (inline JSON or a ``--file``) are a user-input boundary: malformed
-    JSON or a payload that fails validation must surface as a plain ``Error: …``,
+    CLI args are a user-input boundary: an unreadable ``--file``, malformed JSON,
+    or a payload that fails validation must all surface as a plain ``Error: …``,
     not a raw traceback. ``_handle`` only catches ``GoalsError``, so we translate
-    ``JSONDecodeError`` and pydantic ``ValidationError`` here.
+    ``OSError`` (read), ``JSONDecodeError`` (parse), and pydantic
+    ``ValidationError`` (schema) here. The caller still enforces exactly-one-of
+    inline/``--file`` so it can word that message naturally.
     """
+    if file is not None:
+        try:
+            raw: str | None = file.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GoalsError(f"Could not read {file}: {exc}") from exc
+    else:
+        raw = inline
     try:
         data = json.loads(raw or "{}")
     except json.JSONDecodeError as exc:
@@ -1452,8 +1461,7 @@ def assess_breakdown(
             raise GoalsError("Provide the breakdown as inline JSON or --file, not both.")
         if file is None and breakdown_json is None:
             raise GoalsError("Provide the breakdown as inline JSON or --file.")
-        raw = file.read_text(encoding="utf-8") if file is not None else breakdown_json
-        breakdown = _load_json_model(raw, ProblemBreakdown)
+        breakdown = _load_json_model(breakdown_json, file, ProblemBreakdown)
         append_event(
             Path.cwd(),
             Event(
@@ -1593,8 +1601,7 @@ def phase_evidence(
             raise GoalsError("Provide evidence as inline JSON or --file, not both.")
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
-        raw = file.read_text(encoding="utf-8") if file is not None else evidence_json
-        evidence = _load_json_model(raw, Evidence)
+        evidence = _load_json_model(evidence_json, file, Evidence)
         append_event(
             Path.cwd(),
             Event(

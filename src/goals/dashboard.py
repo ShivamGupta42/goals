@@ -375,9 +375,9 @@ def _journey_html(snapshot: GoalSnapshot) -> str:
 
     Renders nothing until the agent has recorded a breakdown or an assumption, so a
     goal with no Assess trace looks exactly as before. The audience toggle is pure
-    CSS: three radios (high-school checked) precede the `.journey-body`, and the
-    `:checked ~ .journey-body .note-*` rules reveal the richer framings — no JS, and
-    keyboard/screen-reader operable as native radios.
+    CSS: a `role="radiogroup"` of three radios (high-school checked), and the
+    `.bjourney:has(#aud-*:checked) .note-*` rules reveal the richer framings — no JS,
+    and keyboard/screen-reader operable as a named native radio group.
     """
     if not snapshot.breakdowns and not snapshot.assumptions:
         return ""

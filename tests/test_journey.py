@@ -327,3 +327,13 @@ def test_cli_assess_breakdown_rejects_invalid_schema(tmp_path: Path, monkeypatch
     result = runner.invoke(app, ["assess", "breakdown", '{"whys": []}'])
     assert result.exit_code == 1
     assert "Invalid ProblemBreakdown" in result.stdout
+
+
+def test_cli_assess_breakdown_rejects_missing_file(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # A bad --file path must be a clean error, not a raw FileNotFoundError.
+    result = runner.invoke(app, ["assess", "breakdown", "--file", "no_such_file.json"])
+    assert result.exit_code == 1
+    assert "Could not read" in result.stdout
+    assert result.exception is None or isinstance(result.exception, SystemExit)
