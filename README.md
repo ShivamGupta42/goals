@@ -33,16 +33,60 @@ fills, and it is the part that survives any single tool evolving:
 4. **Auditable history** — an append-only event log independent of any
    proprietary store.
 
+## Run it inside Claude Code or Codex (recommended)
+
+The smoothest way to use Goals is **from inside your agent** — no copy-paste, no
+`cd`. One command wires it up:
+
+```bash
+goals setup --agent both      # or: --agent claude | --agent codex  (use --dry-run to preview)
+```
+
+- **Claude Code** — registers this repo as a plugin marketplace and enables the
+  `goals` plugin, so you get namespaced slash commands and a SessionStart hook
+  that auto-loads the active goal:
+
+  | Command | What it does |
+  | --- | --- |
+  | `/goals:create "<objective>"` | Start a goal and begin its first phase. |
+  | `/goals:next` | Work the current phase, record evidence, review, accept. |
+  | `/goals:check` | Status, proof, and what (if anything) needs you. |
+  | `/goals:diagram` | Render the goal's architecture/loop as a diagram. |
+  | `/goals:improve` | Turn evidence-backed memory into a reviewable change set. |
+
+  > **`/goals:create` is *not* Claude Code's built-in `/goal`.** `/goal` is
+  > Claude's session-scoped stop-condition; `/goals:*` are this plugin's
+  > namespaced commands. They never collide.
+
+  An **opt-in** Stop hook (set `GOALS_ENFORCE=1`) keeps the session working until
+  the current phase is accepted. Off by default — it never nags.
+
+- **Codex** — installs Goals' skills into `~/.codex/skills`; run
+  `goals context sync` in a project so the active goal shows up in `AGENTS.md`.
+  Codex then drives the same `goals` CLI.
+
+The CLI below is always available too — it's the fallback for local AI and
+scripting.
+
+### Where the work happens
+
+- **On `main`/`master`** Goals never touches your base checkout — it creates an
+  isolated worktree (its own `goal/<id>` branch).
+- **On a feature branch** it asks (interactively) or takes `--worktree` /
+  `--in-place`. Worktrees are how you run **several goals at once**.
+- **In a non-git directory** it works in place and tells you there's no isolation.
+
 ## The simple command set
 
 Most users only need these four:
 
 | Command | What it does |
 | --- | --- |
-| `goals start` | Creates the goal worktree, goal state, dashboard, and first agent handoff. |
+| `goals start` | Creates the goal workspace (worktree on main, or in place — see above), goal state, dashboard, and first agent handoff. |
 | `goals next` | Refreshes generated files and prints the paste-ready `/goal` handoff for Codex or Claude. |
-| `goals check` | Combines brief, checkpoint, issues, merge readiness, and architecture into one status view. |
+| `goals check` | Combines brief, checkpoint, issues, merge readiness, and architecture into one status view (`--json` for agents). |
 | `goals view` | Refreshes the dashboard, architecture map, and portable `.goals/` spec, then prints their paths. |
+| `goals diagram` | Renders the goal's architecture or loop as Mermaid or a standalone `.excalidraw` file. |
 
 ## Portability: the part native tools won't build
 
