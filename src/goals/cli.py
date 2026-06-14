@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -83,6 +84,7 @@ from goals.runtime import (
     emit_architecture,
     emit_dashboard,
     load_active_snapshot,
+    resolve_workspace,
     run_gate,
     transition_phase,
 )
@@ -152,10 +154,30 @@ def start(
     autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
     why: str = typer.Option("", help="Plain-language reason this goal matters."),
     new: Optional[Path] = typer.Option(None, help="Create a new minimal project first."),
+    worktree: bool = typer.Option(
+        False, "--worktree", help="Force an isolated worktree (best for several goals at once)."
+    ),
+    in_place: bool = typer.Option(
+        False, "--in-place", help="Work on the current branch (ignored on main/master)."
+    ),
 ) -> None:
     """Start a goal and show the shortest next steps."""
 
     def run():
+        if worktree and in_place:
+            raise GoalsError("Choose either --worktree or --in-place, not both.")
+        requested = "worktree" if worktree else "in_place" if in_place else "auto"
+        # On a feature branch with no explicit choice, offer the worktree-vs-in-place
+        # decision interactively; non-interactive callers (agents) get the safe default.
+        if requested == "auto" and new is None and sys.stdin.isatty():
+            plan = resolve_workspace(Path.cwd(), requested="auto")
+            if plan.ambiguous:
+                answer = typer.prompt(
+                    f"On branch '{plan.base_branch}'. Isolate this goal in a worktree "
+                    "(recommended for parallel goals) or work in place? [worktree/in-place]",
+                    default="worktree",
+                )
+                requested = "in_place" if answer.strip().lower().startswith("in") else "worktree"
         report = start_workflow(
             objective,
             Path.cwd(),
@@ -163,6 +185,7 @@ def start(
             autonomy=autonomy,
             why=why,
             new_project=new,
+            workspace=requested,
         )
         typer.echo(render_start_workflow(report))
 

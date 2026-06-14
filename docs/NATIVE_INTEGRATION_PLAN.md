@@ -11,10 +11,16 @@ deterministic architecture-diagram generation.
 1. **Name:** keep `goals`. Disambiguate from Claude Code's built-in `/goal` via
    plugin command namespacing — `/goals:create`, `/goals:check`, … (a plugin
    named `goals` namespaces its commands as `/goals:<cmd>` automatically).
-2. **Workspace:** **create a git worktree and work there** when in a git repo
-   (isolation preserved; the agent works in the worktree so the human never has
-   to `cd`/paste). **If the current directory is not a git repo,** work in place
-   there and **inform the user**.
+2. **Workspace policy:**
+   - **On `main`/`master`** → never modify the base checkout; always create a
+     worktree (`goal/<id>` branch). `--in-place` is overridden here.
+   - **On a feature branch** → `auto` prompts (interactive) for worktree vs
+     in-place and defaults to a worktree when non-interactive; `--worktree` /
+     `--in-place` force it.
+   - **Non-git directory** → **full non-git support**: track + work in place
+     (no git needed), informing the user there's no isolation.
+   - Worktrees are the path to **running several goals at once**; this guidance is
+     surfaced in the start output.
 3. **Integration:** **skills + slash commands + hooks over the CLI.** MCP
    deferred — everything routes through the CLI, so MCP can be added later as a
    thin extra surface (Claude plugins can ship a `.mcp.json`) without touching

@@ -35,6 +35,23 @@ def git_root(cwd: Path) -> Path:
     raise GoalsError(f"git could not resolve the repository at {cwd}: {detail or 'unknown error'}")
 
 
+#: Branch names goals treats as a protected base checkout — never worked in
+#: place; a goal on one of these always gets its own worktree.
+DEFAULT_BRANCHES = frozenset({"main", "master"})
+
+
+def find_git_root(cwd: Path) -> Path | None:
+    """Return the git repo root for ``cwd``, or ``None`` if not in a git repo.
+
+    The non-raising counterpart of :func:`git_root`, used to decide between
+    git and non-git (in-place) workspace modes.
+    """
+    result = run_git(["rev-parse", "--show-toplevel"], cwd, check=False)
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip()).resolve()
+
+
 def list_worktrees(repo: Path) -> list[dict[str, str | Path]]:
     """Parse ``git worktree list --porcelain`` into records.
 

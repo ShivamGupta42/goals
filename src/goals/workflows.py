@@ -69,8 +69,16 @@ def start_workflow(
     autonomy: str = "standard",
     why: str = "",
     new_project: Path | None = None,
+    workspace: str = "auto",
 ) -> WorkflowStart:
-    snapshot = create_goal(objective, cwd, autonomy=autonomy, why=why, new_project=new_project)
+    snapshot = create_goal(
+        objective,
+        cwd,
+        autonomy=autonomy,
+        why=why,
+        new_project=new_project,
+        workspace=workspace,  # type: ignore[arg-type]
+    )
     worktree = Path(snapshot.topology.worktree_path)
     dashboard_path = emit_dashboard(worktree)
     plan = build_mode_a_plan(snapshot, agent)
@@ -119,25 +127,56 @@ def view_workflow(cwd: Path) -> WorkflowView:
 def render_start_workflow(report: WorkflowStart) -> str:
     plan = report.plan
     snapshot = report.snapshot
-    worktree = Path(snapshot.topology.worktree_path)
+    topology = snapshot.topology
+    worktree = Path(topology.worktree_path)
+    repo = Path(topology.base_repo)
     agent_label = _agent_label(plan)
     paste_target = _paste_target(plan.adapter)
+
+    is_worktree = worktree != repo
+    is_non_git = not topology.base_branch
+    if is_worktree:
+        location = f"Worktree: `{worktree}` (branch `{topology.branch}`)"
+        notice = (
+            "Created an isolated worktree so your base checkout stays untouched."
+            if topology.base_branch in ("main", "master")
+            else "Created an isolated worktree (run several goals in parallel this way)."
+        )
+        steps = [f"1. `cd {worktree}`", f"2. `goals next --agent {plan.adapter}`"]
+        tip = (
+            "Tip: on macOS, `goals next --agent "
+            f"{plan.adapter} | pbcopy` from the worktree copies the handoff."
+        )
+    else:
+        location = (
+            f"Working in place: `{worktree}`"
+            + (f" (branch `{topology.branch}`)" if not is_non_git else "")
+        )
+        notice = (
+            "No git repository here — working directly with no isolation. "
+            "`git init` (one commit) to get worktree isolation and parallel goals."
+            if is_non_git
+            else f"Working in place on `{topology.branch}` (use --worktree for parallel goals)."
+        )
+        steps = [f"1. `goals next --agent {plan.adapter}` (no cd needed)"]
+        tip = "Tip: use `--worktree` next time to isolate a goal in its own branch."
+
     return "\n".join(
         [
             "# Goal Started",
             "",
             f"Goal: {snapshot.objective}",
-            f"Worktree: `{worktree}`",
+            location,
             f"Dashboard: `{report.dashboard_path}`",
             f"Agent: {agent_label}",
             "",
-            "Next:",
-            f"1. `cd {worktree}`",
-            f"2. `goals next --agent {plan.adapter}`",
-            f"3. Paste the output into {paste_target}.",
+            notice,
             "",
-            "Tip: on macOS, use `goals next --agent "
-            f"{plan.adapter} | pbcopy` from the worktree to copy the handoff.",
+            "Next:",
+            *steps,
+            f"{len(steps) + 1}. Paste the output into {paste_target}.",
+            "",
+            tip,
         ]
     ) + "\n"
 
