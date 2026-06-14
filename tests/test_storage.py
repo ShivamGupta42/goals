@@ -6,6 +6,7 @@ from goals.models import (
     Event,
     EventType,
     GoalArchitectureMap,
+    JudgementRecord,
     SourceClaim,
     SourceRecord,
 )
@@ -292,3 +293,45 @@ def test_source_record_replays_into_snapshot(tmp_path: Path) -> None:
 
     assert derived.sources[0].title == "Customer interview"
     assert derived.source_claims[0].claim == "Users need plain-language progress."
+
+
+def test_decision_record_replays_into_snapshot(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    judgement = JudgementRecord(
+        question="Where should sessions live?",
+        choice="Redis",
+        rationale="Fast and shared across nodes.",
+        decided_by="user",
+        reversible=True,
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.DECISION_RECORDED,
+            payload={"judgement": judgement.model_dump()},
+        )
+    )
+
+    derived = store.snapshot()
+
+    assert len(derived.judgements) == 1
+    assert derived.judgements[0].question == "Where should sessions live?"
+    assert derived.judgements[0].choice == "Redis"
+    assert derived.judgements[0].decided_by == "user"
+    assert derived.judgements[0].reversible is True
