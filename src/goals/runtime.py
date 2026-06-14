@@ -11,6 +11,7 @@ from goals.git_ops import (
     current_branch,
     git_path,
     git_root,
+    goal_worktrees,
     has_commits,
     require_clean_repo,
     slugify,
@@ -133,17 +134,39 @@ def create_goal(
 def active_goal_dir(cwd: Path) -> Path:
     repo = git_root(cwd)
     goals_dir = repo / ".agent-workflow" / "goals"
-    if not goals_dir.exists():
-        raise GoalsError("No .agent-workflow/goals directory found.")
-    goals = sorted(p for p in goals_dir.iterdir() if p.is_dir())
+    goals = sorted(p for p in goals_dir.iterdir() if p.is_dir()) if goals_dir.exists() else []
     if not goals:
-        raise GoalsError("No goals found.")
+        raise GoalsError("No active goal in this directory." + _goal_location_hint(repo))
     if len(goals) > 1:
         active = [p for p in goals if (p / "goal.json").exists()]
         if len(active) == 1:
             return active[0]
-        raise GoalsError("Multiple goals found. Run from a goal worktree or specify one later.")
+        names = ", ".join(p.name for p in goals)
+        raise GoalsError(
+            f"Multiple goals found here ({names}). cd into the specific goal's "
+            "worktree and re-run."
+        )
     return goals[0]
+
+
+def _goal_location_hint(repo: Path) -> str:
+    """Tell the user where the goal actually lives.
+
+    The common mistake is running a command from the base checkout after
+    `goals start`, where no goal state exists — the state is in the goal's
+    worktree. Name those worktrees so the next step is obvious.
+    """
+    worktrees = goal_worktrees(repo)
+    if not worktrees:
+        return (
+            ' No goal exists for this repo yet. Run `goals start "<objective>"` to '
+            "create one, then cd into the worktree it prints."
+        )
+    listing = "\n".join(f"  cd {path}" for path in worktrees)
+    return (
+        " A goal's state lives in its own worktree, not here. cd into it and re-run:\n"
+        + listing
+    )
 
 
 def load_active_snapshot(cwd: Path) -> GoalSnapshot:
@@ -170,7 +193,11 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
                 + "; ".join(checkpoint_issues)
             )
         if not phase.reviews or phase.reviews[-1].verdict != GateVerdict.PASS:
-            raise GoalsError("Latest phase review must pass before acceptance.")
+            raise GoalsError(
+                f"Latest phase review must pass before accepting {phase_id}. "
+                f"Record evidence, then run `goals phase review {phase_id}` and fix "
+                "any findings first."
+            )
         event_type = EventType.PHASE_ACCEPTED
     else:
         raise GoalsError(f"Unsupported phase transition: {action}")
@@ -271,5 +298,6 @@ def _find_phase(snapshot: GoalSnapshot, phase_id: str) -> Phase:
         (candidate for candidate in snapshot.phases if candidate.phase_id == phase_id), None
     )
     if phase is None:
-        raise GoalsError(f"Unknown phase: {phase_id}")
+        valid = ", ".join(p.phase_id for p in snapshot.phases) or "none"
+        raise GoalsError(f"Unknown phase: {phase_id}. Valid phases: {valid}.")
     return phase
