@@ -49,6 +49,8 @@ from goals.loop_check import (
     render_fix_summary,
     render_loop_check_report,
 )
+from goals.diagram import render_architecture as render_architecture_diagram
+from goals.diagram import render_loop as render_loop_diagram
 from goals.loop_improve import (
     apply_loop_improvements,
     log_phase_regression,
@@ -1411,6 +1413,38 @@ def loop_improve(
         else:
             plan = plan_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
         typer.echo(render_loop_improvement_plan(plan))
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def diagram(
+    source: str = typer.Option(
+        "architecture", "--source", help="What to diagram: architecture or loop."
+    ),
+    fmt: str = typer.Option("mermaid", "--format", help="Output format: mermaid or excalidraw."),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Write to a file instead of stdout."
+    ),
+) -> None:
+    """Generate a clean diagram of the goal architecture or designed loop."""
+
+    def run():
+        src = _validate_choice(source, {"architecture", "loop"}, "source")
+        fmt_choice = _validate_choice(fmt, {"mermaid", "excalidraw"}, "format")
+        if src == "architecture":
+            snapshot = load_active_snapshot(Path.cwd())
+            content = render_architecture_diagram(
+                architecture_for_snapshot(snapshot), fmt=fmt_choice
+            )
+        else:
+            design = load_design(Path.cwd() / ".goals")
+            content = render_loop_diagram(design, fmt=fmt_choice)
+        if out is not None:
+            atomic_write_text(out, content)
+            typer.echo(f"Wrote {out}")
+        else:
+            typer.echo(content)
 
     _handle(run)
 
