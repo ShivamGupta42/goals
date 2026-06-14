@@ -288,17 +288,23 @@ def _produced_html(checkpoint) -> str:
 def _friendly_timestamp(iso: str) -> str:
     """Turn an ISO timestamp into e.g. `Jun 14, 2026 · 5:40 PM UTC`.
 
-    Falls back to the raw string if it can't be parsed, so a malformed value
-    never breaks the page.
+    Only states what the value actually carries: a naive timestamp renders
+    without a zone label (we don't assert a zone it never had) and a date-only
+    string renders without a time. Falls back to the raw string if it can't be
+    parsed, so a malformed value never breaks the page.
     """
     try:
         moment = datetime.fromisoformat(iso)
     except (ValueError, TypeError):
         return iso
+    date_part = f"{moment:%b} {moment.day}, {moment.year}"
+    if "T" not in iso and ":" not in iso:  # date-only input — no time to show
+        return date_part
     hour = moment.hour % 12 or 12
     meridiem = "AM" if moment.hour < 12 else "PM"
-    zone = moment.tzname() or "UTC"
-    return f"{moment:%b} {moment.day}, {moment.year} · {hour}:{moment.minute:02d} {meridiem} {zone}"
+    zone = moment.tzname() if moment.tzinfo else ""
+    suffix = f" {zone}" if zone else ""
+    return f"{date_part} · {hour}:{moment.minute:02d} {meridiem}{suffix}"
 
 
 def _waiting_label(value: str) -> str:

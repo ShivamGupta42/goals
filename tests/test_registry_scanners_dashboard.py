@@ -198,11 +198,19 @@ def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:
     assert "Agent (working)" in text
 
 
-def test_friendly_timestamp_falls_back_on_garbage() -> None:
+def test_friendly_timestamp_only_states_what_it_carries() -> None:
     from goals.dashboard import _friendly_timestamp
 
+    # Malformed input is returned untouched.
     assert _friendly_timestamp("not-a-date") == "not-a-date"
-    assert "Jun 14, 2026" in _friendly_timestamp("2026-06-14T17:40:19+00:00")
+    # Timezone-aware UTC keeps its zone label.
+    assert _friendly_timestamp("2026-06-14T17:40:19+00:00") == "Jun 14, 2026 · 5:40 PM UTC"
+    # Naive timestamp renders without an invented zone.
+    assert _friendly_timestamp("2026-06-14T17:40:19") == "Jun 14, 2026 · 5:40 PM"
+    # Date-only input renders without an invented time.
+    assert _friendly_timestamp("2026-06-14") == "Jun 14, 2026"
+    # A real midnight still shows its time (not mistaken for date-only).
+    assert _friendly_timestamp("2026-06-14T00:00:00+00:00") == "Jun 14, 2026 · 12:00 AM UTC"
 
 
 def test_dashboard_renders_architecture_svg(tmp_path: Path) -> None:
