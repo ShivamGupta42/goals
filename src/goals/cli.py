@@ -48,6 +48,13 @@ from goals.loop_check import (
     render_fix_summary,
     render_loop_check_report,
 )
+from goals.loop_improve import (
+    apply_loop_improvements,
+    log_phase_regression,
+    plan_loop_improvements,
+    render_loop_improvement_plan,
+    render_regression_report,
+)
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
@@ -1265,6 +1272,43 @@ def loop_check(
         typer.echo(render_loop_check_report(report))
         if report.has_blocking:
             raise typer.Exit(1)
+
+    _handle(run)
+
+
+@loop_app.command("detect")
+def loop_detect(phase_id: str) -> None:
+    """Detect and log regressions for a phase (run after it is accepted)."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        report = log_phase_regression(Path.cwd(), snapshot, phase_id)
+        typer.echo(render_regression_report(report))
+
+    _handle(run)
+
+
+@loop_app.command("improve")
+def loop_improve(
+    apply: bool = typer.Option(
+        False, "--apply", help="Apply the safe, reversible loop-design fixes (approval)."
+    ),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+) -> None:
+    """Turn accumulated, evidence-backed memory into a reviewable change set."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        design_dir = _default_loop_out(out)
+        if not (design_dir / "loop-design.json").exists():
+            design_dir = None
+        if apply:
+            plan = apply_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
+        else:
+            plan = plan_loop_improvements(Path.cwd(), snapshot, design_dir=design_dir)
+        typer.echo(render_loop_improvement_plan(plan))
 
     _handle(run)
 
