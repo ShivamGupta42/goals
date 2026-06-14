@@ -89,6 +89,23 @@ def test_force_worktree_on_feature_branch(tmp_path: Path) -> None:
     assert Path(snapshot.topology.worktree_path) != tmp_path
 
 
+def test_new_in_place_still_protects_main(tmp_path: Path) -> None:
+    # A fresh --new project starts on main; --in-place must not bypass protection.
+    _git_repo(tmp_path, branch="main")
+    plan = resolve_workspace(tmp_path, requested="in_place", new_project_created=True)
+    assert plan.mode == "worktree"
+
+
+def test_second_in_place_goal_is_refused(tmp_path: Path) -> None:
+    _git_repo(tmp_path, branch="feature")
+    create_goal("first goal", tmp_path, workspace="in_place")
+    with pytest.raises(GoalsError, match="already active here"):
+        create_goal("second goal", tmp_path, workspace="in_place")
+    # The escape hatch is a worktree.
+    snapshot = create_goal("second goal", tmp_path, workspace="worktree")
+    assert Path(snapshot.topology.worktree_path) != tmp_path
+
+
 def test_dirty_tree_only_blocks_worktree_not_in_place(tmp_path: Path) -> None:
     _git_repo(tmp_path, branch="feature")
     (tmp_path / "dirty.txt").write_text("x")  # uncommitted change

@@ -115,11 +115,13 @@ def resolve_workspace(
     if git is None:
         return WorkspacePlan("in_place", base.resolve(), False, "", False)
     branch = current_branch(git)
+    # Protected-branch guard FIRST so nothing (incl. --new --in-place, since a
+    # fresh repo starts on a default branch) can work in place on main/master.
+    if branch in DEFAULT_BRANCHES:
+        return WorkspacePlan("worktree", git, True, branch, False)
     if new_project_created:
         mode = "in_place" if requested == "in_place" else "worktree"
         return WorkspacePlan(mode, git, True, branch, False)
-    if branch in DEFAULT_BRANCHES:
-        return WorkspacePlan("worktree", git, True, branch, False)
     if requested == "worktree":
         return WorkspacePlan("worktree", git, True, branch, False)
     if requested == "in_place":
@@ -139,6 +141,14 @@ def create_goal(
     base = _ensure_repo(cwd, new_project) if new_project is not None else cwd
     plan = resolve_workspace(base, requested=workspace, new_project_created=new_project is not None)
     goal_id = slugify(objective)
+    if plan.mode == "in_place":
+        existing = _existing_goal_ids(plan.repo)
+        if existing and goal_id not in existing:
+            raise GoalsError(
+                f"A goal is already active here ({', '.join(existing)}). Finish it, "
+                "or run the new goal in its own worktree with `--worktree` "
+                "(worktrees are how you run several goals at once)."
+            )
     if plan.mode == "worktree":
         require_clean_repo(plan.repo)
         if not has_commits(plan.repo):
@@ -194,14 +204,38 @@ def active_goal_dir(cwd: Path) -> Path:
         raise GoalsError("No active goal in this directory." + _goal_location_hint(repo))
     if len(goals) > 1:
         active = [p for p in goals if (p / "goal.json").exists()]
+        if not active:
+            names = ", ".join(p.name for p in goals)
+            raise GoalsError(f"No readable goal among ({names}). Run `goals repair`.")
         if len(active) == 1:
             return active[0]
-        names = ", ".join(p.name for p in goals)
-        raise GoalsError(
-            f"Multiple goals found here ({names}). cd into the specific goal's "
-            "worktree and re-run."
-        )
+        # Several goals share this directory (in-place goals). Act on the most
+        # recently updated rather than bricking; creating a second in-place goal
+        # is refused at start, so this is rare and resilient by design.
+        return max(active, key=_goal_updated_at)
     return goals[0]
+
+
+def _existing_goal_ids(repo: Path) -> list[str]:
+    goals_dir = repo / ".agent-workflow" / "goals"
+    if not goals_dir.is_dir():
+        return []
+    return sorted(p.name for p in goals_dir.iterdir() if p.is_dir() and (p / "goal.json").exists())
+
+
+def _goal_updated_at(goal_dir: Path) -> str:
+    """Sort key for picking the active goal: the snapshot's last_updated.
+
+    Falls back to the file mtime if the snapshot can't be read, so resolution
+    never crashes on a malformed goal.json.
+    """
+    state = goal_dir / "goal.json"
+    try:
+        import json
+
+        return str(json.loads(state.read_text(encoding="utf-8")).get("last_updated", ""))
+    except (OSError, ValueError):
+        return ""
 
 
 def _goal_location_hint(repo: Path) -> str:
