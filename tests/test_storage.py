@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from goals.models import (
@@ -11,6 +12,71 @@ from goals.models import (
 from goals.runtime import default_phases
 from goals.models import Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, WorktreeLease
 from goals.storage import EventStore
+
+
+def test_load_tolerates_legacy_state(tmp_path: Path) -> None:
+    """A goal started on a previous version still loads after upgrade."""
+    snapshot = GoalSnapshot(
+        goal_id="legacy",
+        objective="Legacy goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/legacy"
+        ),
+        phases=default_phases("Legacy goal"),
+        current_phase="P1",
+    )
+    # A v1 GOAL_CREATED snapshot that still carried a since-removed field.
+    legacy_snapshot = snapshot.model_dump()
+    legacy_snapshot["assets"] = []
+    created = Event(
+        goal_id="legacy",
+        event_type=EventType.GOAL_CREATED,
+        payload={"snapshot": legacy_snapshot},
+    )
+
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    retired = json.dumps(
+        {
+            "event_id": "evt-legacy-asset",
+            "goal_id": "legacy",
+            "event_type": "asset_recorded",  # removed in v2 — no replay handler
+            "payload": {"asset": {"asset_id": "AST-1"}},
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    (goal_dir / "events.jsonl").write_text(created.model_dump_json() + "\n" + retired + "\n")
+
+    loaded = EventStore(goal_dir).snapshot()  # must not raise
+    assert loaded.goal_id == "legacy"
+    assert loaded.current_phase == "P1"
+    # The retired event is skipped; only GOAL_CREATED is counted.
+    assert loaded.event_count == 1
+
+
+def test_genuinely_corrupt_event_still_raises(tmp_path: Path) -> None:
+    from goals.storage import GoalsError
+
+    snapshot = GoalSnapshot(
+        goal_id="x",
+        objective="x",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/x"
+        ),
+        phases=default_phases("x"),
+        current_phase="P1",
+    )
+    created = Event(
+        goal_id="x", event_type=EventType.GOAL_CREATED, payload={"snapshot": snapshot.model_dump()}
+    )
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    (goal_dir / "events.jsonl").write_text(created.model_dump_json() + "\n{ not json \n")
+    try:
+        EventStore(goal_dir).read_events()
+    except GoalsError:
+        return
+    raise AssertionError("corrupt event line should raise GoalsError")
 
 
 def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:

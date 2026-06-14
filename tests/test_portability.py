@@ -96,6 +96,29 @@ def test_replace_block_appends_when_no_markers() -> None:
     assert "goals:context:start" in out
 
 
+def test_replace_block_collapses_duplicates() -> None:
+    block = "<!-- goals:context:start -->\nNEW\n<!-- goals:context:end -->"
+    old = "<!-- goals:context:start -->\nOLD\n<!-- goals:context:end -->"
+    existing = f"# T\n\n{old}\n\nmiddle notes\n\n{old}\n"
+    out = _replace_block(existing, block)
+    assert out.count("goals:context:start") == 1
+    assert "NEW" in out
+    assert "OLD" not in out
+    assert "middle notes" in out  # human content between duplicates is preserved
+
+
+def test_emit_caps_claude_goal_length(tmp_path: Path) -> None:
+    snapshot = snapshot_for(tmp_path)
+    snapshot.phases[0].acceptance_criteria = [
+        f"Criterion {i} with a fair amount of descriptive prose to inflate length"
+        for i in range(200)
+    ]
+    snapshot.current_phase = snapshot.phases[0].phase_id
+    emission = build_native_goal_emission(snapshot, "claude")
+    assert len(emission.command) < 4000
+    assert "`.goals/GOAL.md`" in emission.condition
+
+
 def test_emit_native_goal_claude_and_codex(tmp_path: Path) -> None:
     snapshot = snapshot_for(tmp_path)
     claude = build_native_goal_emission(snapshot, "claude")

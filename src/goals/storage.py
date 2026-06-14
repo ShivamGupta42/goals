@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import contextmanager
@@ -25,6 +26,33 @@ from goals.models import (
 
 class GoalsError(RuntimeError):
     """Base error for user-facing Goals failures."""
+
+
+_KNOWN_EVENT_TYPES = {member.value for member in EventType}
+
+
+def _is_retired_event(line: str) -> bool:
+    """True if a line is a well-formed event for a since-removed feature.
+
+    Earlier versions recorded events (e.g. ``asset_recorded``) whose event_type
+    is no longer a known member. They have no replay handler, so skipping them
+    lets an upgraded Goals still load goals started on a previous version
+    instead of bricking the whole goal. Genuinely corrupt lines are not retired.
+    """
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        return False
+    event_type = data.get("event_type")
+    return isinstance(event_type, str) and event_type not in _KNOWN_EVENT_TYPES
+
+
+def _drop_unknown_fields(payload: object, model: type) -> object:
+    """Strip top-level keys a model no longer declares (forward-compat load)."""
+    if not isinstance(payload, dict):
+        return payload
+    fields = getattr(model, "model_fields", {})
+    return {key: value for key, value in payload.items() if key in fields}
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -73,6 +101,8 @@ class EventStore:
             try:
                 events.append(Event.model_validate_json(line))
             except Exception as exc:  # noqa: BLE001
+                if _is_retired_event(line):
+                    continue
                 raise GoalsError(
                     f"Invalid event at {self.events_path}:{line_number}: {exc}"
                 ) from exc
@@ -102,7 +132,9 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
     first = events[0]
     if first.event_type != EventType.GOAL_CREATED:
         raise GoalsError("First event must be goal_created.")
-    snapshot = GoalSnapshot.model_validate(first.payload["snapshot"])
+    snapshot = GoalSnapshot.model_validate(
+        _drop_unknown_fields(first.payload["snapshot"], GoalSnapshot)
+    )
     snapshot.event_count = len(events)
     for event in events[1:]:
         snapshot.last_updated = event.timestamp

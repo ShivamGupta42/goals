@@ -7,7 +7,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 1
+# v2 dropped the asset/creative/external-review/handoff event types and the
+# matching GoalSnapshot fields. Loading tolerates v1 state (storage skips
+# retired events and drops unknown snapshot fields), so this bump is a signal,
+# not a hard gate.
+SCHEMA_VERSION = 2
 
 # Version of the portable, vendor-neutral goal-state spec written to `.goals/`.
 # Bumped independently of the internal SCHEMA_VERSION because this is the

@@ -17,6 +17,7 @@ paths), everything here is sanitized of local paths and meant to be committed.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -35,6 +36,12 @@ NativeAdapter = Literal["claude", "codex"]
 
 CONTEXT_START = "<!-- goals:context:start -->"
 CONTEXT_END = "<!-- goals:context:end -->"
+_BLOCK_RE = re.compile(
+    re.escape(CONTEXT_START) + r".*?" + re.escape(CONTEXT_END), re.DOTALL
+)
+
+#: Claude Code's `/goal` condition has a ~4000-char limit. Stay under it.
+CLAUDE_GOAL_MAX = 4000
 
 #: Files the context block is synced into, in priority order. AGENTS.md is the
 #: cross-vendor standard (read by Codex, Cursor, Aider, Gemini, ...); CLAUDE.md
@@ -248,11 +255,22 @@ def _new_context_file(name: str, block: str) -> str:
 
 
 def _replace_block(existing: str, block: str) -> str:
-    if CONTEXT_START in existing and CONTEXT_END in existing:
-        before, _, rest = existing.partition(CONTEXT_START)
-        _, _, after = rest.partition(CONTEXT_END)
-        return f"{before.rstrip()}\n\n{block}\n{after.lstrip(chr(10))}".rstrip() + "\n"
-    return existing.rstrip() + "\n\n" + block + "\n"
+    if CONTEXT_START not in existing or CONTEXT_END not in existing:
+        return existing.rstrip() + "\n\n" + block + "\n"
+    # Replace the first managed block in place and drop any duplicates left by
+    # earlier runs or hand edits, so the file always ends up with exactly one.
+    replaced = False
+
+    def _sub(_match: re.Match[str]) -> str:
+        nonlocal replaced
+        if replaced:
+            return ""
+        replaced = True
+        return block
+
+    result = _BLOCK_RE.sub(_sub, existing)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.rstrip() + "\n"
 
 
 # --------------------------------------------------------------------------- #
@@ -274,7 +292,16 @@ def build_native_goal_emission(
     )
     if adapter == "claude":
         # Typed into Claude Code's prompt (a slash command), not a shell — the
-        # backticks in `condition` are literal markdown here.
+        # backticks in `condition` are literal markdown here. Keep it under the
+        # `/goal` length limit: if the inline criteria blow past it, point at
+        # the durable spec instead of pasting every criterion.
+        if len(f"/goal {condition}") > CLAUDE_GOAL_MAX:
+            condition = (
+                f"Every acceptance criterion for Goals phase {phase_id} (listed "
+                "in `.goals/GOAL.md`) is satisfied, `goals check` reports "
+                "`Overall: pass` with nothing under `Needs The User`, and "
+                f"`goals phase accept {phase_id}` has run successfully."
+            )
         command = f"/goal {condition}"
         notes = [
             "Paste the line into Claude Code with the `/goal` command; its Stop "
