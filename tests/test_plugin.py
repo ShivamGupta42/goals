@@ -54,6 +54,29 @@ def test_stop_is_silent_without_a_goal(tmp_path: Path) -> None:
     assert stop_payload(tmp_path, enforce=True) == ""
 
 
+def test_stop_does_not_trap_a_paused_goal(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    from goals import agent_hooks
+    from goals.models import GoalStatus
+
+    real = agent_hooks.load_active_snapshot(tmp_path)
+    paused = real.model_copy(update={"status": GoalStatus.PAUSED})
+    monkeypatch.setattr(agent_hooks, "load_active_snapshot", lambda _cwd: paused)
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_fails_open_on_unexpected_error(tmp_path: Path, monkeypatch) -> None:
+    from goals import agent_hooks
+
+    def boom(_cwd):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr(agent_hooks, "load_active_snapshot", boom)
+    # Must NOT raise (a raising Stop hook is treated as a block — fail open).
+    assert stop_payload(tmp_path, enforce=True) == ""
+    assert session_start_payload(tmp_path) == ""
+
+
 # --- hooks CLI ------------------------------------------------------------- #
 def test_hooks_session_start_command(tmp_path: Path, monkeypatch) -> None:
     _repo_with_goal(tmp_path)
