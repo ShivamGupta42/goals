@@ -9,8 +9,6 @@ from goals.storage import GoalsError
 
 ALLOWED_KEYS = {
     "profiles": {"version", "kind", "profiles"},
-    "skills": {"version", "kind", "skills"},
-    "plugins": {"version", "kind", "plugins"},
     "gates": {"version", "kind", "gates"},
     "agents": {"version", "kind", "agents"},
     "adapters": {"version", "kind", "adapters"},
@@ -18,26 +16,6 @@ ALLOWED_KEYS = {
 }
 
 ENTRY_KEYS = {
-    "skills": {
-        "label",
-        "description",
-        "use_when",
-        "phases",
-        "profiles",
-        "command_hint",
-        "risk",
-        "requires_user_approval",
-    },
-    "plugins": {
-        "label",
-        "description",
-        "use_when",
-        "phases",
-        "profiles",
-        "command_hint",
-        "risk",
-        "requires_user_approval",
-    },
     "adapters": {
         "label",
     },

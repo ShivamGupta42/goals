@@ -292,68 +292,6 @@ class GoalBrief(BaseModel):
     technical_details: list[str] = Field(default_factory=list)
 
 
-class EcosystemRecommendation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["skill", "plugin", "adapter", "agent", "gate"]
-    name: str
-    label: str
-    reason: str
-    confidence: float = 0.0
-    command_hint: str = ""
-    source_registry: str
-    user_approval_required: bool = False
-
-
-class AgentRecommendationSet(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    agent_id: str
-    adapter: Literal["claude", "codex", "worker", "coordinator", "other"] = "other"
-    phase_id: str = ""
-    recommendations: list[EcosystemRecommendation] = Field(default_factory=list)
-    notes: str = ""
-
-
-class MergedEcosystemRecommendation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["skill", "plugin", "adapter", "agent", "gate"]
-    name: str
-    label: str
-    reason: str
-    confidence: float = 0.0
-    command_hint: str = ""
-    source_registry: str
-    user_approval_required: bool = False
-    support_count: int = 0
-    agent_ids: list[str] = Field(default_factory=list)
-    reasons: list[str] = Field(default_factory=list)
-
-
-class EcosystemRecommendationConflict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["p0", "p1", "p2"]
-    kind: Literal["skill", "plugin", "adapter", "agent", "gate"]
-    name: str
-    summary: str
-    agent_ids: list[str] = Field(default_factory=list)
-    options: list[str] = Field(default_factory=list)
-    needs_user: bool = False
-
-
-class EcosystemRecommendationMergeReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str
-    agent_count: int = 0
-    recommendations: list[MergedEcosystemRecommendation] = Field(default_factory=list)
-    conflicts: list[EcosystemRecommendationConflict] = Field(default_factory=list)
-    user_questions: list[str] = Field(default_factory=list)
-    agent_actions: list[str] = Field(default_factory=list)
-
-
 class PermissionPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -707,7 +645,6 @@ class ModeAPlan(BaseModel):
     phase_goal: str
     acceptance_criteria: list[str] = Field(default_factory=list)
     recommended_checks: list[str] = Field(default_factory=list)
-    recommended_tools: list[EcosystemRecommendation] = Field(default_factory=list)
     memory_suggestions: list[SelfEvolutionSuggestion] = Field(default_factory=list)
     evidence_file: str
     evidence_template: Evidence

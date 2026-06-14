@@ -22,12 +22,6 @@ from goals.decisions import (
     render_decision_brief,
     render_decision_explanation,
 )
-from goals.ecosystem import (
-    merge_agent_recommendations,
-    recommend_ecosystem_tools,
-    render_recommendation_merge_report,
-    render_recommendations,
-)
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
     absorb_goal_memory,
@@ -43,11 +37,9 @@ from goals.memory import (
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.models import (
-    AgentRecommendationSet,
     CheckpointKind,
     CheckpointStatus,
     Decision,
-    EcosystemRecommendation,
     Event,
     EventType,
     Evidence,
@@ -111,7 +103,6 @@ architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
-ecosystem_app = typer.Typer(help="Suggest relevant skills and plugins.")
 memory_app = typer.Typer(help="Record and inspect self-evolution memory.")
 permission_app = typer.Typer(help="Explain whether a tool or action should ask the user.")
 phase_app = typer.Typer(help="Agent phase protocol.")
@@ -270,7 +261,6 @@ app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced b
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
-app.add_typer(ecosystem_app, name="ecosystem", rich_help_panel="Advanced building blocks")
 app.add_typer(memory_app, name="memory", rich_help_panel="Advanced building blocks")
 app.add_typer(permission_app, name="permission", rich_help_panel="Advanced building blocks")
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
@@ -692,58 +682,6 @@ def architecture_update(
     _handle(run)
 
 
-@ecosystem_app.command("recommend")
-def ecosystem_recommend(
-    limit: int = typer.Option(6, help="Maximum number of recommendations."),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Recommend skills/plugins for the active goal phase."""
-
-    def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        recommendations = recommend_ecosystem_tools(Path.cwd(), snapshot, limit=limit)
-        if json_output:
-            typer.echo(
-                json.dumps([rec.model_dump(mode="json") for rec in recommendations], indent=2)
-            )
-        else:
-            typer.echo(render_recommendations(recommendations))
-
-    _handle(run)
-
-
-@ecosystem_app.command("merge")
-def ecosystem_merge(
-    file: Optional[list[Path]] = typer.Option(
-        None,
-        "--file",
-        "-f",
-        help="Agent recommendation JSON file. Repeat for multiple agents.",
-    ),
-    limit: int = typer.Option(8, help="Maximum merged recommendations."),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Merge recommendations from multiple agents into one coordinator view."""
-
-    def run():
-        if file:
-            recommendation_sets = _load_agent_recommendation_sets(file)
-        else:
-            snapshot = load_active_snapshot(Path.cwd())
-            recommendation_sets = _default_agent_recommendation_sets(Path.cwd(), snapshot, limit)
-        report = merge_agent_recommendations(
-            recommendation_sets,
-            limit=limit,
-            worktree=Path.cwd(),
-        )
-        if json_output:
-            typer.echo(report.model_dump_json(indent=2))
-        else:
-            typer.echo(render_recommendation_merge_report(report))
-
-    _handle(run)
-
-
 @memory_app.command("record")
 def memory_record(
     note: str,
@@ -1097,63 +1035,6 @@ def _optional_snapshot(cwd: Path):
         return load_active_snapshot(cwd)
     except GoalsError:
         return None
-
-
-def _default_agent_recommendation_sets(
-    cwd: Path, snapshot, limit: int
-) -> list[AgentRecommendationSet]:
-    recommendations = recommend_ecosystem_tools(cwd, snapshot, limit=limit)
-    phase_id = snapshot.current_phase or ""
-    return [
-        AgentRecommendationSet(
-            agent_id="claude",
-            adapter="claude",
-            phase_id=phase_id,
-            recommendations=recommendations,
-            notes="Default Claude-shaped Mode A recommendations.",
-        ),
-        AgentRecommendationSet(
-            agent_id="codex",
-            adapter="codex",
-            phase_id=phase_id,
-            recommendations=recommendations,
-            notes="Default Codex-shaped Mode A recommendations.",
-        ),
-    ]
-
-
-def _load_agent_recommendation_sets(files: list[Path]) -> list[AgentRecommendationSet]:
-    loaded: list[AgentRecommendationSet] = []
-    for path in files:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        loaded.extend(_agent_recommendation_sets_from_data(data, path.stem))
-    if not loaded:
-        raise GoalsError("No agent recommendations found.")
-    return loaded
-
-
-def _agent_recommendation_sets_from_data(
-    data, default_agent_id: str
-) -> list[AgentRecommendationSet]:
-    if isinstance(data, dict) and "recommendations" in data:
-        return [AgentRecommendationSet.model_validate(data)]
-    if isinstance(data, dict) and {"kind", "name"}.issubset(data):
-        return [
-            AgentRecommendationSet(
-                agent_id=default_agent_id,
-                recommendations=[EcosystemRecommendation.model_validate(data)],
-            )
-        ]
-    if isinstance(data, list):
-        if all(isinstance(item, dict) and "recommendations" in item for item in data):
-            return [AgentRecommendationSet.model_validate(item) for item in data]
-        return [
-            AgentRecommendationSet(
-                agent_id=default_agent_id,
-                recommendations=[EcosystemRecommendation.model_validate(item) for item in data],
-            )
-        ]
-    raise GoalsError("Recommendation file must contain an agent set or recommendation list.")
 
 
 def _phase_or_error(snapshot, phase_id: str) -> Phase:

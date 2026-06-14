@@ -368,7 +368,7 @@ def _suggestion_title(area: str, kind: str) -> str:
         "dashboard": "Improve dashboard visibility",
         "decision": "Improve decision handling",
         "docs": "Improve documentation",
-        "ecosystem": "Improve skill/plugin routing",
+        "ecosystem": "Improve skill discovery",
         "gate": "Improve review gates",
         "phase": "Improve phase breakdown",
         "safety": "Improve safety checks",
@@ -386,7 +386,7 @@ def _recommended_change(area: str, kind: str) -> str:
         "dashboard": "Make the dashboard expose this status in plain language.",
         "decision": "Tighten the decision rule or explainer so ambiguity is resolved sooner.",
         "docs": "Update README, roadmap, or examples to make the expected workflow clearer.",
-        "ecosystem": "Add registry hints or tool recommendations for this recurring pattern.",
+        "ecosystem": "Improve how skills are discovered or surfaced for this recurring pattern.",
         "gate": "Strengthen the gate criteria or add a specialized gate.",
         "phase": "Adjust default phases or acceptance criteria.",
         "safety": "Add a scanner fixture or safety rule.",
@@ -404,7 +404,7 @@ def _suggested_command(area: str) -> str:
     commands = {
         "dashboard": "goals dashboard",
         "decision": "goals decision explain --file decision.json --level basic",
-        "ecosystem": "goals ecosystem recommend",
+        "ecosystem": "goals skills list",
         "safety": "goals safety-check --mode local .",
         "test": "uv run pytest -q",
     }

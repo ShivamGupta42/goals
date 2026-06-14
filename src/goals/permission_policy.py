@@ -6,7 +6,6 @@ import re
 import yaml
 
 from goals.models import (
-    EcosystemRecommendation,
     PermissionDecision,
     PermissionPolicy,
     PermissionPolicyReport,
@@ -97,57 +96,6 @@ def decide_permission(
     )
 
 
-def apply_permission_to_recommendation(
-    worktree: Path,
-    recommendation: EcosystemRecommendation,
-) -> EcosystemRecommendation:
-    decision = decide_permission(
-        worktree,
-        subject_kind=recommendation.kind,
-        subject_name=recommendation.name,
-        label=recommendation.label,
-        reason=recommendation.reason,
-        command_hint=recommendation.command_hint,
-        fallback_needs_user=recommendation.user_approval_required,
-    )
-    return recommendation.model_copy(
-        update={
-            "user_approval_required": decision.needs_user or decision.unsafe,
-            "reason": _append_policy_reason(recommendation.reason, decision),
-        }
-    )
-
-
-def permission_report_for_recommendations(
-    worktree: Path,
-    recommendations: list[EcosystemRecommendation],
-) -> PermissionPolicyReport:
-    decisions = [
-        decide_permission(
-            worktree,
-            subject_kind=recommendation.kind,
-            subject_name=recommendation.name,
-            label=recommendation.label,
-            reason=recommendation.reason,
-            command_hint=recommendation.command_hint,
-            fallback_needs_user=recommendation.user_approval_required,
-        )
-        for recommendation in recommendations
-    ]
-    user_questions = [decision.user_question for decision in decisions if decision.user_question]
-    agent_actions = [decision.agent_action for decision in decisions if decision.agent_action]
-    return PermissionPolicyReport(
-        summary=(
-            f"Checked {len(decisions)} permission decision(s): "
-            f"{len([item for item in decisions if item.needs_user])} need user approval, "
-            f"{len([item for item in decisions if item.unsafe])} unsafe."
-        ),
-        decisions=decisions,
-        user_questions=user_questions,
-        agent_actions=agent_actions,
-    )
-
-
 def render_permission_report(report: PermissionPolicyReport) -> str:
     lines = [
         "# Permission Policy Report",
@@ -215,15 +163,6 @@ def _policy_matches(policy: PermissionPolicy, text: str) -> bool:
 
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
-
-
-def _append_policy_reason(reason: str, decision: PermissionDecision) -> str:
-    suffix = (
-        f" Permission policy `{decision.policy_id}` says {decision.decision}."
-        if decision.policy_id
-        else f" Permission policy fallback says {decision.decision}."
-    )
-    return reason + suffix
 
 
 def _subject_kind(value: str) -> str:

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Literal
 
 from goals.adapters import adapter_check
-from goals.ecosystem import recommend_ecosystem_tools, render_recommendations
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase
 from goals.sources import render_claim_summary, render_source_summary
@@ -20,7 +19,6 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
     worktree = Path(snapshot.topology.worktree_path)
     goal_dir = worktree / ".agent-workflow" / "goals" / snapshot.goal_id
     checks = recommended_checks(worktree)
-    recommended_tools = recommend_ecosystem_tools(worktree, snapshot)
     memory_suggestions = derive_memory_suggestions(load_memory(worktree, snapshot))[:5]
     evidence_file = goal_dir / f"evidence-{phase.phase_id.lower()}.json"
     evidence = Evidence(
@@ -44,7 +42,6 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         phase_goal=phase.goal,
         acceptance_criteria=phase.acceptance_criteria,
         recommended_checks=checks,
-        recommended_tools=recommended_tools,
         memory_suggestions=memory_suggestions,
         evidence_file=str(evidence_file),
         evidence_template=evidence,
@@ -90,7 +87,6 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
     adapter_notes = _adapter_notes(plan.adapter, plan.adapter_ready, plan.adapter_detail)
     criteria = _bullets(plan.acceptance_criteria)
     checks = _bullets(plan.recommended_checks)
-    tools = render_recommendations(plan.recommended_tools)
     memory = render_memory_suggestions(plan.memory_suggestions)
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
@@ -135,11 +131,8 @@ Parallel worktree merge gate:
 Recommended checks for this repo:
 {checks}
 
-Recommended skills/plugins for this phase:
-{tools}
-
-Ecosystem recommendation merge:
-- When multiple agents recommend tools, use `goals ecosystem merge` to deduplicate recommendations, surface approval-required tools, and keep routine routing decisions with the coordinator.
+Skills:
+- Run `goals skills list` to see skills discovered live in `~/.claude/skills` and `~/.codex/skills` (plus goals' own bundled skills). Use the ones that fit this phase.
 
 Permission policy:
 - Before using an external service, connector, paid tool, production-affecting action, or destructive command, run `goals permission check NAME --kind plugin --action "plain-language action"`.

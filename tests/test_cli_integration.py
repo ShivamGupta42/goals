@@ -29,9 +29,7 @@ def init_repo(path: Path) -> None:
         "adapters.yml": "adapters",
         "agents.yml": "agents",
         "gates.yml": "gates",
-        "plugins.yml": "plugins",
         "profiles.yml": "profiles",
-        "skills.yml": "skills",
     }
     for name, kind in registry_kinds.items():
         (registry_root / name).write_text(f"version: 1\nkind: {kind}\n{kind}: {{}}\n")
@@ -109,12 +107,9 @@ def test_create_status_dashboard_validate(tmp_path: Path) -> None:
     assert "Overall: pass" in architecture_check.stdout
     validate = run(["python", "-m", "goals.cli", "validate"], worktree)
     assert "Validated goal" in validate.stdout
-    assert "registries=6" in validate.stdout
-    ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "recommend"], worktree)
-    assert "skill:" in ecosystem.stdout or "plugin:" in ecosystem.stdout
-    merged_ecosystem = run(["python", "-m", "goals.cli", "ecosystem", "merge"], worktree)
-    assert "Cross-Agent Ecosystem Recommendation Merge" in merged_ecosystem.stdout
-    assert "supported by 2 agent(s)" in merged_ecosystem.stdout
+    assert "registries=4" in validate.stdout
+    skills = run(["python", "-m", "goals.cli", "skills", "list"], worktree)
+    assert "goals-decision-explainer" in skills.stdout
     permission = run(
         [
             "python",
