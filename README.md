@@ -21,6 +21,13 @@ Most users should only need these four commands:
 The lower-level commands still exist as advanced building blocks, but the daily
 loop should feel like: start, paste, check, view.
 
+## Prerequisites
+
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — used for every
+  install and command below. `uv` also auto-provisions Python 3.11+, so you do not need
+  to install Python separately.
+- `git` — `goals start` operates on a clean git repository with at least one commit.
+
 ## Install
 
 From this repository:
@@ -38,6 +45,10 @@ For development inside this repository, use:
 uv sync
 uv run pytest -q
 ```
+
+The usage examples below pipe to `pbcopy`, which is macOS-only. On Linux use
+`| xclip -selection clipboard` or `| wl-copy`; on Windows use `| clip`. Or run the
+`goals next` command without the pipe and copy the output manually.
 
 ## Use With Codex
 
