@@ -336,10 +336,13 @@ def _friendly_timestamp(iso: str) -> str:
 
 
 def _waiting_label(value: str) -> str:
+    # Answer *whose turn* it is; the goal status (eyebrow + banner) already says
+    # whether the agent is working, paused, or done — don't restate it here and
+    # risk contradicting it (e.g. "Agent (working)" on a complete goal).
     return {
         "you": "You",
-        "agent": "Agent (working)",
-        "no one": "No one — done",
+        "agent": "Agent",
+        "no one": "No one",
     }.get(str(value), str(value))
 
 

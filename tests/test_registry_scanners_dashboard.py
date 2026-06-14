@@ -195,7 +195,8 @@ def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:
     assert "<h2>Status</h2>" in text
 
     # "Waiting on" is mapped to plain language, never the raw token.
-    assert "Agent (working)" in text
+    assert "Agent" in text
+    assert "Agent (working)" not in text  # status, not turn-ownership, says "working"
 
 
 def test_dashboard_header_frames_journey_and_clamps_long_goal(tmp_path: Path) -> None:
