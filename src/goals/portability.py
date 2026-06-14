@@ -273,17 +273,24 @@ def build_native_goal_emission(
         "successfully."
     )
     if adapter == "claude":
+        # Typed into Claude Code's prompt (a slash command), not a shell — the
+        # backticks in `condition` are literal markdown here.
         command = f"/goal {condition}"
         notes = [
-            "Paste the condition into Claude Code with the `/goal` command; its "
-            "Stop hook keeps the session working until the condition holds.",
+            "Paste the line into Claude Code with the `/goal` command; its Stop "
+            "hook keeps the session working until the condition holds.",
             "The native check reads only the transcript — keep the durable proof "
             "in `.goals/goal-state.json` via `goals phase evidence`.",
         ]
     else:
-        command = f'codex "{condition}"'
+        # Pasted into Codex as the task's definition of done — NOT a shell
+        # command. Never wrap in `codex "..."`: the condition contains backticks
+        # that a shell would execute as command substitution (e.g. running
+        # `goals phase accept`) the moment it is pasted into a terminal.
+        command = condition
         notes = [
-            "Use the condition as the task's definition of done in Codex.",
+            "Paste this as the task's definition of done in Codex; it is task "
+            "text, not a shell command.",
             "If the local Codex goal feature is unavailable, paste it into the "
             "current session and let Goals remain the state layer.",
         ]
@@ -297,10 +304,14 @@ def emit_native_goal(cwd: Path, adapter: NativeAdapter) -> NativeGoalEmission:
 
 
 def render_native_goal_emission(emission: NativeGoalEmission) -> str:
+    if emission.adapter == "claude":
+        label = "Paste into Claude Code (a `/goal` prompt line, not a shell command):"
+    else:
+        label = "Paste into Codex as the task's definition of done (task text, not a shell command):"
     lines = [
         f"# Native goal condition ({emission.adapter})",
         "",
-        "Paste-ready command:",
+        label,
         "",
         f"    {emission.command}",
         "",

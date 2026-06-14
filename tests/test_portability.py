@@ -105,5 +105,10 @@ def test_emit_native_goal_claude_and_codex(tmp_path: Path) -> None:
     assert claude.notes
 
     codex = build_native_goal_emission(snapshot, "codex")
-    assert codex.command.startswith("codex ")
     assert codex.adapter == "codex"
+    # The codex paste-target is task text, NOT a shell command: it must not be
+    # wrapped in `codex "..."`, which would let the backticks in the condition
+    # run as shell command substitution (e.g. `goals phase accept P1`) on paste.
+    assert not codex.command.startswith("codex ")
+    assert not codex.command.strip().startswith('codex "')
+    assert codex.command == codex.condition
