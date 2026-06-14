@@ -106,6 +106,17 @@ def test_second_in_place_goal_is_refused(tmp_path: Path) -> None:
     assert Path(snapshot.topology.worktree_path) != tmp_path
 
 
+def test_in_place_slug_collision_is_refused_not_merged(tmp_path: Path) -> None:
+    # Two different objectives that slugify to the same id must not silently
+    # merge into one goal's event log.
+    _git_repo(tmp_path, branch="feature")
+    create_goal("Build the API!", tmp_path, workspace="in_place")
+    with pytest.raises(GoalsError, match="already active here"):
+        create_goal("Build the API?", tmp_path, workspace="in_place")
+    # The first goal's log is intact — its objective is unchanged.
+    assert load_active_snapshot(tmp_path).objective == "Build the API!"
+
+
 def test_dirty_tree_only_blocks_worktree_not_in_place(tmp_path: Path) -> None:
     _git_repo(tmp_path, branch="feature")
     (tmp_path / "dirty.txt").write_text("x")  # uncommitted change

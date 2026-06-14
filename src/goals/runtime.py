@@ -143,7 +143,11 @@ def create_goal(
     goal_id = slugify(objective)
     if plan.mode == "in_place":
         existing = _existing_goal_ids(plan.repo)
-        if existing and goal_id not in existing:
+        # In-place is one goal per repo root. Refuse ANY existing goal here —
+        # including a same-id slug collision (two different objectives that
+        # slugify alike), which would otherwise append a second goal_created
+        # event into the first goal's log and silently discard this objective.
+        if existing:
             raise GoalsError(
                 f"A goal is already active here ({', '.join(existing)}). Finish it, "
                 "or run the new goal in its own worktree with `--worktree` "
