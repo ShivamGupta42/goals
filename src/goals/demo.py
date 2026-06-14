@@ -17,12 +17,8 @@ from goals.runtime import (
 )
 from goals.storage import GoalsError, atomic_write_text
 
-DEMO_OBJECTIVE = "Create a reusable first-goal starter kit"
-DEMO_WHY = (
-    "Give new users a useful artifact while proving that Goals can plan, record "
-    "evidence, pass review, and show proof."
-)
-STARTER_KIT_FILE = "FIRST_GOAL.md"
+DEMO_OBJECTIVE = "Complete the first Goals demo"
+DEMO_WHY = "Prove that Goals can plan, record evidence, pass review, and show proof."
 
 
 @dataclass(frozen=True)
@@ -32,7 +28,6 @@ class DemoReport:
     accepted_phase: str
     current_phase: str | None
     dashboard_path: Path
-    starter_kit_path: Path
     portable_goal_path: Path
     portable_state_path: Path
 
@@ -52,7 +47,6 @@ class DemoReport:
             "current_phase": self.current_phase,
             "dashboard_path": str(self.dashboard_path),
             "dashboard_uri": self.dashboard_uri,
-            "starter_kit_path": str(self.starter_kit_path),
             "portable_goal_path": str(self.portable_goal_path),
             "portable_state_path": str(self.portable_state_path),
             "next_commands": self.next_commands,
@@ -63,7 +57,6 @@ def run_demo(out: Path | None = None) -> DemoReport:
     """Create a standalone demo goal and accept its first phase with real evidence."""
     workspace = _prepare_workspace(out)
     _write_demo_readme(workspace)
-    starter_kit_path = _write_starter_kit(workspace)
 
     snapshot = create_goal(DEMO_OBJECTIVE, workspace, why=DEMO_WHY, workspace="in_place")
     emit_dashboard(workspace)
@@ -71,21 +64,17 @@ def run_demo(out: Path | None = None) -> DemoReport:
 
     phase = next(phase for phase in snapshot.phases if phase.phase_id == "P1")
     evidence = Evidence(
-        changed_files=["README.md", STARTER_KIT_FILE],
+        changed_files=["README.md"],
         checks_run=[
-            "Created a standalone demo workspace with a reusable first-goal starter kit.",
+            "Created a standalone demo workspace.",
             "Rendered the Goals dashboard.",
             "Exported the portable goal spec.",
         ],
-        acceptance_met=[
-            *phase.acceptance_criteria,
-            "The starter kit gives the user a practical template for their first real goal.",
-        ],
+        acceptance_met=list(phase.acceptance_criteria),
         confidence=0.95,
         notes=(
-            "Goals demo produced FIRST_GOAL.md as a first-goal starter kit, then "
-            "recorded evidence for the first phase so the dashboard can show "
-            "proof of a useful artifact."
+            "Goals demo recorded evidence for the first phase so the dashboard "
+            "can show proof instead of a claim."
         ),
     )
     append_event(
@@ -110,7 +99,6 @@ def run_demo(out: Path | None = None) -> DemoReport:
         accepted_phase="P1",
         current_phase=snapshot.current_phase,
         dashboard_path=dashboard_path,
-        starter_kit_path=starter_kit_path,
         portable_goal_path=Path(export.markdown_path),
         portable_state_path=Path(export.state_path),
     )
@@ -129,7 +117,6 @@ def render_demo_report(report: DemoReport) -> str:
             f"Goal: `{report.goal_id}`",
             f"Accepted phase: `{report.accepted_phase}`",
             f"Current phase: `{report.current_phase or 'none'}`",
-            f"Useful artifact: `{report.starter_kit_path}`",
             f"Dashboard: {report.dashboard_uri}",
             f"Portable goal spec: `{report.portable_goal_path}`",
             f"Portable state JSON: `{report.portable_state_path}`",
@@ -168,9 +155,8 @@ def _write_demo_readme(workspace: Path, report: DemoReport | None = None) -> Non
         "",
         "This workspace was created by `goals demo`.",
         "",
-        "It gives you a reusable first-goal starter kit and proves that Goals can",
-        "create a plan, record evidence, pass review, accept one phase, and render",
-        "a dashboard without touching another project.",
+        "It proves that Goals can create a plan, record evidence, pass review,",
+        "accept one phase, and render a dashboard without touching another project.",
     ]
     if report is not None:
         lines += [
@@ -178,14 +164,12 @@ def _write_demo_readme(workspace: Path, report: DemoReport | None = None) -> Non
             "## What happened",
             "",
             "- Created a real Goals-managed goal.",
-            f"- Created `{STARTER_KIT_FILE}`, a reusable starter kit for your first real goal.",
             f"- Accepted phase `{report.accepted_phase}` with recorded evidence.",
             f"- Left phase `{report.current_phase or 'none'}` as the next active phase.",
             "- Rendered the dashboard and portable goal files.",
             "",
             "## Inspect it",
             "",
-            f"- Useful artifact: `{report.starter_kit_path}`",
             f"- Dashboard: {report.dashboard_uri}",
             f"- Portable goal spec: `{report.portable_goal_path}`",
             f"- Portable state JSON: `{report.portable_state_path}`",
@@ -195,58 +179,6 @@ def _write_demo_readme(workspace: Path, report: DemoReport | None = None) -> Non
             *[f"{index}. `{command}`" for index, command in enumerate(report.next_commands, start=1)],
         ]
     atomic_write_text(workspace / "README.md", "\n".join(lines) + "\n")
-
-
-def _write_starter_kit(workspace: Path) -> Path:
-    path = workspace / STARTER_KIT_FILE
-    atomic_write_text(
-        path,
-        "\n".join(
-            [
-                "# First Goal Starter Kit",
-                "",
-                "Use this file after the demo to turn a vague AI request into a",
-                "Goals-tracked task with clear proof.",
-                "",
-                "## 1. Name One Concrete Outcome",
-                "",
-                "Start with one result someone can inspect.",
-                "",
-                "- Vague: `make my project better`",
-                "- Clear: `add login with email/password and document how to test it`",
-                "",
-                "## 2. Write A Definition Of Done",
-                "",
-                "A good definition of done says what must be true at the end.",
-                "",
-                "- The requested behavior exists.",
-                "- The important files or screens are named.",
-                "- Tests, checks, or manual verification are recorded.",
-                "- Known gaps are explicit.",
-                "",
-                "## 3. Decide What Evidence Counts",
-                "",
-                "Evidence is proof that work happened and was checked.",
-                "",
-                "- Automated checks, such as `pytest` or `npm test`.",
-                "- Manual checks, such as opening a dashboard or trying a workflow.",
-                "- Changed files, screenshots, logs, or exported artifacts.",
-                "",
-                "## 4. Start Your Real Goal",
-                "",
-                "Run this from the project you want to improve:",
-                "",
-                '```bash',
-                'goals start "add the concrete outcome here"',
-                '```',
-                "",
-                "Then use `goals next`, `goals check`, and `goals view --open` as the",
-                "work progresses.",
-                "",
-            ]
-        ),
-    )
-    return path
 
 
 def _has_active_goal(path: Path) -> bool:

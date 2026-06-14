@@ -376,7 +376,6 @@ def test_demo_command_creates_verified_first_run(tmp_path: Path) -> None:
     assert payload["current_phase"] == "P2"
     assert Path(payload["dashboard_path"]).exists()
     assert payload["dashboard_uri"].startswith("file://")
-    assert Path(payload["starter_kit_path"]).exists()
     assert Path(payload["portable_goal_path"]).exists()
     assert Path(payload["portable_state_path"]).exists()
     assert payload["next_commands"] == [
@@ -393,19 +392,13 @@ def test_demo_command_creates_verified_first_run(tmp_path: Path) -> None:
     assert p1.status == PhaseStatus.ACCEPTED
     assert p1.evidence is not None
     assert p1.evidence.confidence == 0.95
-    assert "FIRST_GOAL.md" in p1.evidence.changed_files
-    assert "first-goal starter kit" in p1.evidence.notes
     assert p2.status == PhaseStatus.PENDING
     assert snapshot.current_phase == "P2"
 
     architecture_path = goal_file.parent / "architecture.md"
     assert architecture_path.exists()
-    starter_kit = (out / "FIRST_GOAL.md").read_text()
-    assert "First Goal Starter Kit" in starter_kit
-    assert "Decide What Evidence Counts" in starter_kit
     readme = (out / "README.md").read_text()
     assert "## What happened" in readme
-    assert "Created `FIRST_GOAL.md`" in readme
     assert "Accepted phase `P1` with recorded evidence." in readme
     assert "Left phase `P2` as the next active phase." in readme
     assert payload["dashboard_uri"] in readme
@@ -421,8 +414,6 @@ def test_demo_plain_output_points_to_dashboard_and_next_commands(tmp_path: Path)
 
     assert "# Goals Demo Complete" in result.stdout
     assert f"cd {out.resolve()}" in result.stdout
-    assert "Useful artifact:" in result.stdout
-    assert "FIRST_GOAL.md" in result.stdout
     assert "Dashboard: file://" in result.stdout
     assert "Portable state JSON:" in result.stdout
     assert "goals check" in result.stdout
