@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use Goals, please cite it and link back to the repository."
+title: Goals
+abstract: A no-nonsense goal workflow engine for Claude Code and Codex.
+type: software
+authors:
+  - given-names: Shivam
+    family-names: Gupta
+repository-code: "https://github.com/ShivamGupta42/goals"
+url: "https://github.com/ShivamGupta42/goals"
+license: MIT
