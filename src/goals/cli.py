@@ -98,6 +98,7 @@ from goals.portability import (
     CONTEXT_TARGETS,
     emit_native_goal,
     export_goal,
+    render_context_block,
     render_context_sync,
     render_export,
     render_native_goal_emission,
@@ -217,12 +218,31 @@ def check(
         "--strict",
         help="Exit non-zero when the combined check needs attention.",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
     """Run the main read-only goal health checks in one command."""
 
     def run():
         report = check_workflow(Path.cwd())
-        typer.echo(render_check_workflow(report))
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    {
+                        "goal_id": report.snapshot.goal_id,
+                        "passed": report.passed,
+                        "brief": report.brief.model_dump(mode="json"),
+                        "issues": report.issues.model_dump(mode="json"),
+                        "checkpoint": (
+                            report.checkpoint.model_dump(mode="json")
+                            if report.checkpoint
+                            else None
+                        ),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            typer.echo(render_check_workflow(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
@@ -341,15 +361,66 @@ def create(
 
 
 @app.command(rich_help_panel="Advanced building blocks")
-def status() -> None:
+def status(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
     """Show the active goal status."""
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    {
+                        "goal_id": snapshot.goal_id,
+                        "objective": snapshot.objective,
+                        "status": str(snapshot.status),
+                        "current_phase": snapshot.current_phase,
+                        "event_count": snapshot.event_count,
+                    },
+                    indent=2,
+                )
+            )
+            return
         typer.echo(f"Goal: {snapshot.objective}")
         typer.echo(f"Status: {snapshot.status}")
         typer.echo(f"Current phase: {snapshot.current_phase or 'none'}")
         typer.echo(f"Events: {snapshot.event_count}")
+
+    _handle(run)
+
+
+@context_app.command("show")
+def context_show(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Print the active goal's context block (for agent session hooks)."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if not json_output:
+            typer.echo(render_context_block(snapshot))
+            return
+        brief = build_goal_brief(snapshot)
+        current = next(
+            (p for p in snapshot.phases if p.phase_id == snapshot.current_phase), None
+        )
+        typer.echo(
+            json.dumps(
+                {
+                    "goal_id": snapshot.goal_id,
+                    "objective": snapshot.objective,
+                    "status": str(snapshot.status),
+                    "current_phase": snapshot.current_phase,
+                    "phase_title": current.title if current else None,
+                    "acceptance_criteria": list(current.acceptance_criteria) if current else [],
+                    "waiting_on": brief.waiting_on,
+                    "worktree_path": snapshot.topology.worktree_path,
+                    "next_step": brief.current_step,
+                },
+                indent=2,
+            )
+        )
 
     _handle(run)
 
