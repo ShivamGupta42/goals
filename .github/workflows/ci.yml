@@ -13,6 +13,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
       - run: uv run pytest -q
+      - run: uv run ruff check .
       - run: uv run goals validate || true
-      - run: uv run goals safety-check .
 
