@@ -182,14 +182,15 @@ def render_dashboard(
     code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--chip); padding:.06rem .35rem; border-radius:5px; font-size:.85em; overflow-wrap:anywhere; }}
     svg text {{ font-family:"Hanken Grotesk",-apple-system,system-ui,sans-serif; }}
     .bjourney {{ margin:.4rem 0 .6rem; }}
+    .aud {{ border:0; padding:0; margin:.4rem 0 0; display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; }}
     .aud-legend {{ font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); font-weight:700; margin-right:.55rem; }}
-    .bjourney > input {{ position:absolute; opacity:0; width:1px; height:1px; }}
-    .bjourney > input + label {{ font-size:.8rem; font-weight:600; color:var(--soft); background:var(--chip); border-radius:999px; padding:.22rem .7rem; margin-right:.3rem; cursor:pointer; }}
-    .bjourney > input:checked + label {{ background:var(--clay); color:var(--paper); }}
-    .bjourney > input:focus-visible + label {{ outline:3px solid var(--focus); outline-offset:2px; }}
+    .aud input {{ position:absolute; opacity:0; width:1px; height:1px; }}
+    .aud input + label {{ font-size:.8rem; font-weight:600; color:var(--soft); background:var(--chip); border-radius:999px; padding:.22rem .7rem; cursor:pointer; }}
+    .aud input:checked + label {{ background:var(--clay); color:var(--paper); }}
+    .aud input:focus-visible + label {{ outline:3px solid var(--focus); outline-offset:2px; }}
     .note-college, .note-hobbyist {{ display:none; color:var(--soft); }}
-    #aud-college:checked ~ .journey-body .note-college {{ display:inline; }}
-    #aud-hobbyist:checked ~ .journey-body .note-hobbyist {{ display:inline; }}
+    .bjourney:has(#aud-college:checked) .note-college {{ display:inline; }}
+    .bjourney:has(#aud-hobbyist:checked) .note-hobbyist {{ display:inline; }}
     .journey-body {{ margin-top:.9rem; }}
     .asm {{ list-style:none; padding:0; margin:.3rem 0 1rem; display:grid; gap:.5rem; }}
     .asm li {{ border:1px solid var(--line); border-left-width:3px; border-radius:10px; padding:.6rem .85rem; background:var(--card); }}
@@ -384,13 +385,15 @@ def _journey_html(snapshot: GoalSnapshot) -> str:
     return (
         '<section class="bjourney" aria-label="The building journey">'
         '<h3 class="subsec">The building journey</h3>'
-        '<span class="aud-legend">Explain it like</span>'
+        '<div class="aud" role="radiogroup" aria-label="Explain it like">'
+        '<span class="aud-legend" aria-hidden="true">Explain it like</span>'
         '<input type="radio" id="aud-hs" name="aud" checked>'
         '<label for="aud-hs">High school</label>'
         '<input type="radio" id="aud-college" name="aud">'
         '<label for="aud-college">College</label>'
         '<input type="radio" id="aud-hobbyist" name="aud">'
         '<label for="aud-hobbyist">Hobbyist</label>'
+        "</div>"
         f'<div class="journey-body">{body}</div>'
         "</section>"
     )

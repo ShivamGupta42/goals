@@ -215,7 +215,10 @@ def test_dashboard_renders_journey_with_toggle_and_broken_first(tmp_path: Path) 
 
     assert "The building journey" in text
     assert "A holding assumption." in text
-    # Accessible, JS-free audience toggle.
+    # Accessible, JS-free audience toggle: a named radio group with a programmatic
+    # group label, native keyboard-operable radios, and per-option labels.
+    assert 'role="radiogroup"' in text
+    assert 'aria-label="Explain it like"' in text
     assert 'name="aud"' in text
     assert 'id="aud-hs"' in text and "checked" in text
     assert '<label for="aud-college">' in text
@@ -305,3 +308,22 @@ def test_cli_assess_assume_and_journey(tmp_path: Path, monkeypatch) -> None:
     assert journey.exit_code == 0, journey.stdout
     assert "I assume one log is enough." in journey.stdout
     assert "open events.jsonl." in journey.stdout
+
+
+def test_cli_assess_breakdown_rejects_malformed_json(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["assess", "breakdown", "{not valid json"])
+    # A user-input error must surface as a clean message, not a raw traceback.
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.stdout
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_cli_assess_breakdown_rejects_invalid_schema(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # Valid JSON, but missing the required `problem` field.
+    result = runner.invoke(app, ["assess", "breakdown", '{"whys": []}'])
+    assert result.exit_code == 1
+    assert "Invalid ProblemBreakdown" in result.stdout

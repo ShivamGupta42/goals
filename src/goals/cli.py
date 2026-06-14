@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from pydantic import ValidationError
 
 from goals.adapters import adapter_check
 from goals.agent_hooks import session_start_payload, stop_payload
@@ -158,6 +159,24 @@ phase_app = typer.Typer(help="Agent phase protocol.")
 skills_app = typer.Typer(help="Discover and install skills from agent dirs.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 user_app = typer.Typer(help="Record and inspect private global user memory.")
+
+
+def _load_json_model(raw: str | None, model):
+    """Parse a user-supplied JSON string into a model with clean errors.
+
+    CLI args (inline JSON or a ``--file``) are a user-input boundary: malformed
+    JSON or a payload that fails validation must surface as a plain ``Error: …``,
+    not a raw traceback. ``_handle`` only catches ``GoalsError``, so we translate
+    ``JSONDecodeError`` and pydantic ``ValidationError`` here.
+    """
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError as exc:
+        raise GoalsError(f"Invalid JSON: {exc}") from exc
+    try:
+        return model.model_validate(data)
+    except ValidationError as exc:
+        raise GoalsError(f"Invalid {model.__name__}: {exc}") from exc
 
 
 def _handle(fn):
@@ -1434,7 +1453,7 @@ def assess_breakdown(
         if file is None and breakdown_json is None:
             raise GoalsError("Provide the breakdown as inline JSON or --file.")
         raw = file.read_text(encoding="utf-8") if file is not None else breakdown_json
-        breakdown = ProblemBreakdown.model_validate(json.loads(raw or "{}"))
+        breakdown = _load_json_model(raw, ProblemBreakdown)
         append_event(
             Path.cwd(),
             Event(
@@ -1575,7 +1594,7 @@ def phase_evidence(
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
         raw = file.read_text(encoding="utf-8") if file is not None else evidence_json
-        evidence = Evidence.model_validate(json.loads(raw or "{}"))
+        evidence = _load_json_model(raw, Evidence)
         append_event(
             Path.cwd(),
             Event(
