@@ -17,7 +17,9 @@ from goals.user_memory import (
 ModeAAdapter = Literal["auto", "claude", "codex"]
 
 
-def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") -> ModeAPlan:
+def build_mode_a_plan(
+    snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto", *, full: bool = True
+) -> ModeAPlan:
     selected, ready, detail = resolve_mode_a_adapter(adapter)
     phase = _current_phase(snapshot)
     worktree = Path(snapshot.topology.worktree_path)
@@ -51,7 +53,7 @@ def build_mode_a_plan(snapshot: GoalSnapshot, adapter: ModeAAdapter = "auto") ->
         evidence_template=evidence,
         prompt="",
     )
-    return plan.model_copy(update={"prompt": render_mode_a_prompt(snapshot, plan)})
+    return plan.model_copy(update={"prompt": render_mode_a_prompt(snapshot, plan, full=full)})
 
 
 def resolve_mode_a_adapter(adapter: ModeAAdapter) -> tuple[Literal["claude", "codex"], bool, str]:
@@ -87,15 +89,17 @@ def recommended_checks(worktree: Path) -> list[str]:
     return checks
 
 
-def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan) -> str:
+def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan, *, full: bool = True) -> str:
     adapter_notes = _adapter_notes(plan.adapter, plan.adapter_ready, plan.adapter_detail)
     criteria = _bullets(plan.acceptance_criteria)
+    evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
+    if not full:
+        return _render_short_prompt(snapshot, plan, criteria, evidence_json, adapter_notes)
     checks = _bullets(plan.recommended_checks)
     memory = render_memory_suggestions(plan.memory_suggestions)
     personalization = _personalization_for_prompt()
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
-    evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
 Mode A adapter: {plan.adapter}
@@ -116,19 +120,20 @@ Acceptance criteria:
 
 Required loop:
 1. Read `goal.json` before each turn and work only on the current phase.
-2. Make reversible progress without changing unrelated files.
-3. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
-4. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
-5. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
-6. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
-7. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
-8. If `goals brief` says `Waiting on: you`, or `goals issues` lists anything under `Needs The User`, ask exactly one plain-language question using the brief wording, then stop. Do not run review or accept until the user answers and the answer is recorded.
-9. Run `goals checkpoint current` to confirm the current checkpoint, unresolved proof, and next safe step.
-10. Run `goals architecture check --strict` to catch changed code files missing from the architecture map or stale architecture evidence.
-11. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
-12. Run `goals phase review {plan.current_phase}`.
-13. Only after the review passes, run `goals phase accept {plan.current_phase}`.
-14. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
+2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
+3. Make reversible progress without changing unrelated files.
+4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
+5. Put phase evidence in `{plan.evidence_file}` using the JSON shape below.
+6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`.
+7. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
+8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
+9. If `goals brief` says `Waiting on: you`, or `goals issues` lists anything under `Needs The User`, ask exactly one plain-language question using the brief wording, then stop. Do not run review or accept until the user answers and the answer is recorded.
+10. Run `goals checkpoint current` to confirm the current checkpoint, unresolved proof, and next safe step.
+11. Run `goals architecture check --strict` to catch changed code files missing from the architecture map or stale architecture evidence.
+12. Run `goals merge-check` to catch migration ordering, branch drift, or parallel-worktree merge risks before acceptance.
+13. Run `goals phase review {plan.current_phase}`.
+14. Only after the review passes, run `goals phase accept {plan.current_phase}`.
+15. Run `goals run --adapter {plan.adapter}` before moving to the next phase.
 
 Parallel worktree merge gate:
 - `goals merge-check` scans sibling worktrees when Git exposes them, then reports dirty worktrees, branch drift, file overlap, and migration-ordering risk as agent repair actions unless an explicit high-risk user approval is missing.
@@ -177,6 +182,57 @@ Portable handoff (works across agents):
 - Run `goals emit --agent {plan.adapter}` to get a transcript-verifiable native stop-condition derived from this phase's acceptance criteria.
 
 Goals is the durable state and review layer. The native agent goal loop owns persistence of attention; Goals owns phases, evidence, gates, decisions, learnings, memory, the dashboard, and the portable goal spec other agents can read.
+"""
+
+
+def _render_short_prompt(
+    snapshot: GoalSnapshot,
+    plan: ModeAPlan,
+    criteria: str,
+    evidence_json: str,
+    adapter_notes: str,
+) -> str:
+    """The calm default handoff: enough to act, not a 15-step wall.
+
+    Paths are shown relative to the goal worktree, and `goals next --full` reaches
+    the complete protocol (gates, permissions, sources, memory, portable handoff).
+    """
+    worktree = Path(snapshot.topology.worktree_path)
+    try:
+        evidence_rel = str(Path(plan.evidence_file).relative_to(worktree))
+    except ValueError:
+        evidence_rel = plan.evidence_file
+    phase = plan.current_phase
+    return f"""/goal Finish this Goals-managed task: {snapshot.objective}
+
+Current phase: {phase} - {plan.phase_title}
+Phase goal: {plan.phase_goal}
+Acceptance:
+{criteria}
+
+Do this:
+1. Assess (PACERS): break this phase into sub-problems and hunt the assumptions \
+your approach depends on. Record them with \
+`goals assess assume "I'm assuming X" --building "..." --toward "..." [--depends] --phase {phase}` \
+and `goals assess breakdown --problem "..." --subproblem "statement | task | open question"`. \
+Write them plainly enough for a non-technical reader — they become the dashboard's building journey.
+2. Build only this phase. Keep changes reversible and don't touch unrelated files.
+3. Record proof: write evidence JSON to `{evidence_rel}`, then run \
+`goals phase evidence {phase} --file {evidence_rel}`.
+4. Run `goals brief`. If it says `Waiting on: you`, ask one plain-language question in its \
+wording and stop. Otherwise continue.
+5. Run `goals phase review {phase}`; once it passes, `goals phase accept {phase}`.
+
+Evidence JSON shape:
+```json
+{evidence_json}
+```
+
+Paths above are relative to the goal worktree: {worktree}
+For the complete protocol (architecture, merge, permission, source, and memory gates, plus the \
+portable cross-agent handoff), run `goals next --full`. For a plain-language status any time, run \
+`goals check`.
+{adapter_notes}
 """
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from pydantic import ValidationError
 
 from goals.adapters import adapter_check
 from goals.agent_hooks import session_start_payload, stop_payload
@@ -61,7 +62,9 @@ from goals.loop_improve import (
 )
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
+from goals.journey import render_journey_text
 from goals.models import (
+    Assumption,
     CheckpointKind,
     CheckpointStatus,
     Decision,
@@ -75,9 +78,11 @@ from goals.models import (
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
+    ProblemBreakdown,
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
+    Subproblem,
     UserMemoryEvent,
     utc_now,
 )
@@ -143,6 +148,7 @@ from goals.workflows import (
 app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing track.")
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
+assess_app = typer.Typer(help="Record the building journey — assumptions and problem breakdowns.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
@@ -154,6 +160,49 @@ phase_app = typer.Typer(help="Agent phase protocol.")
 skills_app = typer.Typer(help="Discover and install skills from agent dirs.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
 user_app = typer.Typer(help="Record and inspect private global user memory.")
+
+
+def _load_json_model(inline: str | None, file: Optional[Path], model):
+    """Read inline-or-``--file`` JSON into a model with clean errors.
+
+    CLI args are a user-input boundary: an unreadable ``--file``, malformed JSON,
+    or a payload that fails validation must all surface as a plain ``Error: …``,
+    not a raw traceback. ``_handle`` only catches ``GoalsError``, so we translate
+    ``OSError`` (read), ``JSONDecodeError`` (parse), and pydantic
+    ``ValidationError`` (schema) here. The caller still enforces exactly-one-of
+    inline/``--file`` so it can word that message naturally.
+    """
+    if file is not None:
+        try:
+            raw: str | None = file.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GoalsError(f"Could not read {file}: {exc}") from exc
+    else:
+        raw = inline
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError as exc:
+        raise GoalsError(f"Invalid JSON: {exc}") from exc
+    try:
+        return model.model_validate(data)
+    except ValidationError as exc:
+        raise GoalsError(f"Invalid {model.__name__}: {exc}") from exc
+
+
+def _parse_subproblem(spec: str) -> Subproblem:
+    """Parse a flag-mode sub-problem: "statement | task1; task2 | q1; q2".
+
+    Only the statement is required; the tasks and open-questions segments are
+    optional and each splits on ``;``. Lets a user author a breakdown without
+    writing nested JSON.
+    """
+    parts = [segment.strip() for segment in spec.split("|")]
+    statement = parts[0]
+    if not statement:
+        raise GoalsError("A --subproblem needs a statement before the first '|'.")
+    tasks = [t.strip() for t in parts[1].split(";") if t.strip()] if len(parts) > 1 else []
+    questions = [q.strip() for q in parts[2].split(";") if q.strip()] if len(parts) > 2 else []
+    return Subproblem(statement=statement, tasks=tasks, open_questions=questions)
 
 
 def _handle(fn):
@@ -195,11 +244,12 @@ def start(
             plan = resolve_workspace(Path.cwd(), requested="auto")
             if plan.ambiguous:
                 answer = typer.prompt(
-                    f"On branch '{plan.base_branch}'. Isolate this goal in a worktree "
-                    "(recommended for parallel goals) or work in place? [worktree/in-place]",
-                    default="worktree",
+                    f"On branch '{plan.base_branch}'. Work in place (simplest, no cd), "
+                    "or isolate this goal in a worktree (for several goals at once)? "
+                    "[in-place/worktree]",
+                    default="in-place",
                 )
-                requested = "in_place" if answer.strip().lower().startswith("in") else "worktree"
+                requested = "worktree" if answer.strip().lower().startswith("w") else "in_place"
         report = start_workflow(
             objective,
             Path.cwd(),
@@ -222,11 +272,18 @@ def next_command(
         "--adapter",
         help="Native agent to prepare instructions for.",
     ),
+    full: bool = typer.Option(
+        False, "--full", help="Print the complete protocol (gates, permissions, sources, memory)."
+    ),
 ) -> None:
-    """Refresh goal files and print the next paste-ready agent handoff."""
+    """Refresh goal files and print the next paste-ready agent handoff.
+
+    Prints a short, act-now handoff by default; add ``--full`` for the complete
+    protocol with every gate, permission, source, and memory step.
+    """
 
     def run():
-        report = next_workflow(Path.cwd(), agent=agent)
+        report = next_workflow(Path.cwd(), agent=agent, full=full)
         typer.echo(report.plan.prompt)
 
     _handle(run)
@@ -344,6 +401,7 @@ def context_sync(
 
 app.add_typer(adapter_app, name="adapter", rich_help_panel="Advanced building blocks")
 app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced building blocks")
+app.add_typer(assess_app, name="assess", rich_help_panel="Advanced building blocks")
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
@@ -694,7 +752,7 @@ def validate() -> None:
         derived = store.snapshot()
         if not store.snapshot_path.exists():
             raise GoalsError("Derived snapshot file is missing.")
-        stored = type(derived).model_validate_json(store.snapshot_path.read_text(encoding="utf-8"))
+        stored = _load_json_model(None, store.snapshot_path, type(derived))
         if stored.model_dump(mode="json") != derived.model_dump(mode="json"):
             raise GoalsError("Derived snapshot does not match the event log. Run `goals repair`.")
         registries = validate_registries(Path.cwd())
@@ -806,7 +864,7 @@ def architecture_update(
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        architecture = GoalArchitectureMap.model_validate_json(file.read_text(encoding="utf-8"))
+        architecture = _load_json_model(None, file, GoalArchitectureMap)
         append_event(
             Path.cwd(),
             Event(
@@ -1000,7 +1058,13 @@ def user_import_insights(
     """Import a Claude Code /insights summary as candidate user memory."""
 
     def run():
-        text = sys.stdin.read() if str(file) == "-" else file.read_text(encoding="utf-8")
+        if str(file) == "-":
+            text = sys.stdin.read()
+        else:
+            try:
+                text = file.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise GoalsError(f"Could not read {file}: {exc}") from exc
         events = events_from_insights(text, area=_user_area(area))  # type: ignore[arg-type]
         if not events:
             raise GoalsError("No usable insight statements found.")
@@ -1254,7 +1318,7 @@ def decision_explain(
             raise GoalsError("level must be basic, detailed, or technical.")
         snapshot = load_active_snapshot(Path.cwd())
         context = build_decision_context(snapshot, _personalization_or_none())
-        decision = Decision.model_validate_json(file.read_text(encoding="utf-8"))
+        decision = _load_json_model(None, file, Decision)
         if not decision.suggested_reply:
             decision.suggested_reply = f"I choose: {decision.recommendation}"
         decision.what_we_know = decision.what_we_know or []
@@ -1338,6 +1402,168 @@ def decision_brief(
             typer.echo(brief.model_dump_json(indent=2))
         else:
             typer.echo(render_decision_brief(brief))
+
+    _handle(run)
+
+
+@assess_app.command("assume")
+def assess_assume(
+    statement: str = typer.Argument(..., help="Plain-English assumption: 'I'm assuming X'."),
+    building: str = typer.Option("", "--building", help="What's being built (the X)."),
+    toward: str = typer.Option("", "--toward", help="The sub-problem this works toward (the Y)."),
+    depends: bool = typer.Option(
+        False,
+        "--depends/--no-depends",
+        help="Mark load-bearing: the solution depends on this assumption holding.",
+    ),
+    status: str = typer.Option(
+        "holding", "--status", help="holding, validated, or broken."
+    ),
+    phase: Optional[str] = typer.Option(None, "--phase", help="Phase this belongs to (e.g. P2)."),
+    college: str = typer.Option("", "--college", help="Optional richer framing for a college reader."),
+    hobbyist: str = typer.Option("", "--hobbyist", help="Optional framing for a hobbyist/tinkerer."),
+    reversible: bool = typer.Option(
+        True, "--reversible/--irreversible", help="Whether the assumption is cheap to revisit."
+    ),
+    assumption_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to update an existing assumption (e.g. flip to broken)."
+    ),
+    confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
+) -> None:
+    """Record (or update) an assumption the agent is leaning on while building.
+
+    This is PACERS' *Assess* — hunting the assumptions a plan depends on. The
+    ``statement`` should read at a high-school level; ``--college``/``--hobbyist``
+    only add framing for those readers. Re-run with the same ``--id`` to update an
+    assumption's status (e.g. ``--status broken``) without duplicating it.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        notes = {}
+        if college:
+            notes["college"] = college
+        if hobbyist:
+            notes["hobbyist"] = hobbyist
+        fields = dict(
+            statement=statement,
+            building=building,
+            toward=toward,
+            depends_on=depends,
+            status=_validate_choice(status, {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
+            confidence=confidence,
+            reversible=reversible,
+            phase_id=phase,
+            audience_notes=notes,
+        )
+        if assumption_id is not None:
+            fields["assumption_id"] = assumption_id
+        assumption = Assumption(**fields)
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.ASSUMPTION_RECORDED,
+                payload={"assumption": assumption.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded assumption: {assumption.assumption_id} ({assumption.status})")
+
+    _handle(run)
+
+
+@assess_app.command("breakdown")
+def assess_breakdown(
+    breakdown_json: Optional[str] = typer.Argument(None),
+    file: Optional[Path] = typer.Option(
+        None, "--file", "-f", help="Read the breakdown JSON from a file."
+    ),
+    problem: Optional[str] = typer.Option(
+        None, "--problem", help="Rephrased problem (switches to no-JSON flag mode)."
+    ),
+    subproblem: Optional[list[str]] = typer.Option(
+        None,
+        "--subproblem",
+        help='Sub-problem, repeatable. Optional tasks/questions: '
+        '"statement | task1; task2 | question1; question2".',
+    ),
+    why: Optional[list[str]] = typer.Option(
+        None, "--why", help="A step in the 5-Whys chain. Repeat for the chain."
+    ),
+    pause: str = typer.Option("", "--pause", help="The Pause/satisficing check."),
+    system: str = typer.Option("", "--system", help="System view (for recurring problems)."),
+    phase: Optional[str] = typer.Option(None, "--phase", help="Phase this belongs to (e.g. P2)."),
+) -> None:
+    """Record how the agent broke a goal or phase into sub-problems.
+
+    Two ways to author it:
+
+    - Flag mode (no JSON): ``--problem "..." --subproblem "..." [--why ...]``.
+      A sub-problem may carry tasks and open questions with a simple
+      ``"statement | task1; task2 | q1; q2"`` form.
+    - JSON mode: a full ProblemBreakdown object inline or via ``--file`` (for the
+      richer fields like per-audience notes).
+
+    This is the artifact behind the journey's "how the agent broke the problem down".
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if problem is not None:
+            if file is not None or breakdown_json is not None:
+                raise GoalsError("Use flag mode (--problem) or JSON (--file/inline), not both.")
+            breakdown = ProblemBreakdown(
+                problem=problem,
+                phase_id=phase,
+                whys=why or [],
+                pause_note=pause,
+                system_view=system,
+                subproblems=[_parse_subproblem(spec) for spec in (subproblem or [])],
+            )
+        else:
+            if file is not None and breakdown_json is not None:
+                raise GoalsError("Provide the breakdown as inline JSON or --file, not both.")
+            if file is None and breakdown_json is None:
+                raise GoalsError(
+                    "Provide the breakdown in flag mode (--problem …) or as JSON (--file/inline)."
+                )
+            breakdown = _load_json_model(breakdown_json, file, ProblemBreakdown)
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.BREAKDOWN_RECORDED,
+                payload={"breakdown": breakdown.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded breakdown: {breakdown.breakdown_id}")
+
+    _handle(run)
+
+
+@assess_app.command("journey")
+def assess_journey(
+    audience: str = typer.Option(
+        "high_school", "--audience", help="high_school, college, or hobbyist."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show the building journey in plain language at the chosen audience level."""
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        level = _validate_choice(
+            audience, {"high_school", "college", "hobbyist"}, "audience"
+        )
+        if json_output:
+            payload = {
+                "assumptions": [a.model_dump() for a in snapshot.assumptions],
+                "breakdowns": [b.model_dump() for b in snapshot.breakdowns],
+                "judgements": [j.model_dump() for j in snapshot.judgements],
+            }
+            typer.echo(json.dumps(payload, indent=2))
+        else:
+            typer.echo(render_journey_text(snapshot, level))  # type: ignore[arg-type]
 
     _handle(run)
 
@@ -1441,8 +1667,7 @@ def phase_evidence(
             raise GoalsError("Provide evidence as inline JSON or --file, not both.")
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
-        raw = file.read_text(encoding="utf-8") if file is not None else evidence_json
-        evidence = Evidence.model_validate(json.loads(raw or "{}"))
+        evidence = _load_json_model(evidence_json, file, Evidence)
         append_event(
             Path.cwd(),
             Event(

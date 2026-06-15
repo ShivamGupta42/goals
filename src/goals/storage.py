@@ -9,6 +9,7 @@ from tempfile import NamedTemporaryFile
 from typing import Iterator
 
 from goals.models import (
+    Assumption,
     Decision,
     Evidence,
     Event,
@@ -20,6 +21,7 @@ from goals.models import (
     JudgementRecord,
     PhaseCheckpoint,
     PhaseStatus,
+    ProblemBreakdown,
     SourceClaim,
     SourceRecord,
 )
@@ -168,6 +170,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.DECISION_RECORDED:
             snapshot.judgements.append(JudgementRecord.model_validate(payload["judgement"]))
+        elif event.event_type == EventType.ASSUMPTION_RECORDED:
+            assumption = Assumption.model_validate(payload["assumption"])
+            _upsert_assumption(snapshot.assumptions, assumption)
+        elif event.event_type == EventType.BREAKDOWN_RECORDED:
+            breakdown = ProblemBreakdown.model_validate(payload["breakdown"])
+            _upsert_breakdown(snapshot.breakdowns, breakdown)
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
         elif event.event_type == EventType.SOURCE_RECORDED:
@@ -196,6 +204,24 @@ def _upsert_checkpoint(checkpoints: list[PhaseCheckpoint], checkpoint: PhaseChec
             checkpoints[index] = checkpoint
             return
     checkpoints.append(checkpoint)
+
+
+def _upsert_assumption(assumptions: list[Assumption], assumption: Assumption) -> None:
+    # Re-emitting an assumption (e.g. flipping status holding -> broken) replaces
+    # the prior record rather than stacking a duplicate.
+    for index, existing in enumerate(assumptions):
+        if existing.assumption_id == assumption.assumption_id:
+            assumptions[index] = assumption
+            return
+    assumptions.append(assumption)
+
+
+def _upsert_breakdown(breakdowns: list[ProblemBreakdown], breakdown: ProblemBreakdown) -> None:
+    for index, existing in enumerate(breakdowns):
+        if existing.breakdown_id == breakdown.breakdown_id:
+            breakdowns[index] = breakdown
+            return
+    breakdowns.append(breakdown)
 
 
 def _next_pending_phase_id(snapshot: GoalSnapshot) -> str | None:

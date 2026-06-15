@@ -85,11 +85,11 @@ def start_workflow(
     return WorkflowStart(snapshot=snapshot, plan=plan, dashboard_path=dashboard_path)
 
 
-def next_workflow(cwd: Path, *, agent: ModeAAdapter = "auto") -> WorkflowNext:
+def next_workflow(cwd: Path, *, agent: ModeAAdapter = "auto", full: bool = False) -> WorkflowNext:
     claim_worktree(cwd)
     dashboard_path = emit_dashboard(cwd)
     snapshot = load_active_snapshot(cwd)
-    plan = build_mode_a_plan(snapshot, agent)
+    plan = build_mode_a_plan(snapshot, agent, full=full)
     return WorkflowNext(snapshot=snapshot, plan=plan, dashboard_path=dashboard_path)
 
 

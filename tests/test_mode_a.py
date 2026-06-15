@@ -46,6 +46,10 @@ def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> 
     assert plan.adapter_ready is True
     assert "Claude Mode A notes" in plan.prompt
     assert "goals phase evidence P1 --file" in plan.prompt
+    # The PACERS Assess step is wired into the CLI handoff, not just the Claude
+    # skill, so a CLI-driven agent also populates the building journey.
+    assert "goals assess assume" in plan.prompt
+    assert "goals assess breakdown" in plan.prompt
     assert "goals issues" in plan.prompt
     assert "goals brief" in plan.prompt
     assert "Waiting on: you" in plan.prompt
@@ -87,3 +91,25 @@ def test_build_mode_a_plan_can_target_codex_when_not_ready(monkeypatch, tmp_path
     assert "goals user show" in plan.prompt
     assert "do not assume a native Codex `/insights` command exists" in plan.prompt
     assert "feature disabled" in plan.prompt
+
+
+def test_short_handoff_is_calm_and_points_to_full(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (name == "claude", "ok"))
+    snap = snapshot_for(tmp_path)
+    short = build_mode_a_plan(snap, "claude", full=False).prompt
+    full = build_mode_a_plan(snap, "claude", full=True).prompt
+    # Short is genuinely shorter and still actionable.
+    assert len(short) < len(full) / 2
+    assert "Current phase: P1" in short
+    assert "goals assess assume" in short  # PACERS Assess still front-and-center
+    assert "goals phase evidence P1" in short
+    assert "goals next --full" in short  # escape hatch to the complete protocol
+    # The heavy gates live only in --full, not the default handoff.
+    assert "Parallel worktree merge gate" not in short
+    assert "Permission policy:" not in short
+    assert "Self-evolution memory:" not in short
+    assert "Parallel worktree merge gate" in full
+    assert "Permission policy:" in full
+    # Paths in the short handoff are relative to the worktree, not absolute.
+    assert str(tmp_path) not in short.split("relative to the goal worktree")[0]
+    assert ".agent-workflow/goals/demo/evidence-p1.json" in short

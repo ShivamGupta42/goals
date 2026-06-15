@@ -56,6 +56,8 @@ class EventType(StrEnum):
     PHASE_CHECKPOINT_RECORDED = "phase_checkpoint_recorded"
     DECISION_REQUESTED = "decision_requested"
     DECISION_RECORDED = "decision_recorded"
+    ASSUMPTION_RECORDED = "assumption_recorded"
+    BREAKDOWN_RECORDED = "breakdown_recorded"
     ARCHITECTURE_UPDATED = "architecture_updated"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
@@ -381,6 +383,74 @@ class JudgementRecord(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     profile_claim_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+# Who the building-journey explanation is written for. The agent authors the
+# always-visible base `statement` at a high-school reading level; `college` and
+# `hobbyist` are optional richer framings layered on top (see `journey.reframe`).
+Audience = Literal["high_school", "college", "hobbyist"]
+
+
+class Assumption(BaseModel):
+    """A plain-English assumption the agent is leaning on while building.
+
+    The atom of the building journey: "I'm assuming X (``building``) in order to
+    make progress on Y (``toward``)." Recorded so a non-technical reader can trace
+    *why* the agent did something. ``depends_on`` marks the load-bearing ones —
+    the assumptions whose failure would unravel the work (PACERS: "know which ones
+    your solution depends on"). ``status`` lets a later event flip an assumption to
+    ``validated`` or ``broken`` without losing the original call.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    assumption_id: str = Field(default_factory=lambda: f"A-{uuid4().hex[:8]}")
+    statement: str
+    building: str = ""
+    toward: str = ""
+    depends_on: bool = False
+    status: Literal["holding", "validated", "broken"] = "holding"
+    confidence: float = 0.0
+    reversible: bool = True
+    phase_id: str | None = None
+    audience_notes: dict[str, str] = Field(default_factory=dict)
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+class Subproblem(BaseModel):
+    """One branch of a problem breakdown: a sub-problem and how it's tackled."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    statement: str
+    solves: str = ""
+    tasks: list[str] = Field(default_factory=list)
+    assumption_ids: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    audience_notes: dict[str, str] = Field(default_factory=dict)
+
+
+class ProblemBreakdown(BaseModel):
+    """The Assess output: how the agent broke a goal or phase into sub-problems.
+
+    Captures the critical-thinking pass — the rephrased problem, the 5-Whys chain
+    to the root, a Pause note (did the agent check it wasn't just satisficing?),
+    the sub-problems with their tasks and open questions, and an optional system
+    view for recurring problems. Keyed by ``breakdown_id`` so re-running Assess on
+    a phase replaces rather than duplicates.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    breakdown_id: str = Field(default_factory=lambda: f"BD-{uuid4().hex[:8]}")
+    phase_id: str | None = None
+    problem: str
+    whys: list[str] = Field(default_factory=list)
+    pause_note: str = ""
+    subproblems: list[Subproblem] = Field(default_factory=list)
+    system_view: str = ""
+    audience_notes: dict[str, str] = Field(default_factory=dict)
     recorded_at: str = Field(default_factory=utc_now)
 
 
@@ -761,6 +831,8 @@ class GoalSnapshot(BaseModel):
     current_phase: str | None = None
     decisions: list[Decision] = Field(default_factory=list)
     judgements: list[JudgementRecord] = Field(default_factory=list)
+    assumptions: list[Assumption] = Field(default_factory=list)
+    breakdowns: list[ProblemBreakdown] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

@@ -79,6 +79,38 @@ def build_portable_state(snapshot: GoalSnapshot) -> dict:
         "blockers": list(snapshot.blockers),
         "risks": list(snapshot.risks),
         "learnings": list(snapshot.learnings),
+        "assumptions": [
+            {
+                "id": assumption.assumption_id,
+                "statement": assumption.statement,
+                "building": assumption.building,
+                "toward": assumption.toward,
+                "depends_on": assumption.depends_on,
+                "status": assumption.status,
+                "phase": assumption.phase_id,
+            }
+            for assumption in snapshot.assumptions
+        ],
+        "breakdowns": [
+            {
+                "id": breakdown.breakdown_id,
+                "phase": breakdown.phase_id,
+                "problem": breakdown.problem,
+                "whys": list(breakdown.whys),
+                "pause_note": breakdown.pause_note,
+                "system_view": breakdown.system_view,
+                "subproblems": [
+                    {
+                        "statement": sub.statement,
+                        "solves": sub.solves,
+                        "tasks": list(sub.tasks),
+                        "open_questions": list(sub.open_questions),
+                    }
+                    for sub in breakdown.subproblems
+                ],
+            }
+            for breakdown in snapshot.breakdowns
+        ],
         "last_updated": snapshot.last_updated,
     }
 
@@ -148,6 +180,13 @@ def render_goal_markdown(snapshot: GoalSnapshot) -> str:
             lines.append(f"- **{decision.title}** — recommend: {decision.recommendation}")
             if options:
                 lines.append(f"  - Options: {options}")
+
+    if snapshot.assumptions:
+        lines += ["", "## Building journey — what the agent assumed"]
+        for assumption in snapshot.assumptions:
+            flag = " _(load-bearing)_" if assumption.depends_on else ""
+            toward = f" — toward {assumption.toward}" if assumption.toward else ""
+            lines.append(f"- [{assumption.status}]{flag} {assumption.statement}{toward}")
 
     for title, items in (
         ("Blockers", snapshot.blockers),
