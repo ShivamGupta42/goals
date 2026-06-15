@@ -272,11 +272,18 @@ def next_command(
         "--adapter",
         help="Native agent to prepare instructions for.",
     ),
+    full: bool = typer.Option(
+        False, "--full", help="Print the complete protocol (gates, permissions, sources, memory)."
+    ),
 ) -> None:
-    """Refresh goal files and print the next paste-ready agent handoff."""
+    """Refresh goal files and print the next paste-ready agent handoff.
+
+    Prints a short, act-now handoff by default; add ``--full`` for the complete
+    protocol with every gate, permission, source, and memory step.
+    """
 
     def run():
-        report = next_workflow(Path.cwd(), agent=agent)
+        report = next_workflow(Path.cwd(), agent=agent, full=full)
         typer.echo(report.plan.prompt)
 
     _handle(run)
