@@ -244,11 +244,12 @@ def start(
             plan = resolve_workspace(Path.cwd(), requested="auto")
             if plan.ambiguous:
                 answer = typer.prompt(
-                    f"On branch '{plan.base_branch}'. Isolate this goal in a worktree "
-                    "(recommended for parallel goals) or work in place? [worktree/in-place]",
-                    default="worktree",
+                    f"On branch '{plan.base_branch}'. Work in place (simplest, no cd), "
+                    "or isolate this goal in a worktree (for several goals at once)? "
+                    "[in-place/worktree]",
+                    default="in-place",
                 )
-                requested = "in_place" if answer.strip().lower().startswith("in") else "worktree"
+                requested = "worktree" if answer.strip().lower().startswith("w") else "in_place"
         report = start_workflow(
             objective,
             Path.cwd(),

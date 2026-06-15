@@ -26,6 +26,18 @@ def _git_repo(path: Path, *, branch: str = "main") -> None:
 
 
 # --- resolver (pure) ------------------------------------------------------- #
+def test_slugify_keeps_whole_words_and_stays_short() -> None:
+    from goals.git_ops import slugify
+
+    slug = slugify("Build a tiny tip-split CLI that divides a bill by N people")
+    assert len(slug) <= 32
+    assert not slug.endswith("-")
+    # No mid-word truncation like the old 48-char hard cut ("…a-bill-b").
+    assert all(part.isalnum() for part in slug.split("-"))
+    assert slug.startswith("build")
+    assert slugify("") == "goal"
+
+
 def test_resolve_non_git_dir_is_in_place(tmp_path: Path) -> None:
     plan = resolve_workspace(tmp_path)
     assert plan.mode == "in_place"
@@ -40,11 +52,11 @@ def test_resolve_on_main_forces_worktree_even_when_in_place_requested(tmp_path: 
     assert plan.ambiguous is False
 
 
-def test_resolve_on_feature_branch_auto_is_ambiguous_worktree(tmp_path: Path) -> None:
+def test_resolve_on_feature_branch_auto_defaults_in_place_but_ambiguous(tmp_path: Path) -> None:
     _git_repo(tmp_path, branch="feature")
     plan = resolve_workspace(tmp_path, requested="auto")
-    assert plan.mode == "worktree"
-    assert plan.ambiguous is True  # caller may prompt
+    assert plan.mode == "in_place"  # the calm, no-cd default
+    assert plan.ambiguous is True  # caller may still prompt to offer a worktree
 
 
 def test_resolve_feature_branch_in_place_honored(tmp_path: Path) -> None:

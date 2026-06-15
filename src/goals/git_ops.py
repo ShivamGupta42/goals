@@ -140,9 +140,21 @@ def has_commits(repo: Path) -> bool:
     return result.returncode == 0
 
 
-def slugify(text: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
-    return slug[:48] or "goal"
+def slugify(text: str, max_len: int = 32) -> str:
+    """A short, readable slug for branch/worktree/goal-id names.
+
+    Keeps whole words up to ``max_len`` so names never truncate mid-word (the old
+    48-char hard cut produced things like ``…divides-a-bill-b``). Collisions are
+    handled by the callers, which refuse or error clearly rather than corrupt.
+    """
+    words = re.sub(r"[^a-zA-Z0-9]+", " ", text.lower()).split()
+    slug = ""
+    for word in words:
+        candidate = f"{slug}-{word}" if slug else word
+        if slug and len(candidate) > max_len:
+            break
+        slug = candidate
+    return slug[:max_len] or "goal"
 
 
 def create_worktree(repo: Path, goal_id: str, objective: str) -> tuple[Path, str]:

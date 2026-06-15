@@ -107,8 +107,9 @@ def resolve_workspace(
     - **Non-git directory** → in-place (full non-git support); no isolation.
     - **Default branch (main/master)** → always a worktree; goals never modifies
       the base checkout. Any `--in-place` request is overridden here.
-    - **Feature branch** → honor `--worktree`/`--in-place`; `auto` defaults to a
-      worktree and flags `ambiguous` so an interactive caller can offer a choice.
+    - **Feature branch** → honor `--worktree`/`--in-place`; `auto` defaults to
+      working **in place** (the calm, no-cd path) and flags `ambiguous` so an
+      interactive caller can still offer a worktree for parallel goals.
     - **Freshly created `--new` project** → worktree unless `in_place` requested.
     """
     git = find_git_root(base)
@@ -126,7 +127,7 @@ def resolve_workspace(
         return WorkspacePlan("worktree", git, True, branch, False)
     if requested == "in_place":
         return WorkspacePlan("in_place", git, True, branch, False)
-    return WorkspacePlan("worktree", git, True, branch, True)  # auto → worktree, prompt-able
+    return WorkspacePlan("in_place", git, True, branch, True)  # auto → in-place, prompt-able
 
 
 def create_goal(
