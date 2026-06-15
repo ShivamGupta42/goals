@@ -46,11 +46,12 @@ def render_journey_text(snapshot: GoalSnapshot, audience: Audience = "high_schoo
         lines.append("## How the agent broke the problem down")
         for breakdown in snapshot.breakdowns:
             scope = f" ({breakdown.phase_id})" if breakdown.phase_id else ""
-            lines.append(f"\n### {breakdown.problem}{scope}")
+            problem = reframe(breakdown.problem, breakdown.audience_notes, audience)
+            lines.append(f"\n### {problem}{scope}")
             if breakdown.pause_note:
                 lines.append(f"_Pause:_ {breakdown.pause_note}")
             for sub in breakdown.subproblems:
-                lines.append(f"- **{sub.statement}**")
+                lines.append(f"- **{reframe(sub.statement, sub.audience_notes, audience)}**")
                 for task in sub.tasks:
                     lines.append(f"    - task: {task}")
                 for question in sub.open_questions:

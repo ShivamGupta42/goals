@@ -156,6 +156,36 @@ def test_sort_assumptions_puts_broken_then_load_bearing_first() -> None:
     assert ordered.index("A-lb") < ordered.index("A-h")  # load-bearing before incidental
 
 
+def test_breakdown_is_audience_aware_in_text_and_dashboard(tmp_path: Path) -> None:
+    snapshot = _snapshot(
+        worktree=tmp_path,
+        breakdowns=[
+            ProblemBreakdown(
+                breakdown_id="BD-1",
+                problem="Split a bill fairly",
+                audience_notes={"college": "fairness = equal cents, remainder assigned."},
+                subproblems=[
+                    Subproblem(
+                        statement="Work out each share",
+                        audience_notes={"hobbyist": "it's integer-cent division."},
+                    )
+                ],
+            )
+        ],
+    )
+    # Terminal: the toggle reframes the breakdown, not just assumptions.
+    base = render_journey_text(snapshot, "high_school")
+    college = render_journey_text(snapshot, "college")
+    assert "equal cents" not in base
+    assert "equal cents" in college
+    # Dashboard: both notes are present (hidden by default, CSS reveals on toggle).
+    out = tmp_path / "d.html"
+    render_dashboard(snapshot, out)
+    html = out.read_text()
+    assert 'class="note-college"' in html and "equal cents" in html
+    assert 'class="note-hobbyist"' in html and "integer-cent division" in html
+
+
 def test_render_journey_text_reframes_for_audience() -> None:
     snapshot = _snapshot(
         assumptions=[
@@ -308,6 +338,44 @@ def test_cli_assess_assume_and_journey(tmp_path: Path, monkeypatch) -> None:
     assert journey.exit_code == 0, journey.stdout
     assert "I assume one log is enough." in journey.stdout
     assert "open events.jsonl." in journey.stdout
+
+
+def test_cli_assess_breakdown_flag_mode_no_json(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "assess",
+            "breakdown",
+            "--problem",
+            "Split a bill fairly",
+            "--why",
+            "cents do not divide evenly",
+            "--subproblem",
+            "Work out each share | parse inputs; round to cents | who absorbs the cent?",
+            "--phase",
+            "P1",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "Recorded breakdown" in result.stdout
+    # It actually persisted with the parsed nesting.
+    journey = runner.invoke(app, ["assess", "journey"])
+    assert "Split a bill fairly" in journey.stdout
+    assert "Work out each share" in journey.stdout
+    assert "round to cents" in journey.stdout
+    assert "who absorbs the cent?" in journey.stdout
+
+
+def test_cli_assess_breakdown_rejects_mixed_flag_and_json(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app, ["assess", "breakdown", '{"problem":"x"}', "--problem", "y"]
+    )
+    assert result.exit_code == 1
+    assert "not both" in result.stdout
 
 
 def test_cli_assess_breakdown_rejects_malformed_json(tmp_path: Path, monkeypatch) -> None:

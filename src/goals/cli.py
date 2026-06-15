@@ -82,6 +82,7 @@ from goals.models import (
     SelfEvolutionEntry,
     SourceClaim,
     SourceRecord,
+    Subproblem,
     UserMemoryEvent,
     utc_now,
 )
@@ -186,6 +187,22 @@ def _load_json_model(inline: str | None, file: Optional[Path], model):
         return model.model_validate(data)
     except ValidationError as exc:
         raise GoalsError(f"Invalid {model.__name__}: {exc}") from exc
+
+
+def _parse_subproblem(spec: str) -> Subproblem:
+    """Parse a flag-mode sub-problem: "statement | task1; task2 | q1; q2".
+
+    Only the statement is required; the tasks and open-questions segments are
+    optional and each splits on ``;``. Lets a user author a breakdown without
+    writing nested JSON.
+    """
+    parts = [segment.strip() for segment in spec.split("|")]
+    statement = parts[0]
+    if not statement:
+        raise GoalsError("A --subproblem needs a statement before the first '|'.")
+    tasks = [t.strip() for t in parts[1].split(";") if t.strip()] if len(parts) > 1 else []
+    questions = [q.strip() for q in parts[2].split(";") if q.strip()] if len(parts) > 2 else []
+    return Subproblem(statement=statement, tasks=tasks, open_questions=questions)
 
 
 def _handle(fn):
@@ -1447,21 +1464,56 @@ def assess_breakdown(
     file: Optional[Path] = typer.Option(
         None, "--file", "-f", help="Read the breakdown JSON from a file."
     ),
+    problem: Optional[str] = typer.Option(
+        None, "--problem", help="Rephrased problem (switches to no-JSON flag mode)."
+    ),
+    subproblem: Optional[list[str]] = typer.Option(
+        None,
+        "--subproblem",
+        help='Sub-problem, repeatable. Optional tasks/questions: '
+        '"statement | task1; task2 | question1; question2".',
+    ),
+    why: Optional[list[str]] = typer.Option(
+        None, "--why", help="A step in the 5-Whys chain. Repeat for the chain."
+    ),
+    pause: str = typer.Option("", "--pause", help="The Pause/satisficing check."),
+    system: str = typer.Option("", "--system", help="System view (for recurring problems)."),
+    phase: Optional[str] = typer.Option(None, "--phase", help="Phase this belongs to (e.g. P2)."),
 ) -> None:
     """Record how the agent broke a goal or phase into sub-problems.
 
-    Accepts a ProblemBreakdown JSON object (rephrased problem, 5-Whys, sub-problems
-    with tasks and open questions) inline or via ``--file``. This is the artifact
-    behind the building journey's "how the agent broke the problem down".
+    Two ways to author it:
+
+    - Flag mode (no JSON): ``--problem "..." --subproblem "..." [--why ...]``.
+      A sub-problem may carry tasks and open questions with a simple
+      ``"statement | task1; task2 | q1; q2"`` form.
+    - JSON mode: a full ProblemBreakdown object inline or via ``--file`` (for the
+      richer fields like per-audience notes).
+
+    This is the artifact behind the journey's "how the agent broke the problem down".
     """
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        if file is not None and breakdown_json is not None:
-            raise GoalsError("Provide the breakdown as inline JSON or --file, not both.")
-        if file is None and breakdown_json is None:
-            raise GoalsError("Provide the breakdown as inline JSON or --file.")
-        breakdown = _load_json_model(breakdown_json, file, ProblemBreakdown)
+        if problem is not None:
+            if file is not None or breakdown_json is not None:
+                raise GoalsError("Use flag mode (--problem) or JSON (--file/inline), not both.")
+            breakdown = ProblemBreakdown(
+                problem=problem,
+                phase_id=phase,
+                whys=why or [],
+                pause_note=pause,
+                system_view=system,
+                subproblems=[_parse_subproblem(spec) for spec in (subproblem or [])],
+            )
+        else:
+            if file is not None and breakdown_json is not None:
+                raise GoalsError("Provide the breakdown as inline JSON or --file, not both.")
+            if file is None and breakdown_json is None:
+                raise GoalsError(
+                    "Provide the breakdown in flag mode (--problem …) or as JSON (--file/inline)."
+                )
+            breakdown = _load_json_model(breakdown_json, file, ProblemBreakdown)
         append_event(
             Path.cwd(),
             Event(

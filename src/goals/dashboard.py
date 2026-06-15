@@ -423,7 +423,8 @@ def _breakdowns_html(snapshot: GoalSnapshot) -> str:
                 else ""
             )
             subs.append(
-                f'<li><span class="t">{escape(sub.statement)}</span>{tasks}</li>'
+                f'<li><span class="t">{escape(sub.statement)}</span>'
+                f"{_audience_notes_html(sub.audience_notes)}{tasks}</li>"
             )
             questions.extend(sub.open_questions)
         subs_html = f'<ul class="kv">{"".join(subs)}</ul>' if subs else ""
@@ -440,10 +441,28 @@ def _breakdowns_html(snapshot: GoalSnapshot) -> str:
             else ""
         )
         blocks.append(
-            f'<h4 class="subsec">{escape(breakdown.problem)}{scope}</h4>'
+            f'<h4 class="subsec">{escape(breakdown.problem)}'
+            f"{_audience_notes_html(breakdown.audience_notes)}{scope}</h4>"
             f"{pause}{subs_html}{oq_html}{system}"
         )
     return "".join(blocks)
+
+
+def _audience_notes_html(notes: dict[str, str]) -> str:
+    """Reveal-on-toggle college/hobbyist framing for a breakdown problem or sub-problem.
+
+    Mirrors the assumption notes: hidden by default, revealed by the same
+    `.bjourney:has(#aud-*:checked)` CSS, so the audience toggle now simplifies the
+    whole journey — not just the assumptions.
+    """
+    college = notes.get("college", "")
+    hobbyist = notes.get("hobbyist", "")
+    out = ""
+    if college:
+        out += f' <span class="note-college">{escape(college)}</span>'
+    if hobbyist:
+        out += f' <span class="note-hobbyist">{escape(hobbyist)}</span>'
+    return out
 
 
 def _assumptions_html(snapshot: GoalSnapshot) -> str:

@@ -428,6 +428,7 @@ class Subproblem(BaseModel):
     tasks: list[str] = Field(default_factory=list)
     assumption_ids: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
+    audience_notes: dict[str, str] = Field(default_factory=dict)
 
 
 class ProblemBreakdown(BaseModel):
@@ -449,6 +450,7 @@ class ProblemBreakdown(BaseModel):
     pause_note: str = ""
     subproblems: list[Subproblem] = Field(default_factory=list)
     system_view: str = ""
+    audience_notes: dict[str, str] = Field(default_factory=dict)
     recorded_at: str = Field(default_factory=utc_now)
 
 
