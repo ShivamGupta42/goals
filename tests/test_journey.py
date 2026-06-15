@@ -405,3 +405,19 @@ def test_cli_assess_breakdown_rejects_missing_file(tmp_path: Path, monkeypatch) 
     assert result.exit_code == 1
     assert "Could not read" in result.stdout
     assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_cli_other_file_commands_reject_missing_file(tmp_path: Path, monkeypatch) -> None:
+    # Fix One Find All: the same --file guard now covers the pre-existing
+    # architecture/decision/insights commands, not just the journey ones.
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    for argv in (
+        ["architecture", "update", "--file", "nope.json"],
+        ["decision", "explain", "--file", "nope.json"],
+        ["user", "import-insights", "--file", "nope.txt"],
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code == 1, (argv, result.stdout)
+        assert "Could not read" in result.stdout, (argv, result.stdout)
+        assert result.exception is None or isinstance(result.exception, SystemExit)

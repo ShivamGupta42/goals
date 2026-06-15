@@ -752,7 +752,7 @@ def validate() -> None:
         derived = store.snapshot()
         if not store.snapshot_path.exists():
             raise GoalsError("Derived snapshot file is missing.")
-        stored = type(derived).model_validate_json(store.snapshot_path.read_text(encoding="utf-8"))
+        stored = _load_json_model(None, store.snapshot_path, type(derived))
         if stored.model_dump(mode="json") != derived.model_dump(mode="json"):
             raise GoalsError("Derived snapshot does not match the event log. Run `goals repair`.")
         registries = validate_registries(Path.cwd())
@@ -864,7 +864,7 @@ def architecture_update(
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        architecture = GoalArchitectureMap.model_validate_json(file.read_text(encoding="utf-8"))
+        architecture = _load_json_model(None, file, GoalArchitectureMap)
         append_event(
             Path.cwd(),
             Event(
@@ -1058,7 +1058,13 @@ def user_import_insights(
     """Import a Claude Code /insights summary as candidate user memory."""
 
     def run():
-        text = sys.stdin.read() if str(file) == "-" else file.read_text(encoding="utf-8")
+        if str(file) == "-":
+            text = sys.stdin.read()
+        else:
+            try:
+                text = file.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise GoalsError(f"Could not read {file}: {exc}") from exc
         events = events_from_insights(text, area=_user_area(area))  # type: ignore[arg-type]
         if not events:
             raise GoalsError("No usable insight statements found.")
@@ -1312,7 +1318,7 @@ def decision_explain(
             raise GoalsError("level must be basic, detailed, or technical.")
         snapshot = load_active_snapshot(Path.cwd())
         context = build_decision_context(snapshot, _personalization_or_none())
-        decision = Decision.model_validate_json(file.read_text(encoding="utf-8"))
+        decision = _load_json_model(None, file, Decision)
         if not decision.suggested_reply:
             decision.suggested_reply = f"I choose: {decision.recommendation}"
         decision.what_we_know = decision.what_we_know or []
