@@ -218,6 +218,26 @@ def test_re_verify_after_review_also_invalidates_it(tmp_path: Path) -> None:
         transition_phase(repo, "P1", "accept")
 
 
+def test_depends_assumption_with_no_phase_to_attribute_errors(monkeypatch) -> None:
+    # If there is no phase to attribute a load-bearing assumption to, recording it
+    # must fail loudly rather than silently escape the gate.
+    from goals.models import GoalSnapshot, WorktreeLease
+
+    snap = GoalSnapshot(
+        goal_id="g",
+        objective="o",
+        topology=WorktreeLease(
+            base_repo="/r", base_branch="main", worktree_path="/r", branch="goal/g"
+        ),
+        phases=[],
+        current_phase=None,
+    )
+    monkeypatch.setattr("goals.cli.load_active_snapshot", lambda cwd: snap)
+    result = CliRunner().invoke(app, ["assess", "assume", "X", "--depends"])
+    assert result.exit_code == 1
+    assert "must belong to a phase" in result.stdout
+
+
 def test_depends_assumption_without_phase_is_still_gated(tmp_path: Path, monkeypatch) -> None:
     # A load-bearing assumption recorded with no --phase must NOT escape the gate:
     # it is attributed to the current phase so a falsifier is still required.

@@ -130,7 +130,7 @@ Required loop:
 2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
 3. Make reversible progress without changing unrelated files.
 4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
-5. Prove it by execution, not by description. For every acceptance criterion AND every load-bearing assumption, write a **runnable** check that would fail if the thing were wrong — think about the boundary and environment conditions it could break under (limits, signs, emptiness, scale, locale/clock, the storage or network failing) and make the check exercise them. Prefer automated checks; a `manual` check is only for the genuinely non-automatable and must say why. Each verification's `covers` is the criterion text or the assumption id (e.g. `A-1234`). Put this in the evidence `verifications` list at `{plan.evidence_file}`.
+5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion AND every load-bearing assumption, write a **runnable** check that fails if the thing were wrong; a check that cannot fail proves nothing, so make each one actually exercise the failure it guards. Prefer automated checks; a `manual` check is only for the genuinely non-automatable and must say why. Each verification's `covers` is the criterion text or the assumption id (e.g. `A-1234`). Put this in the evidence `verifications` list at `{plan.evidence_file}`.
 6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`, then `goals phase verify {plan.current_phase}` — the engine runs your checks and records the real results; you cannot mark a check passed yourself. Fix the build until every automated check passes.
 7. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
 8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
@@ -224,11 +224,14 @@ your approach depends on. Record them with \
 and `goals assess breakdown --problem "..." --subproblem "statement | task | open question"`. \
 Write them plainly enough for a non-technical reader — they become the dashboard's building journey.
 2. Build only this phase. Keep changes reversible and don't touch unrelated files.
-3. Prove it by execution, not description: for each acceptance criterion AND each load-bearing \
-assumption, write a runnable check that fails if it's wrong — push it at the boundary/environment \
-conditions it could break under. Put them in the evidence `verifications` list at `{evidence_rel}`, \
-then `goals phase evidence {phase} --file {evidence_rel}` and `goals phase verify {phase}` (the \
-engine runs them and records real results — you can't pass a check yourself). Fix until all pass.
+3. Prove it by execution, not description. First **invert** — try to break it: how could it fail \
+(boundaries/signs, time/locale, empty/huge, concurrency, storage or network failing)? Fix each, \
+guard it with a check, or — if it's a premise you're relying on — record it as a load-bearing \
+assumption. Then for each acceptance criterion AND each load-bearing assumption write a runnable \
+check that fails if it's wrong (a check that can't fail proves nothing). Put them in the evidence \
+`verifications` list at `{evidence_rel}`, then `goals phase evidence {phase} --file {evidence_rel}` \
+and `goals phase verify {phase}` (the engine runs them and records real results — you can't pass a \
+check yourself). Fix until all pass.
 4. Run `goals brief`. If it says `Waiting on: you`, ask one plain-language question in its \
 wording and stop. Otherwise continue.
 5. Run `goals phase review {phase}`; once it passes, `goals phase accept {phase}`.

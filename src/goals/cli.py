@@ -1451,6 +1451,12 @@ def assess_assume(
         # with no `--phase` would have phase_id=None, match no phase, and silently
         # escape the gate entirely.
         phase_id = phase if phase is not None else snapshot.current_phase
+        if depends and phase_id is None:
+            raise GoalsError(
+                "A load-bearing (--depends) assumption must belong to a phase so the gate "
+                "can require a falsifier for it. Pass --phase, or record it while a phase is "
+                "active. (Use --no-depends for an assumption that isn't load-bearing.)"
+            )
         fields = dict(
             statement=statement,
             building=building,

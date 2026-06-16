@@ -389,7 +389,9 @@ def verify_phase(cwd: Path, phase_id: str, *, timeout: int = 120) -> list[dict]:
         except subprocess.TimeoutExpired:
             ran, passed, output = True, False, f"timed out after {timeout}s"
         except OSError as exc:
-            ran, passed, output = True, False, f"could not run: {exc}"
+            # The command never started (e.g. missing/moved worktree): it did not
+            # run, so it cannot count as an executed check.
+            ran, passed, output = False, False, f"could not run: {exc}"
         results.append(
             {
                 "verification_id": v.verification_id,
