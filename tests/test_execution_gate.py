@@ -7,6 +7,9 @@ encodes no domain knowledge — only that proof was *run*, not asserted.
 import subprocess
 from pathlib import Path
 
+from typer.testing import CliRunner
+
+from goals.cli import app
 from goals.gates import review_phase
 from goals.models import (
     Assumption,
@@ -170,3 +173,23 @@ def test_load_bearing_assumption_needs_a_passing_falsifier(tmp_path: Path) -> No
     )
     verify_phase(repo, "P1")
     assert run_gate(repo, "P1").verdict == GateVerdict.PASS
+
+
+def test_depends_assumption_without_phase_is_still_gated(tmp_path: Path, monkeypatch) -> None:
+    # A load-bearing assumption recorded with no --phase must NOT escape the gate:
+    # it is attributed to the current phase so a falsifier is still required.
+    repo = _repo_with_goal(tmp_path)
+    monkeypatch.chdir(repo)
+    result = CliRunner().invoke(app, ["assess", "assume", "the core premise", "--depends"])
+    assert result.exit_code == 0, result.stdout
+    snap = load_active_snapshot(repo)
+    assumption = snap.assumptions[0]
+    assert assumption.depends_on is True
+    assert assumption.phase_id == snap.current_phase  # attributed, not None
+
+    # An executed check that doesn't cover the assumption -> gate still blocks.
+    _record_evidence(repo, snap.goal_id, [{"covers": "done", "kind": "auto", "command": "true"}])
+    verify_phase(repo, "P1")
+    blocked = run_gate(repo, "P1")
+    assert blocked.verdict == GateVerdict.FAIL
+    assert any(assumption.assumption_id in issue for issue in blocked.p0)

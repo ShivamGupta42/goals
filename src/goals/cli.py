@@ -1446,6 +1446,11 @@ def assess_assume(
             notes["college"] = college
         if hobbyist:
             notes["hobbyist"] = hobbyist
+        # Attribute to a phase so the review gate can require a falsifier for a
+        # load-bearing assumption. Without this, a `--depends` assumption recorded
+        # with no `--phase` would have phase_id=None, match no phase, and silently
+        # escape the gate entirely.
+        phase_id = phase if phase is not None else snapshot.current_phase
         fields = dict(
             statement=statement,
             building=building,
@@ -1454,7 +1459,7 @@ def assess_assume(
             status=_validate_choice(status, {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
             confidence=confidence,
             reversible=reversible,
-            phase_id=phase,
+            phase_id=phase_id,
             audience_notes=notes,
         )
         if assumption_id is not None:
@@ -1515,7 +1520,7 @@ def assess_breakdown(
                 raise GoalsError("Use flag mode (--problem) or JSON (--file/inline), not both.")
             breakdown = ProblemBreakdown(
                 problem=problem,
-                phase_id=phase,
+                phase_id=phase if phase is not None else snapshot.current_phase,
                 whys=why or [],
                 pause_note=pause,
                 system_view=system,
