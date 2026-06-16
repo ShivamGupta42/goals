@@ -51,10 +51,22 @@ cost, second-order effects. Prefer a slower reversible action over a fast
 destructive one. Record the call with `goals decision record` (or surface it with
 `goals decision brief` / `goals decision explain` when it needs the user).
 
-**4. Execute — run the chosen plan.**
+**4. Execute — run the chosen plan, and prove it by execution.**
 A good plan has a first step, a **stopping rule**, a way to verify progress, and a
-rollback if risky. Build only the chosen thing; record proof with
-`goals phase evidence`, then `goals phase review` and `goals phase accept`.
+rollback if risky. Build only the chosen thing. Then prove it ran, don't narrate
+that it works. First **invert** (this is where hidden bugs live): deliberately try
+to break what you built — how could it fail across boundaries and signs, time and
+locale, empty and huge inputs, concurrency, and its dependencies (storage, network,
+the clock) failing? The gate only makes you defend the assumptions you *name*, so
+for each plausible failure either fix it, write a check that exercises it, or — if
+it's a premise you were silently relying on — record it as a load-bearing
+assumption. Then, for each acceptance criterion **and** each load-bearing
+assumption, write a runnable check that **fails if it's wrong** (a check that can't
+fail proves nothing). Record them in the evidence `verifications` (each `covers` a
+criterion or an assumption id) with `goals phase evidence`, then
+`goals phase verify` — the engine runs your checks and records the real exit codes,
+so a passing result can't be asserted, only earned. Fix until every automated check
+passes, then `goals phase review` and `goals phase accept`.
 
 **5. Review — learn from the result.**
 Did this solve the *actual* problem? What did you expect vs. what happened? Which

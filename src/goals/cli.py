@@ -99,6 +99,7 @@ from goals.runtime import (
     resolve_workspace,
     run_gate,
     transition_phase,
+    verify_phase,
 )
 from goals.sources import (
     analyze_source_freshness,
@@ -1445,6 +1446,17 @@ def assess_assume(
             notes["college"] = college
         if hobbyist:
             notes["hobbyist"] = hobbyist
+        # Attribute to a phase so the review gate can require a falsifier for a
+        # load-bearing assumption. Without this, a `--depends` assumption recorded
+        # with no `--phase` would have phase_id=None, match no phase, and silently
+        # escape the gate entirely.
+        phase_id = phase if phase is not None else snapshot.current_phase
+        if depends and phase_id is None:
+            raise GoalsError(
+                "A load-bearing (--depends) assumption must belong to a phase so the gate "
+                "can require a falsifier for it. Pass --phase, or record it while a phase is "
+                "active. (Use --no-depends for an assumption that isn't load-bearing.)"
+            )
         fields = dict(
             statement=statement,
             building=building,
@@ -1453,7 +1465,7 @@ def assess_assume(
             status=_validate_choice(status, {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
             confidence=confidence,
             reversible=reversible,
-            phase_id=phase,
+            phase_id=phase_id,
             audience_notes=notes,
         )
         if assumption_id is not None:
@@ -1514,7 +1526,7 @@ def assess_breakdown(
                 raise GoalsError("Use flag mode (--problem) or JSON (--file/inline), not both.")
             breakdown = ProblemBreakdown(
                 problem=problem,
-                phase_id=phase,
+                phase_id=phase if phase is not None else snapshot.current_phase,
                 whys=why or [],
                 pause_note=pause,
                 system_view=system,
@@ -1681,6 +1693,28 @@ def phase_evidence(
     _handle(run)
 
 
+@phase_app.command("verify")
+def phase_verify(phase_id: str) -> None:
+    """Run the phase's automated verifications and record real results.
+
+    The engine runs each `auto` verification's command in the worktree and writes
+    pass/fail from the actual exit code — the only path to a passing check. Run this
+    after recording evidence and before `goals phase review`.
+    """
+
+    def run():
+        results = verify_phase(Path.cwd(), phase_id)
+        passed = sum(1 for r in results if r["passed"])
+        for r in results:
+            mark = "PASS" if r["passed"] else "FAIL"
+            typer.echo(f"  [{mark}] {r['verification_id']}")
+        typer.echo(f"Verified {phase_id}: {passed}/{len(results)} automated check(s) passed.")
+        if passed != len(results):
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
 @phase_app.command("review")
 def phase_review(phase_id: str) -> None:
     """Run the typed phase review gate."""
@@ -1689,6 +1723,8 @@ def phase_review(phase_id: str) -> None:
         result = run_gate(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
         if result.verdict != GateVerdict.PASS:
+            for issue in result.p0:
+                typer.echo(f"  - {issue}")
             raise typer.Exit(1)
 
     _handle(run)

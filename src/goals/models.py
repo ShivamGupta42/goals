@@ -54,6 +54,7 @@ class EventType(StrEnum):
     PHASE_REVIEWED = "phase_reviewed"
     PHASE_ACCEPTED = "phase_accepted"
     PHASE_CHECKPOINT_RECORDED = "phase_checkpoint_recorded"
+    PHASE_VERIFIED = "phase_verified"
     DECISION_REQUESTED = "decision_requested"
     DECISION_RECORDED = "decision_recorded"
     ASSUMPTION_RECORDED = "assumption_recorded"
@@ -133,11 +134,37 @@ class WorktreeLease(BaseModel):
     created_at: str = Field(default_factory=utc_now)
 
 
+class Verification(BaseModel):
+    """One check that earns trust by execution, not narration.
+
+    ``covers`` names what this proves: an acceptance criterion (verbatim) or an
+    assumption id (e.g. ``A-1234``). An ``auto`` verification is a runnable
+    ``command``; the engine — never the agent — runs it via ``goals phase verify``
+    and sets ``ran``/``passed`` from the real exit code, so a passing result cannot
+    be fabricated. A ``manual`` verification is for the genuinely non-automatable
+    (e.g. a visual check) and must carry a ``rationale``; it counts as coverage but
+    never as executed proof, so a phase can never be all-narration.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    verification_id: str = Field(default_factory=lambda: f"V-{uuid4().hex[:8]}")
+    covers: str
+    kind: Literal["auto", "manual"] = "auto"
+    command: str = ""
+    rationale: str = ""
+    ran: bool = False
+    passed: bool = False
+    output_excerpt: str = ""
+    ran_at: str = ""
+
+
 class Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     changed_files: list[str] = Field(default_factory=list)
     checks_run: list[str] = Field(default_factory=list)
+    verifications: list[Verification] = Field(default_factory=list)
     acceptance_met: list[str] = Field(default_factory=list)
     acceptance_not_met: list[str] = Field(default_factory=list)
     ambiguous: list[str] = Field(default_factory=list)

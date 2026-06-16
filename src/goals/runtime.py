@@ -326,7 +326,14 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int = 3) -> GateResult:
     snapshot = load_active_snapshot(cwd)
     phase = _find_phase(snapshot, phase_id)
     attempt = len([review for review in phase.reviews if review.gate_id == "phase-review"]) + 1
-    result = review_phase(phase, attempt=attempt, max_attempts=max_attempts)
+    load_bearing = [
+        (assumption.assumption_id, assumption.statement)
+        for assumption in snapshot.assumptions
+        if assumption.depends_on and assumption.phase_id == phase_id
+    ]
+    result = review_phase(
+        phase, load_bearing=load_bearing, attempt=attempt, max_attempts=max_attempts
+    )
     append_event(
         cwd,
         Event(
@@ -336,6 +343,73 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int = 3) -> GateResult:
         ),
     )
     return result
+
+
+def verify_phase(cwd: Path, phase_id: str, *, timeout: int = 120) -> list[dict]:
+    """Run the phase's automated verifications and record the real results.
+
+    This is what makes trust un-fakeable: the *engine* runs each ``auto``
+    verification's command in the goal worktree and writes ran/passed from the
+    actual exit code. The agent cannot assert a pass — it can only declare a
+    command, which this executes. Commands run in the worktree; route anything
+    networked or destructive through the permission policy before relying on it.
+    """
+    import subprocess
+
+    snapshot = load_active_snapshot(cwd)
+    phase = _find_phase(snapshot, phase_id)
+    if phase.evidence is None:
+        raise GoalsError(
+            f"No evidence recorded for {phase_id}. Record evidence with verifications first."
+        )
+    worktree = Path(snapshot.topology.worktree_path)
+    auto = [
+        v
+        for v in phase.evidence.verifications
+        if v.kind == "auto" and v.command.strip()
+    ]
+    if not auto:
+        raise GoalsError(
+            f"{phase_id} has no automated verifications to run. Add at least one "
+            "`auto` verification with a runnable command, then verify."
+        )
+    results: list[dict] = []
+    for v in auto:
+        try:
+            proc = subprocess.run(
+                v.command,
+                shell=True,
+                cwd=worktree,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            ran, passed = True, proc.returncode == 0
+            output = (proc.stdout + proc.stderr).strip()[-600:]
+        except subprocess.TimeoutExpired:
+            ran, passed, output = True, False, f"timed out after {timeout}s"
+        except OSError as exc:
+            # The command never started (e.g. missing/moved worktree): it did not
+            # run, so it cannot count as an executed check.
+            ran, passed, output = False, False, f"could not run: {exc}"
+        results.append(
+            {
+                "verification_id": v.verification_id,
+                "ran": ran,
+                "passed": passed,
+                "output_excerpt": output,
+                "ran_at": utc_now(),
+            }
+        )
+    append_event(
+        cwd,
+        Event(
+            goal_id=snapshot.goal_id,
+            event_type=EventType.PHASE_VERIFIED,
+            payload={"phase_id": phase_id, "verifications": results},
+        ),
+    )
+    return results
 
 
 def emit_dashboard(cwd: Path) -> Path:

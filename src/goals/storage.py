@@ -148,8 +148,36 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             snapshot.current_phase = phase.phase_id
         elif event.event_type == EventType.PHASE_EVIDENCE:
             phase = _phase(snapshot, payload["phase_id"])
-            phase.evidence = Evidence.model_validate(payload["evidence"])
+            evidence = Evidence.model_validate(payload["evidence"])
+            # Recorded evidence declares *what* will be verified; it can never assert
+            # that a check passed. Strip any agent-set execution result so the only
+            # path to ran/passed is the engine running it (PHASE_VERIFIED).
+            for verification in evidence.verifications:
+                verification.ran = False
+                verification.passed = False
+                verification.output_excerpt = ""
+                verification.ran_at = ""
+            phase.evidence = evidence
             phase.status = PhaseStatus.NEEDS_REVIEW
+            # New evidence invalidates any prior review: a PASS must reflect the
+            # *current* evidence, or re-recording evidence after a pass would let
+            # `accept` ride a stale review without re-verifying.
+            phase.reviews.clear()
+        elif event.event_type == EventType.PHASE_VERIFIED:
+            phase = _phase(snapshot, payload["phase_id"])
+            if phase.evidence is not None:
+                executed = {
+                    item["verification_id"]: item for item in payload.get("verifications", [])
+                }
+                for verification in phase.evidence.verifications:
+                    result = executed.get(verification.verification_id)
+                    if result is not None:
+                        verification.ran = bool(result.get("ran"))
+                        verification.passed = bool(result.get("passed"))
+                        verification.output_excerpt = result.get("output_excerpt", "")
+                        verification.ran_at = result.get("ran_at", "")
+                # Re-running checks changes the proof, so any prior review is stale.
+                phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
             phase.reviews.append(GateResult.model_validate(payload["gate_result"]))
