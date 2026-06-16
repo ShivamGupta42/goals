@@ -18,8 +18,21 @@ from goals.models import (
     PhaseStatus,
     SourceClaim,
     SourceRecord,
+    Verification,
     WorktreeLease,
 )
+
+
+def _verified() -> Evidence:
+    """Evidence whose claim is backed by a check the engine ran and passed."""
+    return Evidence(
+        acceptance_met=["done"],
+        verifications=[
+            Verification(
+                covers="done", kind="auto", command="true", ran=True, passed=True
+            )
+        ],
+    )
 
 
 def test_phase_review_requires_evidence() -> None:
@@ -42,7 +55,7 @@ def test_phase_review_passes_with_strong_evidence() -> None:
         phase_id="P1",
         title="Step",
         goal="Do it",
-        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        evidence=_verified(),
     )
     result = review_phase(phase)
     assert result.verdict == GateVerdict.PASS
@@ -53,7 +66,7 @@ def test_phase_review_needs_human_for_user_checkpoint() -> None:
         phase_id="P1",
         title="Step",
         goal="Do it",
-        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        evidence=_verified(),
         checkpoints=[
             PhaseCheckpoint(
                 checkpoint_id="CP-approval",
@@ -75,7 +88,7 @@ def test_phase_review_allows_waived_checkpoint_with_strong_evidence() -> None:
         phase_id="P1",
         title="Step",
         goal="Do it",
-        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        evidence=_verified(),
         checkpoints=[
             PhaseCheckpoint(
                 checkpoint_id="CP-optional-risk",
@@ -96,7 +109,7 @@ def test_phase_review_allows_passed_checkpoint_even_if_it_was_user_validated() -
         phase_id="P1",
         title="Step",
         goal="Do it",
-        evidence=Evidence(checks_run=["pytest"], acceptance_met=["done"], confidence=0.9),
+        evidence=_verified(),
         checkpoints=[
             PhaseCheckpoint(
                 checkpoint_id="CP-user-validated",

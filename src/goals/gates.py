@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from goals.checkpoints import checkpoint_waits_on_user, phase_checkpoint_blockers
 from goals.models import Evidence, GateResult, GateVerdict, Phase
 
 
-def review_phase(phase: Phase, *, attempt: int = 1, max_attempts: int = 3) -> GateResult:
+def review_phase(
+    phase: Phase,
+    *,
+    load_bearing: Sequence[tuple[str, str]] = (),
+    attempt: int = 1,
+    max_attempts: int = 3,
+) -> GateResult:
+    """Gate a phase on *executed* proof, not narrated proof.
+
+    ``load_bearing`` is the phase's load-bearing assumptions as ``(id, statement)``
+    pairs (supplied by the caller, which has the snapshot). A phase passes only when
+    its acceptance criteria and load-bearing assumptions are each backed by a
+    verification the engine actually ran and that passed — see ``_evidence_issues``.
+    """
     capped_attempt = max(1, min(attempt, max_attempts))
     checkpoint_issues = phase_checkpoint_blockers(phase)
     if checkpoint_issues:
@@ -31,33 +46,69 @@ def review_phase(phase: Phase, *, attempt: int = 1, max_attempts: int = 3) -> Ga
             p0=["Record phase evidence before review."],
             attempts=capped_attempt,
         )
-    issues = _evidence_issues(evidence)
+    issues = _evidence_issues(evidence, load_bearing)
     if issues:
         return GateResult(
             gate_id="phase-review",
             verdict=_blocked_after_cap(capped_attempt, max_attempts),
-            summary=_summary("Evidence is incomplete.", capped_attempt, max_attempts),
+            summary=_summary(
+                "Evidence is not verified by execution.", capped_attempt, max_attempts
+            ),
             p0=issues,
             attempts=capped_attempt,
         )
     return GateResult(
         gate_id="phase-review",
         verdict=GateVerdict.PASS,
-        summary="Evidence satisfies the phase review gate.",
+        summary="Evidence is verified by executed checks.",
         attempts=capped_attempt,
     )
 
 
-def _evidence_issues(evidence: Evidence) -> list[str]:
+def _evidence_issues(
+    evidence: Evidence,
+    load_bearing: Sequence[tuple[str, str]],
+) -> list[str]:
+    """Block unless the claims are backed by checks the engine ran and passed.
+
+    Two un-gameable requirements (the engine never decides *what* to test — the
+    model does — it only insists the proof was executed, not narrated):
+      1. at least one ``auto`` verification actually ran and passed, so a phase can
+         never be accepted on prose alone, and
+      2. every load-bearing assumption has an ``auto`` falsifier that ran and passed
+         — a test that would fail if the assumption were false.
+    """
     issues: list[str] = []
     if evidence.acceptance_not_met:
         issues.append("Some acceptance criteria are explicitly not met.")
     if evidence.ambiguous:
         issues.append("Some acceptance criteria are ambiguous.")
-    if evidence.confidence < 0.7:
-        issues.append("Evidence confidence is below 0.7.")
-    if not evidence.checks_run:
-        issues.append("No checks or tests were recorded.")
+
+    verifications = evidence.verifications
+    for v in verifications:
+        if v.kind == "auto" and not v.command.strip():
+            issues.append(f"Auto verification {v.verification_id} has no command to run.")
+        if v.kind == "manual" and not v.rationale.strip():
+            issues.append(
+                f"Manual verification {v.verification_id} needs a rationale "
+                "(why it cannot be automated)."
+            )
+
+    if not any(v.kind == "auto" and v.ran and v.passed for v in verifications):
+        issues.append(
+            "No automated check has been executed and passed. Add a runnable check "
+            "and run `goals phase verify` (recorded notes are not proof)."
+        )
+
+    for assumption_id, statement in load_bearing:
+        if not any(
+            v.covers.strip() == assumption_id and v.kind == "auto" and v.ran and v.passed
+            for v in verifications
+        ):
+            issues.append(
+                f"Load-bearing assumption has no passing falsifier ({assumption_id}): {statement}"
+            )
+
     return issues
 
 

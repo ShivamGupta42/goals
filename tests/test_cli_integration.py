@@ -432,6 +432,9 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
                 "checks_run": ["pytest"],
                 "acceptance_met": ["Plan confirmed."],
                 "confidence": 0.9,
+                "verifications": [
+                    {"covers": "Plan confirmed.", "kind": "auto", "command": "true"}
+                ],
             }
         )
     )
@@ -448,6 +451,7 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
         ],
         worktree,
     )
+    run(["python", "-m", "goals.cli", "phase", "verify", "P1"], worktree)
     review = run(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
     assert "pass" in review.stdout
 
@@ -612,7 +616,13 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
         .strip()
     )
     evidence = json.dumps(
-        {"checks_run": ["pytest"], "acceptance_met": ["done"], "confidence": 0.9, "notes": "done"}
+        {
+            "checks_run": ["pytest"],
+            "acceptance_met": ["done"],
+            "confidence": 0.9,
+            "notes": "done",
+            "verifications": [{"covers": "done", "kind": "auto", "command": "true"}],
+        }
     )
     evidence_file = worktree / "evidence.json"
     evidence_file.write_text(evidence)
@@ -621,6 +631,7 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
         ["python", "-m", "goals.cli", "phase", "evidence", "P1", "--file", str(evidence_file)],
         worktree,
     )
+    run(["python", "-m", "goals.cli", "phase", "verify", "P1"], worktree)
     run(["python", "-m", "goals.cli", "phase", "review", "P1"], worktree)
     accept = run(["python", "-m", "goals.cli", "phase", "accept", "P1"], worktree)
     assert "Accepted phase P1" in accept.stdout

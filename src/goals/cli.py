@@ -99,6 +99,7 @@ from goals.runtime import (
     resolve_workspace,
     run_gate,
     transition_phase,
+    verify_phase,
 )
 from goals.sources import (
     analyze_source_freshness,
@@ -1681,6 +1682,28 @@ def phase_evidence(
     _handle(run)
 
 
+@phase_app.command("verify")
+def phase_verify(phase_id: str) -> None:
+    """Run the phase's automated verifications and record real results.
+
+    The engine runs each `auto` verification's command in the worktree and writes
+    pass/fail from the actual exit code — the only path to a passing check. Run this
+    after recording evidence and before `goals phase review`.
+    """
+
+    def run():
+        results = verify_phase(Path.cwd(), phase_id)
+        passed = sum(1 for r in results if r["passed"])
+        for r in results:
+            mark = "PASS" if r["passed"] else "FAIL"
+            typer.echo(f"  [{mark}] {r['verification_id']}")
+        typer.echo(f"Verified {phase_id}: {passed}/{len(results)} automated check(s) passed.")
+        if passed != len(results):
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
 @phase_app.command("review")
 def phase_review(phase_id: str) -> None:
     """Run the typed phase review gate."""
@@ -1689,6 +1712,8 @@ def phase_review(phase_id: str) -> None:
         result = run_gate(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
         if result.verdict != GateVerdict.PASS:
+            for issue in result.p0:
+                typer.echo(f"  - {issue}")
             raise typer.Exit(1)
 
     _handle(run)

@@ -51,10 +51,18 @@ cost, second-order effects. Prefer a slower reversible action over a fast
 destructive one. Record the call with `goals decision record` (or surface it with
 `goals decision brief` / `goals decision explain` when it needs the user).
 
-**4. Execute — run the chosen plan.**
+**4. Execute — run the chosen plan, and prove it by execution.**
 A good plan has a first step, a **stopping rule**, a way to verify progress, and a
-rollback if risky. Build only the chosen thing; record proof with
-`goals phase evidence`, then `goals phase review` and `goals phase accept`.
+rollback if risky. Build only the chosen thing. Then prove it ran, don't narrate
+that it works: for each acceptance criterion **and** each load-bearing assumption,
+write a runnable check that **fails if it's wrong** — deliberately push it at the
+boundary and environment conditions it could break under (limits, signs,
+emptiness, scale, clock/locale, the storage or network failing). Record them in the
+evidence `verifications` (each `covers` a criterion or an assumption id) with
+`goals phase evidence`, then `goals phase verify` — the engine runs your checks and
+records the real exit codes, so a passing result can't be asserted, only earned.
+Fix until every automated check passes, then `goals phase review` and
+`goals phase accept`.
 
 **5. Review — learn from the result.**
 Did this solve the *actual* problem? What did you expect vs. what happened? Which
