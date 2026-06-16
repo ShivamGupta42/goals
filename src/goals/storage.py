@@ -159,6 +159,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 verification.ran_at = ""
             phase.evidence = evidence
             phase.status = PhaseStatus.NEEDS_REVIEW
+            # New evidence invalidates any prior review: a PASS must reflect the
+            # *current* evidence, or re-recording evidence after a pass would let
+            # `accept` ride a stale review without re-verifying.
+            phase.reviews.clear()
         elif event.event_type == EventType.PHASE_VERIFIED:
             phase = _phase(snapshot, payload["phase_id"])
             if phase.evidence is not None:
@@ -172,6 +176,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                         verification.passed = bool(result.get("passed"))
                         verification.output_excerpt = result.get("output_excerpt", "")
                         verification.ran_at = result.get("ran_at", "")
+                # Re-running checks changes the proof, so any prior review is stale.
+                phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
             phase.reviews.append(GateResult.model_validate(payload["gate_result"]))

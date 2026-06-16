@@ -175,6 +175,49 @@ def test_load_bearing_assumption_needs_a_passing_falsifier(tmp_path: Path) -> No
     assert run_gate(repo, "P1").verdict == GateVerdict.PASS
 
 
+def test_re_recording_evidence_invalidates_a_prior_pass(tmp_path: Path) -> None:
+    # Bypass guard: pass the gate once, then re-record different (unverified)
+    # evidence. The stale PASS must not let `accept` ride through unverified.
+    import pytest
+
+    from goals.runtime import transition_phase
+    from goals.storage import GoalsError
+
+    repo = _repo_with_goal(tmp_path)
+    goal_id = load_active_snapshot(repo).goal_id
+    _record_evidence(repo, goal_id, [{"covers": "done", "kind": "auto", "command": "true"}])
+    verify_phase(repo, "P1")
+    assert run_gate(repo, "P1").verdict == GateVerdict.PASS  # records a PASS review
+
+    # Re-record evidence — the prior review is now stale and must be cleared.
+    _record_evidence(repo, goal_id, [{"covers": "done", "kind": "auto", "command": "true"}])
+    assert load_active_snapshot(repo).phases[0].reviews == []
+    with pytest.raises(GoalsError):
+        transition_phase(repo, "P1", "accept")  # cannot accept on a stale/absent review
+
+    # Re-verify + re-review earns it back.
+    verify_phase(repo, "P1")
+    assert run_gate(repo, "P1").verdict == GateVerdict.PASS
+    transition_phase(repo, "P1", "accept")  # now allowed
+
+
+def test_re_verify_after_review_also_invalidates_it(tmp_path: Path) -> None:
+    import pytest
+
+    from goals.runtime import transition_phase
+    from goals.storage import GoalsError
+
+    repo = _repo_with_goal(tmp_path)
+    goal_id = load_active_snapshot(repo).goal_id
+    _record_evidence(repo, goal_id, [{"covers": "done", "kind": "auto", "command": "true"}])
+    verify_phase(repo, "P1")
+    assert run_gate(repo, "P1").verdict == GateVerdict.PASS
+    verify_phase(repo, "P1")  # re-run checks -> prior review is stale
+    assert load_active_snapshot(repo).phases[0].reviews == []
+    with pytest.raises(GoalsError):
+        transition_phase(repo, "P1", "accept")
+
+
 def test_depends_assumption_without_phase_is_still_gated(tmp_path: Path, monkeypatch) -> None:
     # A load-bearing assumption recorded with no --phase must NOT escape the gate:
     # it is attributed to the current phase so a falsifier is still required.
