@@ -180,9 +180,11 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
-            # Strip unknown nested keys so an older binary can still replay an event a
-            # newer one wrote (e.g. a `findings` field it does not declare), matching the
-            # snapshot-level forward-compat stance above.
+            # Drop top-level GateResult keys this binary no longer declares, so an older
+            # binary can replay an event a newer one wrote with an added GateResult field
+            # (e.g. `findings`) — matching the snapshot-level forward-compat stance above.
+            # Top-level only: a field added *inside* a findings element is not stripped
+            # (GateFinding is extra="forbid"); add nested handling here if that ever arises.
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )
