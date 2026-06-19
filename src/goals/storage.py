@@ -180,7 +180,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
-            phase.reviews.append(GateResult.model_validate(payload["gate_result"]))
+            # Strip unknown nested keys so an older binary can still replay an event a
+            # newer one wrote (e.g. a `findings` field it does not declare), matching the
+            # snapshot-level forward-compat stance above.
+            phase.reviews.append(
+                GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
+            )
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             phase = _phase(snapshot, payload["phase_id"])
             checkpoint = PhaseCheckpoint.model_validate(payload["checkpoint"])

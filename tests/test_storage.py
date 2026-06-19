@@ -11,7 +11,16 @@ from goals.models import (
     SourceRecord,
 )
 from goals.runtime import default_phases
-from goals.models import Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, WorktreeLease
+from goals.models import (
+    Evidence,
+    GateFactType,
+    GateFinding,
+    GateResult,
+    GateVerdict,
+    GoalSnapshot,
+    GoalStatus,
+    WorktreeLease,
+)
 from goals.storage import EventStore
 
 
@@ -335,3 +344,69 @@ def test_decision_record_replays_into_snapshot(tmp_path: Path) -> None:
     assert derived.judgements[0].choice == "Redis"
     assert derived.judgements[0].decided_by == "user"
     assert derived.judgements[0].reversible is True
+
+
+def test_gate_result_with_findings_round_trips() -> None:
+    """The new typed findings survive dump -> validate (event persistence path)."""
+    result = GateResult(
+        gate_id="phase-review",
+        verdict=GateVerdict.FAIL,
+        summary="Evidence is not verified by execution.",
+        p0=["Automated check V-1 ran and failed (covers done)."],
+        findings=[
+            GateFinding(
+                fact_type=GateFactType.CHECK_FAILED,
+                message="Automated check V-1 ran and failed (covers done).",
+                ref="V-1",
+            )
+        ],
+    )
+    again = GateResult.model_validate(result.model_dump())
+    assert again == result
+    assert again.findings[0].fact_type is GateFactType.CHECK_FAILED
+    assert again.findings[0].ref == "V-1"
+
+
+def test_phase_reviewed_replay_tolerates_unknown_gate_result_field(tmp_path: Path) -> None:
+    """An older binary must still replay an event a newer one wrote with extra keys."""
+    from goals.models import Event, EventType
+    from goals.runtime import default_phases
+
+    snapshot = GoalSnapshot(
+        goal_id="g",
+        objective="Ship it",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/g"
+        ),
+        phases=default_phases("Ship it"),
+        current_phase="P1",
+    )
+    created = Event(
+        goal_id="g",
+        event_type=EventType.GOAL_CREATED,
+        payload={"snapshot": snapshot.model_dump()},
+    )
+    # A gate_result written by a newer Goals that declares a field this binary does not.
+    gate_result = GateResult(
+        gate_id="phase-review",
+        verdict=GateVerdict.FAIL,
+        summary="Evidence is not verified by execution.",
+        p0=["No automated check has been executed and passed."],
+    ).model_dump()
+    gate_result["a_future_field"] = {"nested": 1}
+    reviewed = Event(
+        goal_id="g",
+        event_type=EventType.PHASE_REVIEWED,
+        payload={"phase_id": "P1", "gate_result": gate_result},
+    )
+
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    (goal_dir / "events.jsonl").write_text(
+        created.model_dump_json() + "\n" + reviewed.model_dump_json() + "\n"
+    )
+
+    loaded = EventStore(goal_dir).snapshot()  # must not raise on the unknown field
+    p1 = next(phase for phase in loaded.phases if phase.phase_id == "P1")
+    assert len(p1.reviews) == 1
+    assert p1.reviews[0].verdict == GateVerdict.FAIL

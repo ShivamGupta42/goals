@@ -16,6 +16,7 @@ from goals.models import (
     Evidence,
     Event,
     EventType,
+    GateFactType,
     GateVerdict,
     Phase,
     Verification,
@@ -74,6 +75,87 @@ def test_prose_only_evidence_is_rejected() -> None:
     result = review_phase(phase)
     assert result.verdict == GateVerdict.FAIL
     assert any("no automated check" in issue.lower() for issue in result.p0)
+
+
+# --- typed facts: the kernel reports *why*, mechanically -------------------- #
+def _facts(phase: Phase, **kw) -> list[GateFactType]:
+    return [f.fact_type for f in review_phase(phase, **kw).findings]
+
+
+def test_prose_only_evidence_reports_no_passing_check_fact() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(checks_run=["I ran it"], confidence=0.95),
+    )
+    assert GateFactType.NO_PASSING_CHECK in _facts(phase)
+
+
+def test_acceptance_not_met_reports_a_gap_fact() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(
+            acceptance_not_met=["signup works"],
+            verifications=[
+                Verification(covers="done", kind="auto", command="true", ran=True, passed=True)
+            ],
+        ),
+    )
+    facts = _facts(phase)
+    assert GateFactType.ACCEPTANCE_NOT_MET in facts
+    assert review_phase(phase).verdict == GateVerdict.FAIL
+
+
+def test_ran_and_failed_check_is_a_bug_fact_and_suppresses_generic_line() -> None:
+    # A check the engine ran that exited non-zero is CHECK_FAILED — distinct from
+    # "nothing ran". The generic NO_PASSING_CHECK line is suppressed to avoid
+    # double-reporting, and its substring must be gone.
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(
+            verifications=[
+                Verification(covers="done", kind="auto", command="false", ran=True, passed=False)
+            ]
+        ),
+    )
+    result = review_phase(phase)
+    facts = [f.fact_type for f in result.findings]
+    assert GateFactType.CHECK_FAILED in facts
+    assert GateFactType.NO_PASSING_CHECK not in facts
+    assert not any("no automated check" in line.lower() for line in result.p0)
+    assert result.verdict == GateVerdict.FAIL
+
+
+def test_missing_falsifier_fact_carries_assumption_ref() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(
+            verifications=[
+                Verification(covers="done", kind="auto", command="true", ran=True, passed=True)
+            ]
+        ),
+    )
+    findings = review_phase(phase, load_bearing=[("A-load", "the premise")]).findings
+    falsifier = [f for f in findings if f.fact_type == GateFactType.MISSING_FALSIFIER]
+    assert falsifier and falsifier[0].ref == "A-load"
+
+
+def test_p0_mirrors_finding_messages_verbatim() -> None:
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(checks_run=["note"], confidence=0.9),
+    )
+    result = review_phase(phase)
+    assert result.p0 == [f.message for f in result.findings]
 
 
 def test_declared_but_unrun_check_does_not_pass() -> None:

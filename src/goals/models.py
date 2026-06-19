@@ -47,6 +47,32 @@ class GateVerdict(StrEnum):
     UNSAFE = "unsafe"
 
 
+class GateFactType(StrEnum):
+    """Mechanical facts about a phase's proof state, derived purely from execution.
+
+    The gate kernel emits these; it never names a human category. The rubric
+    (``goals.rubric``) maps facts -> audience vocabulary at read-time, so the persisted
+    record stores only facts and the vocabulary can evolve without rewriting proof
+    history.
+    """
+
+    NO_EVIDENCE = "no_evidence"
+    ACCEPTANCE_NOT_MET = "acceptance_not_met"
+    AMBIGUOUS = "ambiguous"
+    VERIFICATION_UNRUNNABLE = "verification_unrunnable"
+    CHECK_FAILED = "check_failed"
+    NO_PASSING_CHECK = "no_passing_check"
+    MISSING_FALSIFIER = "missing_falsifier"
+
+
+class GateFindingCategory(StrEnum):
+    """The human rubric a fact maps to — one swappable view (see ``goals.rubric``)."""
+
+    GAP = "gap"
+    BUG = "bug"
+    VERIFICATION_MISS = "verification_miss"
+
+
 class EventType(StrEnum):
     GOAL_CREATED = "goal_created"
     PHASE_STARTED = "phase_started"
@@ -174,6 +200,21 @@ class Evidence(BaseModel):
     notes: str = ""
 
 
+class GateFinding(BaseModel):
+    """One typed reason a phase is not acceptable: a mechanical fact plus its message.
+
+    ``fact_type`` is the kernel's machine-readable signal; ``message`` is the verbatim
+    human line (also mirrored into ``GateResult.p0`` for back-compat); ``ref`` carries the
+    verification or assumption id when one applies, for machine consumers.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    fact_type: GateFactType
+    message: str
+    ref: str = ""
+
+
 class GateResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -183,6 +224,7 @@ class GateResult(BaseModel):
     p0: list[str] = Field(default_factory=list)
     p1: list[str] = Field(default_factory=list)
     p2: list[str] = Field(default_factory=list)
+    findings: list[GateFinding] = Field(default_factory=list)
     attempts: int = 1
     created_at: str = Field(default_factory=utc_now)
 
@@ -810,6 +852,8 @@ class GoalIssue(BaseModel):
     suggested_action: str = ""
     needs_user: bool = False
     evidence_refs: list[str] = Field(default_factory=list)
+    # Read-time rubric tag for gate issues (None for non-gate or pre-rubric reviews).
+    category: GateFindingCategory | None = None
 
 
 class GoalIssueReport(BaseModel):

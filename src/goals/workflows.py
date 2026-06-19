@@ -302,7 +302,8 @@ def _issue_lines(report: GoalIssueReport) -> list[str]:
         owner = "user" if issue.needs_user else "agent"
         action = f" Next: {issue.suggested_action}" if issue.suggested_action else ""
         summary = issue.summary.rstrip(".")
-        lines.append(f"[{issue.severity}][{owner}][{issue.area}] {summary}.{action}")
+        category = f"[{issue.category}]" if issue.category else ""
+        lines.append(f"[{issue.severity}][{owner}][{issue.area}]{category} {summary}.{action}")
     if len(report.issues) > 8:
         lines.append(f"{len(report.issues) - 8} more issue(s); run `goals issues`.")
     return lines
