@@ -141,7 +141,8 @@ underneath the native inner loop. Goals provides:
 - adapter-aware native stop-conditions (`goals emit`) and synced context blocks
   (`goals context sync`),
 - live skill discovery (`goals skills list`) that reads `~/.claude/skills`,
-  `~/.codex/skills`, and goals' own bundled skills with no registry to maintain,
+  `~/.agents/skills`, legacy `~/.codex/skills`, and goals' own bundled skills
+  with no registry to maintain,
   plus optional install into an agent's dir (`goals skills install`),
 - a visual loop builder (`goals loop build|check|improve`) that composes goal
   loops in a text TUI, lints them, exports standalone HTML, and feeds per-phase

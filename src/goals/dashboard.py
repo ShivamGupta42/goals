@@ -10,13 +10,15 @@ from goals.architecture import (
     architecture_status_counts,
     build_architecture_brief,
 )
+from goals.audit import build_phase_lineage
 from goals.brief import build_goal_brief
+from goals.capabilities import analyze_capabilities
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
 from goals.journey import sort_assumptions
-from goals.models import GoalArchitectureMap, GoalSnapshot
+from goals.models import Event, GoalArchitectureMap, GoalSnapshot
 from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
 
@@ -58,6 +60,7 @@ def render_dashboard(
     *,
     architecture: GoalArchitectureMap | None = None,
     architecture_path: Path | None = None,
+    events: list[Event] | None = None,
 ) -> None:
     """Render the read-only goal dashboard.
 
@@ -73,6 +76,7 @@ def render_dashboard(
     brief = build_goal_brief(snapshot)
     checkpoint = build_current_checkpoint_brief(snapshot)
     issue_report = analyze_goal_issues(snapshot)
+    capability_report = analyze_capabilities(snapshot)
 
     accepted = len([p for p in snapshot.phases if str(p.status) == "accepted"])
     total = len(snapshot.phases)
@@ -87,7 +91,9 @@ def render_dashboard(
     journey_section = _journey_html(snapshot)
     decisions_teaser = _decisions_teaser_html(snapshot)
     issues_section = _issues_section_html(issue_report)
+    capability_section = _capability_section_html(capability_report)
     evidence = _evidence_detail_html(snapshot, checkpoint)
+    lineage_section = _lineage_section_html(snapshot, events or [])
     architecture_section = _architecture_section_html(
         snapshot, architecture, architecture_path, has_recorded_architecture
     )
@@ -234,9 +240,11 @@ def render_dashboard(
 
     <h2 class="sec">Checks &amp; references</h2>
     {issues_section}
+    {capability_section}
     <details><summary>Proof &amp; evidence<span class="meta">{proof} of {total} recorded</span></summary>
       <div class="body">{evidence}</div>
     </details>
+    {lineage_section}
     {architecture_section}
     {sources_section}
     <details><summary>Technical details</summary>
@@ -536,6 +544,34 @@ def _issues_section_html(report) -> str:
     )
 
 
+def _capability_section_html(report) -> str:
+    """Show capability gaps only when a goal appears to need missing tooling."""
+    if not report.gaps:
+        return ""
+    has_user = any(gap.needs_user for gap in report.gaps)
+    tone = "amber" if has_user else "muted"
+    open_attr = " open" if has_user else ""
+    items = "".join(
+        f'<li><span class="t">{escape(gap.title)}'
+        f'<span class="chip">{escape(gap.severity)}</span></span>'
+        + (f'<br><span class="d">{escape(gap.detail)}</span>' if gap.detail else "")
+        + (
+            f'<br><span class="d">Next: {escape(gap.suggested_action)}</span>'
+            if gap.suggested_action
+            else ""
+        )
+        + "</li>"
+        for gap in report.gaps[:8]
+    )
+    meta = f"{len(report.gaps)} gap" + ("" if len(report.gaps) == 1 else "s")
+    return (
+        f"<details{open_attr}><summary>Capabilities"
+        f'<span class="meta {tone}">{escape(meta)}</span></summary>'
+        f'<div class="body"><p>{escape(report.summary)}</p><ul class="kv">{items}</ul></div>'
+        "</details>"
+    )
+
+
 def _architecture_section_html(
     snapshot: GoalSnapshot, architecture, architecture_path, has_recorded: bool
 ) -> str:
@@ -558,6 +594,51 @@ def _sources_section_html(snapshot: GoalSnapshot) -> str:
         f'<details><summary>Sources<span class="meta">{_sources_meta(snapshot)}</span></summary>'
         f'<div class="body">{_sources_html(snapshot)}</div></details>'
     )
+
+
+def _lineage_section_html(snapshot: GoalSnapshot, events: list[Event]) -> str:
+    if not events:
+        return ""
+    phase_id = snapshot.current_phase or _latest_phase_id(events)
+    if not phase_id:
+        return ""
+    try:
+        lineage = build_phase_lineage(events, phase_id)
+    except Exception as exc:  # noqa: BLE001
+        return _lineage_diagnostic_html(str(exc))
+    items = []
+    latest_chain = lineage.chains[-1] if lineage.chains else []
+    for item in latest_chain:
+        phase = f" · {escape(item.phase_id)}" if item.phase_id else ""
+        items.append(
+            f'<li><span class="t">{escape(item.event_type)}{phase}</span>'
+            f'<br><span class="d"><code>{escape(item.event_id)}</code> · '
+            f'{escape(item.summary)}</span></li>'
+        )
+    if not items:
+        return ""
+    meta = f"{len(latest_chain)} event chain"
+    return (
+        f'<details><summary>Lineage<span class="meta">{escape(meta)}</span></summary>'
+        '<div class="body"><p>Latest causal chain for the current phase.</p>'
+        f'<ul class="kv">{"".join(items)}</ul></div></details>'
+    )
+
+
+def _lineage_diagnostic_html(message: str) -> str:
+    return (
+        '<details><summary>Lineage<span class="meta amber">unavailable</span></summary>'
+        "<div class=\"body\"><p>Lineage could not be rendered from the event log.</p>"
+        f"<p>{escape(message)}</p></div></details>"
+    )
+
+
+def _latest_phase_id(events: list[Event]) -> str:
+    for event in reversed(events):
+        phase_id = event.payload.get("phase_id")
+        if isinstance(phase_id, str):
+            return phase_id
+    return ""
 
 
 def _steps_html(snapshot: GoalSnapshot) -> str:

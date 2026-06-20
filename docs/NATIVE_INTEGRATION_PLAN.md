@@ -206,11 +206,11 @@ Package the in-agent experience. Plugin name `goals` ⇒ `/goals:<cmd>`.
   (idempotent, collision-safe; `--dry-run` to preview):
   - **claude**: register the self-hosted marketplace + enable the plugin (write
     `extraKnownMarketplaces` + `enabledPlugins`), and install bundled skills.
-  - **codex**: install skills into `~/.codex/skills`
-    (`skill_discovery.install_bundled_skills`), write Codex prompt files for the
-    `goals` verbs, and sync the `AGENTS.md` managed block
-    (`portability.sync_context_files`).
-  - Print a one-line "you're set up — run /goals:create" summary.
+  - **codex**: install skills into `~/.agents/skills`
+    (`skill_discovery.install_bundled_skills`) and remind the user to run
+    `goals context sync` inside a project when they want the active goal in
+    `AGENTS.md`.
+  - Print a concise setup summary with the actions taken.
 - **Verify Codex actually works** (not assumed):
   - drive a real check with `codex exec` (the CLI is available in this env) — run
     `goals start`, `goals next`, `goals phase evidence/review/accept`, `goals

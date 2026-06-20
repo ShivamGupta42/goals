@@ -133,6 +133,17 @@ def _portable_phase(phase: Phase) -> dict:
             "known_gaps": list(phase.evidence.known_gaps),
             "confidence": phase.evidence.confidence,
         }
+        if phase.evidence.artifacts:
+            evidence["artifacts"] = [
+                {
+                    "path": artifact.path,
+                    "sha256": artifact.sha256,
+                    "size_bytes": artifact.size_bytes,
+                    "missing": artifact.missing,
+                    "error": artifact.error,
+                }
+                for artifact in phase.evidence.artifacts
+            ]
     return {
         "phase_id": phase.phase_id,
         "title": phase.title,

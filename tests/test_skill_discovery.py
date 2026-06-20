@@ -251,6 +251,27 @@ def test_install_never_follows_or_deletes_a_symlinked_dest(tmp_path: Path) -> No
     assert "user." in (external / "SKILL.md").read_text()
 
 
+def test_codex_legacy_root_is_fallback_and_primary_wins(tmp_path: Path) -> None:
+    _write_skill(tmp_path / "codex", "shared", "Primary Codex root.")
+    _write_skill(tmp_path / "codex-legacy", "shared", "Legacy Codex root.")
+    _write_skill(tmp_path / "codex-legacy", "legacy-only", "Legacy only.")
+
+    skills = {
+        skill.name: skill
+        for skill in discover_skills(
+            claude_dir=tmp_path / "claude",
+            codex_dir=tmp_path / "codex",
+            codex_legacy_dir=tmp_path / "codex-legacy",
+            bundled_dir=tmp_path / "bundled",
+        )
+    }
+
+    assert skills["shared"].description == "Primary Codex root."
+    assert "/codex/shared/" in skills["shared"].path
+    assert skills["legacy-only"].agents == ["codex"]
+    assert "/codex-legacy/legacy-only/" in skills["legacy-only"].path
+
+
 def test_render_marks_uninstalled_bundled_and_truncates(tmp_path: Path) -> None:
     long_desc = "x" * 300
     out = render_skills_list(

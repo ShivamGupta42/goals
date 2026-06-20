@@ -5,6 +5,7 @@ from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
 from goals.brief import build_goal_brief
+from goals.capabilities import analyze_capabilities
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.issues import analyze_goal_issues
 from goals.loop_builder import load_design, to_snapshot
@@ -14,6 +15,7 @@ from goals.portability import export_goal
 from goals.storage import GoalsError
 from goals.models import (
     ArchitectureCheckReport,
+    CapabilityCheckReport,
     CurrentCheckpointBrief,
     GoalBrief,
     GoalIssueReport,
@@ -51,12 +53,18 @@ class WorkflowCheck:
     issues: GoalIssueReport
     merge: MergeReadinessReport
     architecture: ArchitectureCheckReport
+    capability: CapabilityCheckReport
     registry_count: int
     portable_path: Path | None = None
 
     @property
     def passed(self) -> bool:
-        return not self.issues.issues and self.merge.passed and self.architecture.passed
+        return (
+            not self.issues.issues
+            and self.merge.passed
+            and self.architecture.passed
+            and self.capability.passed
+        )
 
 
 @dataclass(frozen=True)
@@ -141,6 +149,7 @@ def check_workflow(cwd: Path, *, refresh: bool = False) -> WorkflowCheck:
         issues=analyze_goal_issues(snapshot),
         merge=analyze_merge_readiness(snapshot),
         architecture=analyze_code_architecture(snapshot, worktree),
+        capability=analyze_capabilities(snapshot),
         registry_count=len(validate_registries(worktree)),
         portable_path=Path(export.markdown_path) if export is not None else None,
     )
@@ -234,6 +243,7 @@ def render_check_workflow(report: WorkflowCheck) -> str:
     issues = report.issues
     merge = report.merge
     architecture = report.architecture
+    capability = report.capability
     lines = [
         "# Goal Check",
         "",
@@ -281,6 +291,10 @@ def render_check_workflow(report: WorkflowCheck) -> str:
         "## Architecture",
         f"Overall: {'pass' if architecture.passed else 'needs attention'}",
         _bullets(_architecture_lines(architecture), empty=architecture.summary),
+        "",
+        "## Capabilities",
+        f"Overall: {'pass' if capability.passed else 'needs attention'}",
+        _bullets(_capability_lines(capability), empty=capability.summary),
         "",
         "## Registry",
         f"Validated registry files: {report.registry_count}",
@@ -411,4 +425,16 @@ def _architecture_lines(report: ArchitectureCheckReport) -> list[str]:
         lines.append(
             f"{len(report.findings) - 6} more finding(s); run `goals architecture check`."
         )
+    return lines
+
+
+def _capability_lines(report: CapabilityCheckReport) -> list[str]:
+    lines = []
+    for gap in report.gaps[:6]:
+        owner = "user" if gap.needs_user else "agent"
+        action = f" Next: {gap.suggested_action}" if gap.suggested_action else ""
+        summary = gap.title.rstrip(".")
+        lines.append(f"[{gap.severity}][{owner}][{gap.status}] {summary}.{action}")
+    if len(report.gaps) > 6:
+        lines.append(f"{len(report.gaps) - 6} more gap(s); run `goals capability check`.")
     return lines

@@ -13,7 +13,7 @@ Design philosophy (see docs/VISUAL_BUILDER_GOAL.md):
   (portable spec + HTML) can never drift.
 * **Skills discovered live, never registered.** A phase stores only skill *name*
   references. Which agent has each skill — and whether it is missing from
-  ``~/.codex/skills`` — is resolved at render/check time via
+  ``~/.agents/skills`` — is resolved at render/check time via
   :func:`goals.skill_discovery.discover_skills`, so the durable design stays
   environment-independent and committable.
 * **Thin.** No server, no curses, no new runtime dependency. The interactive
@@ -677,7 +677,7 @@ def _agents_label(skill: DiscoveredSkill) -> str:
 
 
 def _install_hint(skill: DiscoveredSkill) -> str:
-    """Suggest installing into ~/.codex/skills when a skill is Claude-only.
+    """Suggest installing into ~/.agents/skills when a skill is Claude-only.
 
     Keeps the loop runnable under both Claude and Codex. Uses the ``~``-relative
     form (not the expanded absolute home path) so the hint is safe to embed in
@@ -685,7 +685,7 @@ def _install_hint(skill: DiscoveredSkill) -> str:
     """
     if "claude" in skill.agents and "codex" not in skill.agents:
         return (
-            f"Suggestion: install {skill.name} into ~/.codex/skills so the loop "
+            f"Suggestion: install {skill.name} into ~/.agents/skills so the loop "
             f"runs under Codex too (`goals skills install --target codex` for "
             "bundled skills, or copy the skill dir)."
         )

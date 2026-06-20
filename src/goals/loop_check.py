@@ -239,7 +239,7 @@ def _check_skill_refs(design: LoopDesign, known: set[str]) -> list[LoopCheckFind
                         code="unknown-skill",
                         summary=(
                             f"Phase {phase.phase_id} references skill {name!r}, which is not in "
-                            "~/.claude/skills or ~/.codex/skills."
+                            "~/.claude/skills, ~/.agents/skills, or legacy ~/.codex/skills."
                         ),
                         suggested_fix="Install the skill, rename the reference, or remove it.",
                         phase_id=phase.phase_id,

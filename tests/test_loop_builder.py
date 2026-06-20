@@ -94,7 +94,7 @@ def test_attach_claude_only_skill_emits_codex_install_hint(tmp_path: Path) -> No
     )
     combined = "\n".join(out)
     assert "goals-decision-explainer" in combined
-    assert ".codex/skills" in combined  # the portability install suggestion
+    assert ".agents/skills" in combined  # the portability install suggestion
 
 
 def test_attach_shared_skill_has_no_install_hint(tmp_path: Path) -> None:
@@ -217,7 +217,7 @@ def test_html_shows_attached_skill_availability(tmp_path: Path) -> None:
     assert "goals-decision-explainer" in html
     assert "shared-skill" in html
     # The Claude-only skill surfaces the codex install hint in the HTML too.
-    assert ".codex/skills" in html
+    assert ".agents/skills" in html
 
 
 def test_next_phase_id_never_collides_with_custom_ids(tmp_path: Path) -> None:
@@ -247,12 +247,12 @@ def test_add_rejects_empty_title(tmp_path: Path) -> None:
 
 def test_html_export_never_leaks_an_absolute_home_path(tmp_path: Path) -> None:
     # The export lands in committable, path-free .goals/loop.html, so the
-    # Claude-only install hint must use ~/.codex/skills, not the expanded home.
+    # Claude-only install hint must use ~/.agents/skills, not the expanded home.
     session = _session(tmp_path)
     _drive(session, "add Plan", "attach goals-decision-explainer")
     html = render_loop_html(session.design, skills=_skills())
     assert str(Path.home()) not in html
-    assert "~/.codex/skills" in html
+    assert "~/.agents/skills" in html
 
 
 def test_unknown_command_is_reported(tmp_path: Path) -> None:
