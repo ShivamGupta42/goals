@@ -1,7 +1,9 @@
 # Goals
 
 **A no-nonsense goal workflow engine.** It keeps your AI on a plan you can read,
-decide on, and trust.
+decide on, and trust — and proves each step actually ran before it counts as done.
+
+![Goals keeps your AI's plan and proof alive across /clear](docs/assets/goals-hero-opt.gif)
 
 **Just say what you want — for example:**
 
@@ -44,6 +46,16 @@ Anyone using AI to get real work done:
 
 Goals runs the **workflow**; your AI assistant (Claude Code, Codex, …) does the **work**.
 Goals is the part that keeps it organized, legible, and accountable.
+
+Under the hood it's a small CLI + plugin over plain files you own. The goal
+lifecycle — `start` → assess → a phase loop where each step's checks must *run*
+before it's accepted → `finish`:
+
+![Goal lifecycle](docs/assets/architecture-2.svg)
+
+See [**docs/architecture.md**](docs/architecture.md) for the full set: system
+architecture, the goal lifecycle, skill-first discovery + capability gaps, and the
+portability layer that lets a goal survive `/clear`.
 
 ## Get started
 
