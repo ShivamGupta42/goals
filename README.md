@@ -3,6 +3,8 @@
 **A no-nonsense goal workflow engine.** It keeps your AI on a plan you can read,
 decide on, and trust — and proves each step actually ran before it counts as done.
 
+![Goals keeps your AI's plan and proof alive across /clear](docs/marketing-refresh/assets/goals-hero-opt.gif)
+
 **Just say what you want — for example:**
 
 - *"build me a weight-loss tracking app"*

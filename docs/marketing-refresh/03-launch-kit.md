@@ -128,18 +128,23 @@ Lead with the pain, show the GIF, link last. Keep self-promo <10% of activity.
 
 ---
 
-## I. Out of scope — follow-ups (need screen capture / live env)
+## I. Asset status
 
-These can't be produced headlessly; flagged, not silently dropped:
+Done locally (in `docs/marketing-refresh/assets/`):
 
-1. **Re-record the hero GIF** against current behaviour. The `marketing` branch
-   `assets/goals-readme.tape` 5-beat shot list (start → check → `/clear` → resume)
-   should gain a beat that shows `goals phase verify` running real checks and a
-   beat on the building-journey dashboard. Re-render with VHS:
-   `vhs docs/marketing/assets/goals-readme.tape`.
-2. **Re-shoot the dashboard hero screenshot** (`dashboard-hero.png`) — it predates
-   the PACERS building-journey reframe (#18). Run `goals view` on a real goal.
-3. **Convert a rendered SVG to PNG** for the GitHub social preview (needs an
-   image tool, e.g. `rsvg-convert` / `sharp`).
-4. **Actually submit** the awesome-list PRs and post to HN/Reddit/X — owner action,
-   gated on per-channel approval (`goals permission check`).
+1. ✅ **Hero GIF re-recorded** against current behaviour — `goals-hero-opt.gif`
+   (+ `.gif`, `.mp4`). New beats over the old marketing tape: a **building
+   journey** beat (`goals assess journey`) and an **executed-proof** goal that
+   survives `/clear`. Reproducible: `setup-demo.sh` + `goals-hero.tape`
+   (`bash setup-demo.sh && cd … && vhs goals-hero.tape`).
+2. ✅ **Dashboard hero screenshot** — `dashboard-hero.png`, captured from a real
+   completed goal showing the PACERS building journey (#18). Reproduce with
+   headless Chrome on any goal's `dashboard.html`.
+3. ✅ **SVG → PNG social preview** — `architecture-1.png`, `architecture-2.png`
+   (2× via `rsvg-convert`). Use `architecture-2.png` (the lifecycle) as the
+   GitHub social-preview image.
+
+Still owner actions (remote — can't be done locally):
+
+4. **Push the branch / submit** the awesome-list PRs and post to HN/Reddit/X —
+   gated on per-channel approval (`goals permission check`). Copy is ready above.

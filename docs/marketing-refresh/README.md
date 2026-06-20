@@ -46,8 +46,13 @@ its checks **actually run and pass**. Everything lives as files in your repo, so
 the goal survives `/clear`, a new session, or switching agents — and it tells you
 which skills it's missing before it starts, instead of failing halfway.
 
-## Open follow-ups (need screen capture / owner action)
+## Assets (all rendered locally — see `03-launch-kit.md` §I)
 
-See `03-launch-kit.md` §I: re-record hero GIF + dashboard screenshot against
-current behaviour, convert an SVG to PNG for the social preview, and submit the
-awesome-list PRs / launch posts (owner action, per-channel approval).
+- `assets/goals-hero-opt.gif` (+ `.gif`, `.mp4`) — re-recorded hero demo with
+  building-journey + executed-proof beats; reproducible via `setup-demo.sh` +
+  `goals-hero.tape`.
+- `assets/dashboard-hero.png` — real completed-goal dashboard (PACERS journey).
+- `assets/architecture-1..4.svg` + `architecture-1/2.png` — diagrams + social preview.
+
+**Only remaining (remote, owner action):** push the branch, submit the awesome-list
+PRs, and post to HN/Reddit/X — gated on per-channel approval (`goals permission check`).
