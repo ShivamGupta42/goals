@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from goals.checkpoints import checkpoint_waits_on_user, phase_checkpoint_blockers
+from goals.criteria import criterion_cover_aliases, criterion_refs
 from goals.models import (
     Evidence,
     GateFactType,
@@ -10,6 +11,7 @@ from goals.models import (
     GateResult,
     GateVerdict,
     Phase,
+    Verification,
 )
 
 
@@ -58,7 +60,7 @@ def review_phase(
             findings=[no_evidence],
             attempts=capped_attempt,
         )
-    findings = _evidence_findings(evidence, load_bearing)
+    findings = _evidence_findings(phase, evidence, load_bearing)
     if findings:
         return GateResult(
             gate_id="phase-review",
@@ -79,6 +81,7 @@ def review_phase(
 
 
 def _evidence_findings(
+    phase: Phase,
     evidence: Evidence,
     load_bearing: Sequence[tuple[str, str]],
 ) -> list[GateFinding]:
@@ -90,8 +93,7 @@ def _evidence_findings(
 
     Two un-gameable requirements (the engine never decides *what* to test — the
     model does — it only insists the proof was executed, not narrated):
-      1. at least one ``auto`` verification actually ran and passed, so a phase can
-         never be accepted on prose alone, and
+      1. every acceptance criterion is covered by a valid verification, and
       2. every load-bearing assumption has an ``auto`` falsifier that ran and passed
          — a test that would fail if the assumption were false.
     """
@@ -121,13 +123,13 @@ def _evidence_findings(
                     ref=v.verification_id,
                 )
             )
-        if v.kind == "manual" and not v.rationale.strip():
+        if v.kind in {"manual", "production", "waived"} and not v.rationale.strip():
             findings.append(
                 GateFinding(
                     fact_type=GateFactType.VERIFICATION_UNRUNNABLE,
                     message=(
-                        f"Manual verification {v.verification_id} needs a rationale "
-                        "(why it cannot be automated)."
+                        f"{v.kind.title()} verification {v.verification_id} needs a rationale "
+                        "(why local automated proof is not appropriate)."
                     ),
                     ref=v.verification_id,
                 )
@@ -143,7 +145,7 @@ def _evidence_findings(
             )
         )
 
-    if not any(v.kind == "auto" and v.ran and v.passed for v in verifications):
+    if not any(_verification_counts_as_coverage(v) for v in verifications):
         # A check that ran and failed already carries the signal via CHECK_FAILED;
         # suppress the generic line so the CLI and the memory friction note do not
         # double-report. The no-check-ran case still emits it (preserving the gate's
@@ -158,6 +160,8 @@ def _evidence_findings(
                     ),
                 )
             )
+
+    findings.extend(_criterion_coverage_findings(evidence, phase))
 
     for assumption_id, statement in load_bearing:
         if not any(
@@ -176,6 +180,32 @@ def _evidence_findings(
             )
 
     return findings
+
+
+def _criterion_coverage_findings(evidence: Evidence, phase: Phase) -> list[GateFinding]:
+    findings: list[GateFinding] = []
+    verifications = evidence.verifications
+    for ref in criterion_refs(phase):
+        aliases = criterion_cover_aliases(phase, ref)
+        if any(_verification_counts_as_coverage(v) and v.covers.strip() in aliases for v in verifications):
+            continue
+        findings.append(
+            GateFinding(
+                fact_type=GateFactType.CRITERION_UNVERIFIED,
+                message=(
+                    f"Acceptance criterion {ref.criterion_id} has no valid verification: "
+                    f"{ref.text}"
+                ),
+                ref=ref.criterion_id,
+            )
+        )
+    return findings
+
+
+def _verification_counts_as_coverage(v: Verification) -> bool:
+    if v.kind == "auto":
+        return v.ran and v.passed
+    return bool(v.rationale.strip())
 
 
 def _blocked_after_cap(attempt: int, max_attempts: int) -> GateVerdict:

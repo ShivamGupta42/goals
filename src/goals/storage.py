@@ -24,6 +24,7 @@ from goals.models import (
     JudgementRecord,
     PhaseCheckpoint,
     PhaseStatus,
+    ToolHealthCheck,
     ProblemBreakdown,
     SourceClaim,
     SourceRecord,
@@ -285,6 +286,11 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                     snapshot.source_claims.append(claim)
         elif event.event_type == EventType.LEARNING_CAPTURED:
             snapshot.learnings.append(payload["learning"])
+        elif event.event_type == EventType.TOOL_HEALTH_RECORDED:
+            snapshot.tool_health = [
+                ToolHealthCheck.model_validate(item)
+                for item in payload.get("checks", [])
+            ]
     return GoalSnapshot.model_validate(snapshot.model_dump())
 
 

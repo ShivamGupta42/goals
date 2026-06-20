@@ -11,7 +11,7 @@ from goals.portability import (
     sync_context_files,
     _replace_block,
 )
-from goals.runtime import default_phases
+from goals.runtime import create_goal, default_phases, transition_phase
 from goals.models import UserMemoryEvent
 from goals.user_memory import append_user_event
 
@@ -38,7 +38,7 @@ def test_build_portable_state_is_sanitized(tmp_path: Path) -> None:
     payload = json.dumps(state)
     # No local machine path leaks into the committable spec.
     assert str(tmp_path) not in payload
-    assert state["spec_version"] == 1
+    assert state["spec_version"] == 2
     assert state["branch"] == "goal/demo"
     assert state["current_phase"] == "P1"
     assert state["phases"], "phases should be exported"
@@ -82,8 +82,20 @@ def test_export_goal_writes_committable_pair(monkeypatch, tmp_path: Path) -> Non
     assert state_path.exists() and markdown_path.exists()
     assert state_path.parent.name == ".goals"
     parsed = json.loads(state_path.read_text())
-    assert parsed["spec_version"] == 1
+    assert parsed["spec_version"] == 2
     assert result.phase_count == len(snapshot.phases)
+
+
+def test_mutating_events_refresh_portable_state(tmp_path: Path) -> None:
+    create_goal("refresh portable state", tmp_path, workspace="in_place")
+    transition_phase(tmp_path, "P1", "start")
+
+    state = json.loads((tmp_path / ".goals" / "goal-state.json").read_text())
+    phase = state["phases"][0]
+
+    assert phase["phase_id"] == "P1"
+    assert phase["status"] == "in_progress"
+    assert phase["acceptance_criteria"][0]["id"] == "P1.C1"
 
 
 def test_context_sync_creates_then_preserves(monkeypatch, tmp_path: Path) -> None:

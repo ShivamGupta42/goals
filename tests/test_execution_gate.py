@@ -49,9 +49,19 @@ def _repo_with_goal(tmp_path: Path) -> Path:
 def _record_evidence(repo: Path, goal_id: str, verifications: list[dict]) -> None:
     # Build through the model (as the CLI does) so verification ids are baked into
     # the stored payload and stay stable across event replay.
+    phase = load_active_snapshot(repo).phases[0]
+    expanded: list[dict] = []
+    for verification in verifications:
+        if verification.get("covers") == "done" and phase.acceptance_criteria:
+            for index, _criterion in enumerate(phase.acceptance_criteria, start=1):
+                copy = dict(verification)
+                copy["covers"] = f"{phase.phase_id}.C{index}"
+                expanded.append(copy)
+        else:
+            expanded.append(verification)
     evidence = Evidence(
         acceptance_met=["done"],
-        verifications=[Verification(**v) for v in verifications],
+        verifications=[Verification(**v) for v in expanded],
     )
     append_event(
         repo,

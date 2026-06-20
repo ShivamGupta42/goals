@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Matches a YAML frontmatter fence (`---`) on its own line, so a `---` inside a
 # description value or the markdown body never splits the frontmatter.
@@ -50,6 +50,7 @@ class DiscoveredSkill(BaseModel):
 
     name: str
     description: str
+    capabilities: list[str] = Field(default_factory=list)
     sources: list[str]
     agents: list[str]
     path: str
@@ -112,22 +113,23 @@ def discover_skills(
         ("bundled", bundled_dir if bundled_dir is not None else bundled_skills_root()),
     ]
 
-    # dir_name -> {source_label: (description, skill_md_path)}
-    merged: dict[str, dict[str, tuple[str, Path]]] = {}
+    # dir_name -> {source_label: (description, capabilities, skill_md_path)}
+    merged: dict[str, dict[str, tuple[str, list[str], Path]]] = {}
     for label, root in sources:
-        for dir_name, (description, path) in _scan_source(root).items():
-            merged.setdefault(dir_name, {})[label] = (description, path)
+        for dir_name, (description, capabilities, path) in _scan_source(root).items():
+            merged.setdefault(dir_name, {})[label] = (description, capabilities, path)
 
     skills: list[DiscoveredSkill] = []
     for dir_name in sorted(merged):
         by_label = merged[dir_name]
         best = min(by_label, key=lambda label: _SOURCE_PRECEDENCE[label])
-        description, path = by_label[best]
+        description, capabilities, path = by_label[best]
         present = set(by_label)
         skills.append(
             DiscoveredSkill(
                 name=dir_name,
                 description=description,
+                capabilities=capabilities,
                 sources=sorted(present, key=lambda label: _SOURCE_PRECEDENCE[label]),
                 agents=sorted(present & _AGENT_SOURCES),
                 path=str(path),
@@ -136,9 +138,9 @@ def discover_skills(
     return skills
 
 
-def _scan_source(root: Path) -> dict[str, tuple[str, Path]]:
-    """Return {dir_name: (description, skill_md_path)} for one source dir."""
-    found: dict[str, tuple[str, Path]] = {}
+def _scan_source(root: Path) -> dict[str, tuple[str, list[str], Path]]:
+    """Return {dir_name: (description, capabilities, skill_md_path)} for one source dir."""
+    found: dict[str, tuple[str, list[str], Path]] = {}
     if not root.is_dir():
         return found
     for entry in sorted(root.iterdir()):
@@ -150,12 +152,12 @@ def _scan_source(root: Path) -> dict[str, tuple[str, Path]]:
         parsed = _parse_skill_md(skill_md)
         if parsed is None:
             continue
-        found[entry.name] = (parsed[1], skill_md)
+        found[entry.name] = (parsed[1], parsed[2], skill_md)
     return found
 
 
-def _parse_skill_md(path: Path) -> tuple[str, str] | None:
-    """Return (name, description) from SKILL.md frontmatter, or None if invalid.
+def _parse_skill_md(path: Path) -> tuple[str, str, list[str]] | None:
+    """Return (name, description, capabilities) from SKILL.md frontmatter, or None if invalid.
 
     Splits only on a ``---`` fence that sits on its own line, so a ``---`` inside
     a value or the body never corrupts the frontmatter. Non-UTF8, unreadable,
@@ -182,7 +184,14 @@ def _parse_skill_md(path: Path) -> tuple[str, str] | None:
     description = data.get("description", "")
     if not isinstance(description, str):
         description = str(description)
-    return name.strip(), description.strip()
+    capabilities = data.get("capabilities", [])
+    if isinstance(capabilities, str):
+        parsed_capabilities = [capabilities.strip()] if capabilities.strip() else []
+    elif isinstance(capabilities, list):
+        parsed_capabilities = [str(item).strip() for item in capabilities if str(item).strip()]
+    else:
+        parsed_capabilities = []
+    return name.strip(), description.strip(), parsed_capabilities
 
 
 def install_bundled_skills(

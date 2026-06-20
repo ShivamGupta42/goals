@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
+from goals.criteria import criterion_refs
 from goals.models import (
     PORTABLE_SPEC_VERSION,
     ContextSyncResult,
@@ -79,6 +80,9 @@ def build_portable_state(snapshot: GoalSnapshot) -> dict:
         "blockers": list(snapshot.blockers),
         "risks": list(snapshot.risks),
         "learnings": list(snapshot.learnings),
+        "tool_health": [
+            check.model_dump(mode="json") for check in snapshot.tool_health
+        ],
         "assumptions": [
             {
                 "id": assumption.assumption_id,
@@ -122,6 +126,10 @@ def _portable_phase(phase: Phase) -> dict:
             "acceptance_met": list(phase.evidence.acceptance_met),
             "acceptance_not_met": list(phase.evidence.acceptance_not_met),
             "checks_run": list(phase.evidence.checks_run),
+            "verifications": [
+                verification.model_dump(mode="json")
+                for verification in phase.evidence.verifications
+            ],
             "known_gaps": list(phase.evidence.known_gaps),
             "confidence": phase.evidence.confidence,
         }
@@ -130,7 +138,11 @@ def _portable_phase(phase: Phase) -> dict:
         "title": phase.title,
         "goal": phase.goal,
         "status": str(phase.status),
-        "acceptance_criteria": list(phase.acceptance_criteria),
+        "acceptance_criteria": [
+            {"id": ref.criterion_id, "text": ref.text}
+            for ref in criterion_refs(phase)
+        ],
+        "protocol": phase.protocol.model_dump(mode="json"),
         "evidence": evidence,
     }
 
@@ -163,9 +175,21 @@ def render_goal_markdown(snapshot: GoalSnapshot) -> str:
         if phase.acceptance_criteria:
             lines.append("")
             met = set(phase.evidence.acceptance_met) if phase.evidence else set()
-            for criterion in phase.acceptance_criteria:
-                box = "x" if criterion in met else " "
-                lines.append(f"- [{box}] {criterion}")
+            for ref in criterion_refs(phase):
+                box = "x" if ref.text in met or ref.criterion_id in met else " "
+                lines.append(f"- [{box}] `{ref.criterion_id}` {ref.text}")
+        if phase.protocol.skills:
+            lines.append("")
+            lines.append("Required skills:")
+            lines.extend(_bullets(phase.protocol.skills))
+        if phase.protocol.validation_profiles:
+            lines.append("")
+            lines.append("Validation profiles:")
+            lines.extend(_bullets(phase.protocol.validation_profiles))
+        if phase.protocol.termination_conditions:
+            lines.append("")
+            lines.append("Termination conditions:")
+            lines.extend(_bullets(phase.protocol.termination_conditions))
         if phase.evidence is not None:
             lines.append(
                 f"- _Evidence: {len(phase.evidence.checks_run)} check(s) run, "
@@ -205,9 +229,8 @@ def render_goal_markdown(snapshot: GoalSnapshot) -> str:
     return "\n".join(lines)
 
 
-def export_goal(cwd: Path) -> PortableExport:
-    """Write the portable spec pair into `<worktree>/.goals/`."""
-    snapshot = load_active_snapshot(cwd)
+def export_snapshot(snapshot: GoalSnapshot) -> PortableExport:
+    """Write the portable spec pair for an already-derived snapshot."""
     worktree = Path(snapshot.topology.worktree_path)
     goals_dir = worktree / ".goals"
     state_path = goals_dir / "goal-state.json"
@@ -222,6 +245,11 @@ def export_goal(cwd: Path) -> PortableExport:
         markdown_path=str(markdown_path),
         phase_count=len(snapshot.phases),
     )
+
+
+def export_goal(cwd: Path) -> PortableExport:
+    """Write the portable spec pair into `<worktree>/.goals/`."""
+    return export_snapshot(load_active_snapshot(cwd))
 
 
 # --------------------------------------------------------------------------- #
