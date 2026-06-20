@@ -1,0 +1,24 @@
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    edgeLabelBackground: "#ffffff"
+    fontSize: "16px"
+---
+flowchart TD
+    A["goals start 'a goal'"] --> B["assess · PACERS<br/>break it down + name assumptions"]
+    B --> C["goals next<br/>current phase + acceptance"]
+    C --> D["agent builds this phase"]
+    D --> E["goals phase evidence<br/>runnable checks per criterion"]
+    E --> F{"goals phase verify<br/>checks actually run"}
+    F -- "any fails" --> D
+    F -- "all pass" --> G["goals phase accept"]
+    G -- "next phase" --> C
+    G -- "last phase" --> H["goals finish"]
+    classDef accent fill:#DDD2FF,stroke:#6B50FF,stroke-width:3px,color:#1F2937;
+    class A,F,H accent;

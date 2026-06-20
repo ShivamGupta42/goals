@@ -17,7 +17,6 @@ own. No server, no database.
 ```mermaid
 ---
 config:
-  look: handDrawn
   theme: default
 ---
 flowchart TB
@@ -73,7 +72,6 @@ after its checks **actually run**.
 ```mermaid
 ---
 config:
-  look: handDrawn
   theme: default
 ---
 flowchart TD
@@ -126,7 +124,6 @@ Before working, Goals checks it actually *has* the skills/tools a goal needs.
 ```mermaid
 ---
 config:
-  look: handDrawn
   theme: default
 ---
 flowchart LR
@@ -159,7 +156,6 @@ vendor-locked and short-lived. Goals owns the durable, portable state.
 ```mermaid
 ---
 config:
-  look: handDrawn
   theme: default
 ---
 flowchart TB
