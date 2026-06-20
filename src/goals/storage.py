@@ -329,19 +329,29 @@ def _infer_cause(events: list[Event], event: Event) -> str | None:
     phase_id = event.payload.get("phase_id")
     if isinstance(phase_id, str):
         if event.event_type == EventType.PHASE_VERIFIED:
-            return _latest_event_id(events, EventType.PHASE_EVIDENCE, phase_id)
+            cause = _latest_event_id(events, EventType.PHASE_EVIDENCE, phase_id)
+            if cause:
+                return cause
         if event.event_type == EventType.PHASE_REVIEWED:
-            return _latest_event_id(events, EventType.PHASE_VERIFIED, phase_id) or _latest_event_id(
+            cause = _latest_event_id(events, EventType.PHASE_VERIFIED, phase_id) or _latest_event_id(
                 events, EventType.PHASE_EVIDENCE, phase_id
             )
+            if cause:
+                return cause
         if event.event_type == EventType.PHASE_ACCEPTED:
-            return _latest_event_id(events, EventType.PHASE_REVIEWED, phase_id)
+            cause = _latest_event_id(events, EventType.PHASE_REVIEWED, phase_id)
+            if cause:
+                return cause
         if event.event_type == EventType.PHASE_EVIDENCE:
-            return _latest_event_id(events, EventType.PHASE_STARTED, phase_id)
+            cause = _latest_event_id(events, EventType.PHASE_STARTED, phase_id)
+            if cause:
+                return cause
         if event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             return _latest_phase_event_id(events, phase_id)
     if event.event_type == EventType.DECISION_RECORDED:
-        return _latest_event_id(events, EventType.DECISION_REQUESTED)
+        cause = _latest_event_id(events, EventType.DECISION_REQUESTED)
+        if cause:
+            return cause
     return events[-1].event_id if events else None
 
 

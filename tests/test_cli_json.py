@@ -70,6 +70,18 @@ def test_lineage_phase_json_parses(tmp_path: Path, monkeypatch) -> None:
     assert data["chains"]
 
 
+def test_lineage_phase_text_renders(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    start = runner.invoke(app, ["phase", "start", "P1"])
+    assert start.exit_code == 0
+    result = runner.invoke(app, ["lineage", "--phase", "P1"])
+    assert result.exit_code == 0
+    assert "Lineage for P1:" in result.stdout
+    assert "phase_started" in result.stdout
+    assert "actor=goals-cli" in result.stdout
+
+
 def test_dashboard_renders_lineage_section(tmp_path: Path, monkeypatch) -> None:
     _repo_with_goal(tmp_path)
     monkeypatch.chdir(tmp_path)

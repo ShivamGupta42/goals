@@ -48,6 +48,30 @@ def test_event_append_adds_trace_and_phase_cause(tmp_path: Path) -> None:
     assert events[2].caused_by == events[1].event_id
 
 
+def test_phase_evidence_without_started_phase_falls_back_to_previous_event(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": _snapshot().model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={"phase_id": "P1", "evidence": Evidence().model_dump()},
+        )
+    )
+
+    events = store.read_events()
+
+    assert events[1].caused_by == events[0].event_id
+
+
 def test_strict_audit_reports_dangling_cause(tmp_path: Path) -> None:
     goal_dir = tmp_path / "goal"
     store = EventStore(goal_dir)
