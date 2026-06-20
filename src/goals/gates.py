@@ -3,7 +3,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from goals.checkpoints import checkpoint_waits_on_user, phase_checkpoint_blockers
-from goals.models import Evidence, GateResult, GateVerdict, Phase
+from goals.models import (
+    Evidence,
+    GateFactType,
+    GateFinding,
+    GateResult,
+    GateVerdict,
+    Phase,
+)
 
 
 def review_phase(
@@ -37,24 +44,30 @@ def review_phase(
         )
     evidence = phase.evidence
     if evidence is None:
+        no_evidence = GateFinding(
+            fact_type=GateFactType.NO_EVIDENCE,
+            message="Record phase evidence before review.",
+        )
         return GateResult(
             gate_id="phase-review",
             verdict=_blocked_after_cap(capped_attempt, max_attempts),
             summary=_summary(
                 "No evidence was recorded for this phase.", capped_attempt, max_attempts
             ),
-            p0=["Record phase evidence before review."],
+            p0=[no_evidence.message],
+            findings=[no_evidence],
             attempts=capped_attempt,
         )
-    issues = _evidence_issues(evidence, load_bearing)
-    if issues:
+    findings = _evidence_findings(evidence, load_bearing)
+    if findings:
         return GateResult(
             gate_id="phase-review",
             verdict=_blocked_after_cap(capped_attempt, max_attempts),
             summary=_summary(
                 "Evidence is not verified by execution.", capped_attempt, max_attempts
             ),
-            p0=issues,
+            p0=[finding.message for finding in findings],
+            findings=findings,
             attempts=capped_attempt,
         )
     return GateResult(
@@ -65,11 +78,15 @@ def review_phase(
     )
 
 
-def _evidence_issues(
+def _evidence_findings(
     evidence: Evidence,
     load_bearing: Sequence[tuple[str, str]],
-) -> list[str]:
+) -> list[GateFinding]:
     """Block unless the claims are backed by checks the engine ran and passed.
+
+    Returns typed *facts* about the proof state — never human categories; the rubric
+    (``goals.rubric``) maps facts to a vocabulary at read-time. Each fact's ``message``
+    is verbatim, so ``GateResult.p0`` (derived from these) stays back-compatible.
 
     Two un-gameable requirements (the engine never decides *what* to test — the
     model does — it only insists the proof was executed, not narrated):
@@ -78,38 +95,87 @@ def _evidence_issues(
       2. every load-bearing assumption has an ``auto`` falsifier that ran and passed
          — a test that would fail if the assumption were false.
     """
-    issues: list[str] = []
+    findings: list[GateFinding] = []
     if evidence.acceptance_not_met:
-        issues.append("Some acceptance criteria are explicitly not met.")
+        findings.append(
+            GateFinding(
+                fact_type=GateFactType.ACCEPTANCE_NOT_MET,
+                message="Some acceptance criteria are explicitly not met.",
+            )
+        )
     if evidence.ambiguous:
-        issues.append("Some acceptance criteria are ambiguous.")
+        findings.append(
+            GateFinding(
+                fact_type=GateFactType.AMBIGUOUS,
+                message="Some acceptance criteria are ambiguous.",
+            )
+        )
 
     verifications = evidence.verifications
     for v in verifications:
         if v.kind == "auto" and not v.command.strip():
-            issues.append(f"Auto verification {v.verification_id} has no command to run.")
+            findings.append(
+                GateFinding(
+                    fact_type=GateFactType.VERIFICATION_UNRUNNABLE,
+                    message=f"Auto verification {v.verification_id} has no command to run.",
+                    ref=v.verification_id,
+                )
+            )
         if v.kind == "manual" and not v.rationale.strip():
-            issues.append(
-                f"Manual verification {v.verification_id} needs a rationale "
-                "(why it cannot be automated)."
+            findings.append(
+                GateFinding(
+                    fact_type=GateFactType.VERIFICATION_UNRUNNABLE,
+                    message=(
+                        f"Manual verification {v.verification_id} needs a rationale "
+                        "(why it cannot be automated)."
+                    ),
+                    ref=v.verification_id,
+                )
             )
 
-    if not any(v.kind == "auto" and v.ran and v.passed for v in verifications):
-        issues.append(
-            "No automated check has been executed and passed. Add a runnable check "
-            "and run `goals phase verify` (recorded notes are not proof)."
+    failed = [v for v in verifications if v.kind == "auto" and v.ran and not v.passed]
+    for v in failed:
+        findings.append(
+            GateFinding(
+                fact_type=GateFactType.CHECK_FAILED,
+                message=f"Automated check {v.verification_id} ran and failed (covers {v.covers}).",
+                ref=v.verification_id,
+            )
         )
+
+    if not any(v.kind == "auto" and v.ran and v.passed for v in verifications):
+        # A check that ran and failed already carries the signal via CHECK_FAILED;
+        # suppress the generic line so the CLI and the memory friction note do not
+        # double-report. The no-check-ran case still emits it (preserving the gate's
+        # prose-rejection guarantee).
+        if not failed:
+            findings.append(
+                GateFinding(
+                    fact_type=GateFactType.NO_PASSING_CHECK,
+                    message=(
+                        "No automated check has been executed and passed. Add a runnable check "
+                        "and run `goals phase verify` (recorded notes are not proof)."
+                    ),
+                )
+            )
 
     for assumption_id, statement in load_bearing:
         if not any(
             v.covers.strip() == assumption_id and v.kind == "auto" and v.ran and v.passed
             for v in verifications
         ):
-            issues.append(
-                f"Load-bearing assumption has no passing falsifier ({assumption_id}): {statement}"
+            findings.append(
+                GateFinding(
+                    fact_type=GateFactType.MISSING_FALSIFIER,
+                    message=(
+                        f"Load-bearing assumption has no passing falsifier "
+                        f"({assumption_id}): {statement}"
+                    ),
+                    ref=assumption_id,
+                )
             )
 
-    return issues
+    return findings
 
 
 def _blocked_after_cap(attempt: int, max_attempts: int) -> GateVerdict:

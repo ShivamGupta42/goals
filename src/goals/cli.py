@@ -88,6 +88,7 @@ from goals.models import (
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
+from goals.rubric import category_for
 from goals.setup import render_setup_report, setup_agents
 from goals.runtime import (
     append_event,
@@ -1723,8 +1724,12 @@ def phase_review(phase_id: str) -> None:
         result = run_gate(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
         if result.verdict != GateVerdict.PASS:
-            for issue in result.p0:
-                typer.echo(f"  - {issue}")
+            if result.findings:
+                for finding in result.findings:
+                    typer.echo(f"  [{category_for(finding.fact_type)}] {finding.message}")
+            else:
+                for issue in result.p0:
+                    typer.echo(f"  - {issue}")
             raise typer.Exit(1)
 
     _handle(run)

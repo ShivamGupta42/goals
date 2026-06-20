@@ -8,6 +8,7 @@ from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     CheckpointStatus,
+    GateFindingCategory,
     GateVerdict,
     GoalIssue,
     GoalIssueReport,
@@ -15,7 +16,19 @@ from goals.models import (
     GoalStatus,
     PhaseStatus,
 )
+from goals.rubric import representative_category
 from goals.sources import analyze_source_freshness, unresolved_claims
+
+# Category-aware next step for a failing gate issue. The text renders in `goals check`
+# (workflows._issue_lines appends `Next: {suggested_action}`), so it carries the rubric
+# into plain output without touching the gate kernel.
+_GATE_CATEGORY_ACTION: dict[GateFindingCategory, str] = {
+    GateFindingCategory.BUG: "A check the agent ran is failing — fix the code, then re-verify.",
+    GateFindingCategory.GAP: "Finish the unmet acceptance criterion, then re-verify.",
+    GateFindingCategory.VERIFICATION_MISS: (
+        "Add and run a check that proves this, then re-review."
+    ),
+}
 
 
 def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
@@ -176,7 +189,10 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             )
         if phase.reviews:
             latest = phase.reviews[-1]
+            category = representative_category(latest.findings)
             if latest.verdict in {GateVerdict.BLOCKED, GateVerdict.NEEDS_HUMAN, GateVerdict.UNSAFE}:
+                # Escalation case (cap reached or human gate): keep the "ask for help"
+                # action, but still carry the rubric tag.
                 issues.append(
                     GoalIssue(
                         severity="p0",
@@ -186,6 +202,7 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         suggested_action="Change approach or ask for help before accepting the phase.",
                         needs_user=latest.verdict in {GateVerdict.NEEDS_HUMAN, GateVerdict.UNSAFE},
                         evidence_refs=refs,
+                        category=category,
                     )
                 )
             elif latest.verdict == GateVerdict.FAIL:
@@ -195,8 +212,11 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         area="gate",
                         summary=f"{phase.phase_id} latest review failed.",
                         detail=latest.summary,
-                        suggested_action="Fix review findings and rerun the phase review.",
+                        suggested_action=_GATE_CATEGORY_ACTION.get(
+                            category, "Fix review findings and rerun the phase review."
+                        ),
                         evidence_refs=refs,
+                        category=category,
                     )
                 )
     return issues
