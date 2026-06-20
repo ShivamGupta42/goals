@@ -11,6 +11,7 @@ from goals.loop_builder import load_design, to_snapshot
 from goals.merge_readiness import analyze_merge_readiness
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.portability import export_goal
+from goals.storage import GoalsError
 from goals.models import (
     ArchitectureCheckReport,
     CurrentCheckpointBrief,
@@ -93,10 +94,14 @@ def start_workflow(
     definition_of_done = None
     if loop is not None:
         design = load_design(loop)
+        if not design.phases:
+            raise GoalsError("Loop design must include at least one phase before activation.")
         loop_snapshot = to_snapshot(design)
         phases = loop_snapshot.phases
         definition_of_done = loop_snapshot.definition_of_done
         objective = objective or loop_snapshot.objective
+        if not objective.strip():
+            raise GoalsError("Loop design must include an objective, or pass one to `goals start`.")
         why = why or loop_snapshot.why
     snapshot = create_goal(
         objective,

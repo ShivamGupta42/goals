@@ -826,6 +826,22 @@ def test_loop_activate_creates_runtime_phases_with_protocol(tmp_path: Path) -> N
     assert phase["protocol"]["validation_profiles"] == ["product-ux-review"]
 
 
+def test_loop_activate_refuses_empty_design_before_creating_goal_state(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    run(["git", "checkout", "-b", "feature"], repo)
+    script = repo / "empty-loop.txt"
+    script.write_text("objective Empty loop\nsave\n")
+
+    run(["python", "-m", "goals.cli", "loop", "build", "--script", str(script)], repo)
+    activated = run_unchecked(["python", "-m", "goals.cli", "loop", "activate", "--in-place"], repo)
+
+    assert activated.returncode == 1
+    assert "at least one phase" in activated.stdout
+    assert not (repo / ".agent-workflow" / "goals").exists()
+
+
 def test_simulate_command_runs_regression_scenarios(tmp_path: Path) -> None:
     result = run(["python", "-m", "goals.cli", "simulate", "--strict"], tmp_path)
     assert "Goals Simulation Report" in result.stdout
