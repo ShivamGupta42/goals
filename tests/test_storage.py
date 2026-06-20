@@ -217,6 +217,43 @@ def test_reaccepting_earlier_phase_keeps_later_open_phase_current(tmp_path: Path
     assert derived.phases[3].status == PhaseStatus.NEEDS_REVIEW
 
 
+def test_reopening_completed_goal_marks_it_active(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    for phase_id in ("P1", "P2", "P3", "P4"):
+        store.append(
+            Event(
+                goal_id="demo",
+                event_type=EventType.PHASE_ACCEPTED,
+                payload={"phase_id": phase_id},
+            )
+        )
+    store.append(
+        Event(goal_id="demo", event_type=EventType.PHASE_STARTED, payload={"phase_id": "P2"})
+    )
+
+    derived = store.snapshot()
+
+    assert derived.status == GoalStatus.ACTIVE
+    assert derived.current_phase == "P2"
+    assert derived.phases[1].status == PhaseStatus.IN_PROGRESS
+
+
 def test_checkpoint_events_replay_and_upsert(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",

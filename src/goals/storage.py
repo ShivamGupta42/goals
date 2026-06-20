@@ -211,6 +211,7 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             phase = _phase(snapshot, payload["phase_id"])
             phase.status = PhaseStatus.IN_PROGRESS
             snapshot.current_phase = phase.phase_id
+            _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_EVIDENCE:
             phase = _phase(snapshot, payload["phase_id"])
             evidence = Evidence.model_validate(payload["evidence"])
@@ -227,6 +228,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             evidence.artifacts = []
             phase.evidence = evidence
             phase.status = PhaseStatus.NEEDS_REVIEW
+            snapshot.current_phase = phase.phase_id
+            _mark_active_if_reopened(snapshot)
             # New evidence invalidates any prior review: a PASS must reflect the
             # *current* evidence, or re-recording evidence after a pass would let
             # `accept` ride a stale review without re-verifying.
@@ -249,6 +252,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 phase.evidence.artifacts = [
                     EvidenceArtifact.model_validate(item) for item in payload.get("artifacts", [])
                 ]
+                snapshot.current_phase = phase.phase_id
+                _mark_active_if_reopened(snapshot)
                 # Re-running checks changes the proof, so any prior review is stale.
                 phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
@@ -260,6 +265,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )
+            snapshot.current_phase = phase.phase_id
+            _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             phase = _phase(snapshot, payload["phase_id"])
             checkpoint = PhaseCheckpoint.model_validate(payload["checkpoint"])
@@ -270,6 +277,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             snapshot.current_phase = _next_pending_phase_id(snapshot)
             if snapshot.current_phase is None:
                 snapshot.status = GoalStatus.COMPLETE
+            elif snapshot.status == GoalStatus.COMPLETE:
+                snapshot.status = GoalStatus.ACTIVE
         elif event.event_type == EventType.DECISION_REQUESTED:
             decision = Decision.model_validate(payload["decision"])
             snapshot.decisions.append(decision)
@@ -303,6 +312,11 @@ def _phase(snapshot: GoalSnapshot, phase_id: str):
         if phase.phase_id == phase_id:
             return phase
     raise GoalsError(f"Unknown phase id: {phase_id}")
+
+
+def _mark_active_if_reopened(snapshot: GoalSnapshot) -> None:
+    if snapshot.status == GoalStatus.COMPLETE:
+        snapshot.status = GoalStatus.ACTIVE
 
 
 def _with_causality(events: list[Event], event: Event) -> Event:
