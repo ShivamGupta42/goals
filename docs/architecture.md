@@ -18,15 +18,7 @@ own. No server, no database.
 ---
 config:
   look: handDrawn
-  theme: base
-  themeVariables:
-    primaryColor: "#EDE9FE"
-    primaryBorderColor: "#6B50FF"
-    primaryTextColor: "#1F2937"
-    lineColor: "#6B50FF"
-    clusterBkg: "#F7F5FF"
-    clusterBorder: "#B7A9F2"
-    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+  theme: default
 ---
 flowchart TB
     user([You — plain English goal])
@@ -82,15 +74,7 @@ after its checks **actually run**.
 ---
 config:
   look: handDrawn
-  theme: base
-  themeVariables:
-    primaryColor: "#EDE9FE"
-    primaryBorderColor: "#6B50FF"
-    primaryTextColor: "#1F2937"
-    lineColor: "#6B50FF"
-    clusterBkg: "#F7F5FF"
-    clusterBorder: "#B7A9F2"
-    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+  theme: default
 ---
 flowchart TD
     start["goals start 'a goal'<br/>isolated worktree on main"] --> assess
@@ -143,15 +127,7 @@ Before working, Goals checks it actually *has* the skills/tools a goal needs.
 ---
 config:
   look: handDrawn
-  theme: base
-  themeVariables:
-    primaryColor: "#EDE9FE"
-    primaryBorderColor: "#6B50FF"
-    primaryTextColor: "#1F2937"
-    lineColor: "#6B50FF"
-    clusterBkg: "#F7F5FF"
-    clusterBorder: "#B7A9F2"
-    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+  theme: default
 ---
 flowchart LR
     goal[Goal + phase text] --> infer["capabilities.py<br/>infer needs (e.g. browser/UI)"]
@@ -184,15 +160,7 @@ vendor-locked and short-lived. Goals owns the durable, portable state.
 ---
 config:
   look: handDrawn
-  theme: base
-  themeVariables:
-    primaryColor: "#EDE9FE"
-    primaryBorderColor: "#6B50FF"
-    primaryTextColor: "#1F2937"
-    lineColor: "#6B50FF"
-    clusterBkg: "#F7F5FF"
-    clusterBorder: "#B7A9F2"
-    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+  theme: default
 ---
 flowchart TB
     subgraph native["Native agent (vendor-locked, short-lived)"]

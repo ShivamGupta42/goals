@@ -55,44 +55,20 @@ before it's accepted → `finish`:
 ---
 config:
   look: handDrawn
-  theme: base
-  themeVariables:
-    primaryColor: "#EDE9FE"
-    primaryBorderColor: "#6B50FF"
-    primaryTextColor: "#1F2937"
-    lineColor: "#6B50FF"
-    clusterBkg: "#F7F5FF"
-    clusterBorder: "#B7A9F2"
-    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+  theme: default
 ---
 flowchart TD
-    start["goals start 'a goal'<br/>isolated worktree on main"] --> assess
-
-    subgraph assess["Assess — PACERS (goals assess)"]
-        bd["breakdown: problem → sub-problems"]
-        asm["assumptions: the load-bearing ones"]
-        bd --> asm
-    end
-
-    assess --> loop
-
-    subgraph loop["Phase loop (repeat per phase)"]
-        direction TB
-        nextp["goals next → current phase + acceptance"]
-        build["agent builds ONLY this phase"]
-        ev["goals phase evidence<br/>runnable checks per criterion + assumption"]
-        verify{"goals phase verify<br/>checks executed, real exit codes"}
-        review{"goals phase review<br/>proof, not narration"}
-        accept["goals phase accept"]
-        nextp --> build --> ev --> verify
-        verify -- "any check fails" --> build
-        verify -- "all pass" --> review
-        review -- "fail" --> build
-        review -- "pass" --> accept
-        accept --> nextp
-    end
-
-    loop --> finish["goals finish<br/>closeout + portable spec"]
+    A["goals start 'a goal'"] --> B["assess · PACERS<br/>break it down + name assumptions"]
+    B --> C["goals next<br/>current phase + acceptance"]
+    C --> D["agent builds this phase"]
+    D --> E["goals phase evidence<br/>runnable checks per criterion"]
+    E --> F{"goals phase verify<br/>checks actually run"}
+    F -- "any fails" --> D
+    F -- "all pass" --> G["goals phase accept"]
+    G -- "next phase" --> C
+    G -- "last phase" --> H["goals finish"]
+    classDef accent fill:#EDE9FE,stroke:#6B50FF,stroke-width:2px,color:#1F2937;
+    class A,F,H accent;
 ```
 
 See [**docs/architecture.md**](docs/architecture.md) for the full set: system
