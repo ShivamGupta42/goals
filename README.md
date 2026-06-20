@@ -59,26 +59,41 @@ portability layer that lets a goal survive `/clear`.
 
 ## Get started
 
-**1. Install Goals** — one line. It installs everything it needs (including `uv` and
-Python); nothing required up front.
+Goals is a tiny CLI plus a plugin. The CLI brings its own Python (and `uv`), so
+there's nothing to set up first — install it once, then add the plugin.
 
-**macOS / Linux**
+**1. Install the CLI** — one line.
 
 ```bash
+# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.sh | sh
 ```
-
-**Windows (PowerShell)**
-
 ```powershell
+# Windows (PowerShell)
 irm https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.ps1 | iex
 ```
 
-**2. Connect your AI assistant** — one command, for Claude Code *and* Codex:
+**2. Add the plugin for your agent.**
+
+### Claude Code
+
+```text
+/plugin marketplace add ShivamGupta42/goals
+/plugin install goals@goals
+```
+
+Prefer the terminal? `goals setup --agent claude` does the same.
+
+### Codex
 
 ```bash
-goals setup --agent both        # or: --agent claude  |  --agent codex
+goals setup --agent codex
 ```
+
+Codex picks up Goals' skills from `~/.agents/skills`; run `goals context sync` in a
+project to expose the goal in `AGENTS.md`.
+
+**Both at once:** `goals setup --agent both`.
 
 That's it. Now just talk to it in Claude Code:
 
