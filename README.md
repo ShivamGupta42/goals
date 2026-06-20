@@ -59,30 +59,18 @@ portability layer that lets a goal survive `/clear`.
 
 ## Get started
 
-Goals is a tiny CLI plus a plugin. The CLI brings its own Python (and `uv`), so
-there's nothing to set up first — install it once, then add the plugin.
-
-**1. Install the CLI** — one line.
-
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.sh | sh
-```
-```powershell
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.ps1 | iex
-```
-
-**2. Add the plugin for your agent.**
-
 ### Claude Code
+
+Two lines — that's the whole install:
 
 ```text
 /plugin marketplace add ShivamGupta42/goals
 /plugin install goals@goals
 ```
 
-Prefer the terminal? `goals setup --agent claude` does the same.
+The first session installs the `goals` CLI for you (macOS/Linux): the plugin
+ships its own source and bootstraps it on first run — no separate step. Prefer
+the terminal? `goals setup --agent claude` does the same.
 
 ### Codex
 
@@ -93,7 +81,18 @@ goals setup --agent codex
 Codex picks up Goals' skills from `~/.agents/skills`; run `goals context sync` in a
 project to expose the goal in `AGENTS.md`.
 
-**Both at once:** `goals setup --agent both`.
+### Manual / Windows
+
+Install the CLI directly — one line — then `goals setup --agent both`:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.sh | sh
+```
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.ps1 | iex
+```
 
 That's it. Now just talk to it in Claude Code:
 
