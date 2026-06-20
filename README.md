@@ -47,14 +47,26 @@ Anyone using AI to get real work done:
 Goals runs the **workflow**; your AI assistant (Claude Code, Codex, …) does the **work**.
 Goals is the part that keeps it organized, legible, and accountable.
 
-Under the hood it's a small CLI + plugin over plain files you own. The goal
-lifecycle — `start` → assess → a phase loop where each step's checks must *run*
-before it's accepted → `finish`. The **assess** step follows PACERS, a method for
-[solving problems without rushing](https://medium.com/@shivam.gupta42/how-to-solve-problems-without-rushing-6a329be5e6ae):
+Under the hood it's a small **CLI plus a plugin**, working over **plain files in
+your own project** — so the goal, the decisions, and the proof are yours and
+survive a `/clear` or a brand-new session. The **assess** step follows PACERS, a
+method for [solving problems without rushing](https://medium.com/@shivam.gupta42/how-to-solve-problems-without-rushing-6a329be5e6ae).
 
-![Goal lifecycle: start to assess (PACERS) to a phase loop (evidence, verify, accept) to finish](docs/assets/lifecycle.png)
+Here's the whole loop — each step in plain English, with the command behind it
+(click to enlarge):
 
-<sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 1`.</sub>
+<p align="center">
+  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 say your goal (goals start), 2 Goals breaks it into steps and names assumptions, 3 your AI does the next step (goals next), 4 the checks must actually pass (goals phase verify), 5 step checked off with proof (goals phase accept), 6 finished with a full record (goals finish) — plus a dashboard you can read anytime (goals view)" width="520"></a>
+</p>
+
+And you never lose the thread: a **dashboard anyone can read** shows status,
+decisions, and proof at a glance (click to view full size):
+
+<p align="center">
+  <a href="docs/assets/dashboard-hero.png"><img src="docs/assets/dashboard-hero.png" alt="The Goals dashboard — a human-readable view of the goal, its building journey, and proof. Click to view full size." width="300"></a>
+</p>
+
+<sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 2`.</sub>
 
 See [**docs/architecture.md**](docs/architecture.md) for the full set: system
 architecture, the goal lifecycle, skill-first discovery + capability gaps, and the
