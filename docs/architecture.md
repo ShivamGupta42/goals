@@ -15,6 +15,19 @@ A small Python CLI + a Claude Code / Codex plugin, sitting over plain files you
 own. No server, no database.
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    clusterBkg: "#F7F5FF"
+    clusterBorder: "#B7A9F2"
+    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+---
 flowchart TB
     user([You — plain English goal])
     agent([Your AI agent<br/>Claude Code / Codex])
@@ -66,6 +79,19 @@ Systemize) is recorded as a readable *building journey*; a phase is accepted onl
 after its checks **actually run**.
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    clusterBkg: "#F7F5FF"
+    clusterBorder: "#B7A9F2"
+    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+---
 flowchart TD
     start["goals start 'a goal'<br/>isolated worktree on main"] --> assess
 
@@ -114,6 +140,19 @@ A real completed goal's dashboard, showing the building journey:
 Before working, Goals checks it actually *has* the skills/tools a goal needs.
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    clusterBkg: "#F7F5FF"
+    clusterBorder: "#B7A9F2"
+    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+---
 flowchart LR
     goal[Goal + phase text] --> infer["capabilities.py<br/>infer needs (e.g. browser/UI)"]
     subgraph disc["skill_discovery.py"]
@@ -142,6 +181,19 @@ Native agents own the fast inner loop but their goal/task primitives are
 vendor-locked and short-lived. Goals owns the durable, portable state.
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    clusterBkg: "#F7F5FF"
+    clusterBorder: "#B7A9F2"
+    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+---
 flowchart TB
     subgraph native["Native agent (vendor-locked, short-lived)"]
         loopN["inner loop: edit, run, test"]

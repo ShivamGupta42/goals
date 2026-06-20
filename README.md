@@ -52,6 +52,19 @@ lifecycle — `start` → assess → a phase loop where each step's checks must 
 before it's accepted → `finish`:
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    clusterBkg: "#F7F5FF"
+    clusterBorder: "#B7A9F2"
+    fontFamily: "Comic Sans MS, Segoe Print, Bradley Hand, cursive"
+---
 flowchart TD
     start["goals start 'a goal'<br/>isolated worktree on main"] --> assess
 
