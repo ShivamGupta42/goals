@@ -11,6 +11,8 @@ This directory holds deeper design notes and long-lived project context.
   skill update.
 - `DOGFOOD_FINDINGS.md` - observations from using Goals on itself.
 - `NATIVE_INTEGRATION_PLAN.md` - design notes for Claude/Codex native surfaces.
+- `WORKFLOW_IMPROVEMENTS.md` - improvement list from real-world goal loop
+  simulations.
 - `goals-repo-guide.html` - generated visual guide to the repository.
 
 ## Maintenance
