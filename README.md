@@ -51,7 +51,36 @@ Under the hood it's a small CLI + plugin over plain files you own. The goal
 lifecycle — `start` → assess → a phase loop where each step's checks must *run*
 before it's accepted → `finish`:
 
-![Goal lifecycle](docs/assets/architecture-2.svg)
+```mermaid
+flowchart TD
+    start["goals start 'a goal'<br/>isolated worktree on main"] --> assess
+
+    subgraph assess["Assess — PACERS (goals assess)"]
+        bd["breakdown: problem → sub-problems"]
+        asm["assumptions: the load-bearing ones"]
+        bd --> asm
+    end
+
+    assess --> loop
+
+    subgraph loop["Phase loop (repeat per phase)"]
+        direction TB
+        nextp["goals next → current phase + acceptance"]
+        build["agent builds ONLY this phase"]
+        ev["goals phase evidence<br/>runnable checks per criterion + assumption"]
+        verify{"goals phase verify<br/>checks executed, real exit codes"}
+        review{"goals phase review<br/>proof, not narration"}
+        accept["goals phase accept"]
+        nextp --> build --> ev --> verify
+        verify -- "any check fails" --> build
+        verify -- "all pass" --> review
+        review -- "fail" --> build
+        review -- "pass" --> accept
+        accept --> nextp
+    end
+
+    loop --> finish["goals finish<br/>closeout + portable spec"]
+```
 
 See [**docs/architecture.md**](docs/architecture.md) for the full set: system
 architecture, the goal lifecycle, skill-first discovery + capability gaps, and the

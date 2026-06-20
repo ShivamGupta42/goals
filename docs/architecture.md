@@ -2,8 +2,7 @@
 
 Four diagrams that explain Goals to a newcomer. Every node maps to a real module
 in `src/goals/`, a real `goals` command, or a real file in `registries/` /
-`.claude-plugin/`. GitHub renders Mermaid natively, so these display inline;
-static renders live in [`assets/`](assets/).
+`.claude-plugin/`. GitHub renders Mermaid natively, so these display inline.
 
 > Honest line: **Goals runs the workflow; your AI does the work.** The agent
 > executes each step; Goals keeps the plan, the decisions, and the proof.
@@ -58,8 +57,6 @@ flowchart TB
 survives `/clear`, a new session, or even a different agent. The registries make
 behaviour declarative; the plugin is just a thin command surface over the CLI.
 
-![System architecture](assets/architecture-1.svg)
-
 ---
 
 ## 2. The goal lifecycle (start → done)
@@ -106,8 +103,6 @@ flowchart TD
 checks and records real exit codes (`gates.py`). A passing result can't be
 asserted by the agent — it has to be earned.
 
-![Goal lifecycle](assets/architecture-2.svg)
-
 A real completed goal's dashboard, showing the building journey:
 
 ![Goal dashboard](assets/dashboard-hero.png)
@@ -139,8 +134,6 @@ flowchart LR
 session. Goals catches the gap up front and tells you, in plain language, what's
 missing (`goals capability check`).
 
-![Skill-first discovery and capability gap](assets/architecture-3.svg)
-
 ---
 
 ## 4. The portability layer (why a goal outlives one session)
@@ -168,8 +161,6 @@ flowchart TB
 **The wedge in one sentence:** your agent forgets the plan on `/clear`; Goals
 keeps the goal, the decisions, and the evidence in files you own — and any agent
 can pick the goal back up.
-
-![Portability layer](assets/architecture-4.svg)
 
 ---
 
