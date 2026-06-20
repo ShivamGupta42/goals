@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 from typing import Literal
 
@@ -21,6 +22,8 @@ from goals.git_ops import (
 )
 from goals.gates import review_phase
 from goals.models import (
+    Evidence,
+    EvidenceArtifact,
     Event,
     EventType,
     GateResult,
@@ -385,13 +388,19 @@ def verify_phase(cwd: Path, phase_id: str, *, timeout: int = 120) -> list[dict]:
                 timeout=timeout,
             )
             ran, passed = True, proc.returncode == 0
-            output = (proc.stdout + proc.stderr).strip()[-600:]
+            full_output = proc.stdout + proc.stderr
+            output = full_output.strip()[-600:]
+            exit_code = proc.returncode
         except subprocess.TimeoutExpired:
             ran, passed, output = True, False, f"timed out after {timeout}s"
+            full_output = output
+            exit_code = None
         except OSError as exc:
             # The command never started (e.g. missing/moved worktree): it did not
             # run, so it cannot count as an executed check.
             ran, passed, output = False, False, f"could not run: {exc}"
+            full_output = output
+            exit_code = None
         results.append(
             {
                 "verification_id": v.verification_id,
@@ -399,14 +408,21 @@ def verify_phase(cwd: Path, phase_id: str, *, timeout: int = 120) -> list[dict]:
                 "passed": passed,
                 "output_excerpt": output,
                 "ran_at": utc_now(),
+                "exit_code": exit_code,
+                "output_sha256": _text_sha256(full_output),
             }
         )
+    artifacts = _hash_evidence_artifacts(worktree, phase.evidence)
     append_event(
         cwd,
         Event(
             goal_id=snapshot.goal_id,
             event_type=EventType.PHASE_VERIFIED,
-            payload={"phase_id": phase_id, "verifications": results},
+            payload={
+                "phase_id": phase_id,
+                "verifications": results,
+                "artifacts": [artifact.model_dump() for artifact in artifacts],
+            },
         ),
     )
     return results
@@ -417,9 +433,10 @@ def emit_dashboard(cwd: Path) -> Path:
     goal_dir = (
         Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
     )
+    events = EventStore(goal_dir).read_events()
     output_path = goal_dir / "dashboard.html"
     architecture_path = emit_architecture(cwd)
-    render_dashboard(snapshot, output_path, architecture_path=architecture_path)
+    render_dashboard(snapshot, output_path, architecture_path=architecture_path, events=events)
     return output_path
 
 
@@ -441,6 +458,51 @@ def write_workflow_gitignore(repo: Path) -> None:
     if missing:
         suffix = "\n".join(["", "# Goals local state", *missing, ""])
         atomic_write_text(path, existing.rstrip() + suffix)
+
+
+def _hash_evidence_artifacts(worktree: Path, evidence: Evidence) -> list[EvidenceArtifact]:
+    artifacts: list[EvidenceArtifact] = []
+    for raw in evidence.changed_files:
+        artifact = _hash_evidence_artifact(worktree, raw)
+        if artifact is not None:
+            artifacts.append(artifact)
+    return artifacts
+
+
+def _hash_evidence_artifact(worktree: Path, raw: str) -> EvidenceArtifact | None:
+    raw = raw.strip()
+    if not raw:
+        return None
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return EvidenceArtifact(path=raw, error="absolute paths are not hashable")
+    resolved = (worktree / candidate).resolve()
+    try:
+        resolved.relative_to(worktree.resolve())
+    except ValueError:
+        return EvidenceArtifact(path=raw, error="path escapes worktree")
+    if not resolved.exists():
+        return EvidenceArtifact(path=raw, missing=True, error="missing")
+    if not resolved.is_file():
+        return EvidenceArtifact(path=raw, error="not a file")
+    return EvidenceArtifact(
+        path=raw,
+        sha256=_file_sha256(resolved),
+        size_bytes=resolved.stat().st_size,
+        hashed_at=utc_now(),
+    )
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _ensure_repo(cwd: Path, new_project: Path | None) -> Path:

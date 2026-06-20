@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
+from goals.capabilities import analyze_capabilities
 from goals.decisions import should_surface_decision
 from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -37,6 +38,7 @@ def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
     issues.extend(_phase_issues(snapshot))
     issues.extend(_decision_issues(snapshot))
     issues.extend(_source_issues(snapshot))
+    issues.extend(_capability_issues(snapshot))
     issues.extend(_risk_issues(snapshot))
     issues.extend(_architecture_issues(snapshot))
     issues.extend(_merge_readiness_issues(snapshot))
@@ -356,6 +358,22 @@ def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             )
         )
     return issues
+
+
+def _capability_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    report = analyze_capabilities(snapshot)
+    return [
+        GoalIssue(
+            severity=gap.severity,
+            area="capability",
+            summary=f"Capability gap: {gap.title}",
+            detail=gap.detail,
+            suggested_action=gap.suggested_action,
+            needs_user=gap.needs_user,
+            evidence_refs=gap.evidence_refs,
+        )
+        for gap in report.gaps
+    ]
 
 
 def _risk_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:

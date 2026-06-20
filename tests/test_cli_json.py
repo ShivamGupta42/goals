@@ -47,6 +47,53 @@ def test_check_json_parses(tmp_path: Path, monkeypatch) -> None:
     assert "issues" in data
 
 
+def test_validate_json_parses(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["validate", "--json", "--strict"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["passed"] is True
+    assert data["snapshot_matches"] is True
+    assert "dangling_causes" in data
+
+
+def test_lineage_phase_json_parses(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    start = runner.invoke(app, ["phase", "start", "P1"])
+    assert start.exit_code == 0
+    result = runner.invoke(app, ["lineage", "--phase", "P1", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["target"] == "P1"
+    assert data["chains"]
+
+
+def test_lineage_phase_text_renders(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    start = runner.invoke(app, ["phase", "start", "P1"])
+    assert start.exit_code == 0
+    result = runner.invoke(app, ["lineage", "--phase", "P1"])
+    assert result.exit_code == 0
+    assert "Lineage for P1:" in result.stdout
+    assert "phase_started" in result.stdout
+    assert "actor=goals-cli" in result.stdout
+
+
+def test_dashboard_renders_lineage_section(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    start = runner.invoke(app, ["phase", "start", "P1"])
+    assert start.exit_code == 0
+    result = runner.invoke(app, ["dashboard"])
+    assert result.exit_code == 0
+    dashboard_path = next((tmp_path / ".agent-workflow" / "goals").glob("*/dashboard.html"))
+    html = dashboard_path.read_text(encoding="utf-8")
+    assert "Lineage" in html
+
+
 def test_context_json_has_active_goal_block(tmp_path: Path, monkeypatch) -> None:
     _repo_with_goal(tmp_path)
     monkeypatch.chdir(tmp_path)

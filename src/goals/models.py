@@ -7,11 +7,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# v2 dropped the asset/creative/external-review/handoff event types and the
-# matching GoalSnapshot fields. Loading tolerates v1 state (storage skips
-# retired events and drops unknown snapshot fields), so this bump is a signal,
-# not a hard gate.
-SCHEMA_VERSION = 2
+# v3 adds causal event metadata and engine-owned evidence proof fields. Loading
+# tolerates older state through defaults, so this bump is a signal, not a hard gate.
+SCHEMA_VERSION = 3
 
 # Version of the portable, vendor-neutral goal-state spec written to `.goals/`.
 # Bumped independently of the internal SCHEMA_VERSION because this is the
@@ -98,6 +96,9 @@ class Event(BaseModel):
     goal_id: str
     event_type: EventType
     timestamp: str = Field(default_factory=utc_now)
+    actor: str = "goals-cli"
+    caused_by: str | None = None
+    trace_id: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -183,6 +184,26 @@ class Verification(BaseModel):
     passed: bool = False
     output_excerpt: str = ""
     ran_at: str = ""
+    exit_code: int | None = None
+    output_sha256: str = ""
+
+
+class EvidenceArtifact(BaseModel):
+    """A content identity for a workspace artifact used as phase evidence.
+
+    Artifacts are written by the engine during verification, not trusted from an
+    agent-authored evidence JSON. ``missing``/``error`` let strict validation
+    explain why a referenced changed file could not be hashed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    sha256: str = ""
+    size_bytes: int = 0
+    hashed_at: str = Field(default_factory=utc_now)
+    missing: bool = False
+    error: str = ""
 
 
 class Evidence(BaseModel):
@@ -191,6 +212,7 @@ class Evidence(BaseModel):
     changed_files: list[str] = Field(default_factory=list)
     checks_run: list[str] = Field(default_factory=list)
     verifications: list[Verification] = Field(default_factory=list)
+    artifacts: list[EvidenceArtifact] = Field(default_factory=list)
     acceptance_met: list[str] = Field(default_factory=list)
     acceptance_not_met: list[str] = Field(default_factory=list)
     ambiguous: list[str] = Field(default_factory=list)
@@ -346,7 +368,15 @@ class GoalBriefAction(BaseModel):
     suggested_reply: str = ""
     what_happens_next: str = ""
     priority: Literal["blocking", "important", "later"] = "important"
-    source: Literal["checkpoint", "decision", "issue", "merge", "proof", "state"] = "issue"
+    source: Literal[
+        "capability",
+        "checkpoint",
+        "decision",
+        "issue",
+        "merge",
+        "proof",
+        "state",
+    ] = "issue"
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -641,6 +671,80 @@ class SourceFreshnessReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class CapabilityNeed(BaseModel):
+    """A capability the current goal or phase appears to need.
+
+    This is deliberately small and derived-first. Agents can supply explicit needs
+    at the CLI boundary, while Goals can infer obvious ones from the objective,
+    acceptance criteria, and recorded gaps. The model is safe to persist later but
+    does not require new event types for V1.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: str
+    title: str
+    category: Literal[
+        "browser",
+        "skill",
+        "tool",
+        "external_service",
+        "data",
+        "approval",
+        "other",
+    ] = "other"
+    required: bool = True
+    phase_id: str | None = None
+    query: str = ""
+    reason: str = ""
+    preferred_agents: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CapabilityMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    sources: list[str] = Field(default_factory=list)
+    agents: list[str] = Field(default_factory=list)
+    path: str = ""
+
+
+class CapabilityGap(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: str
+    title: str
+    category: str = "other"
+    severity: Literal["p0", "p1", "p2"] = "p1"
+    status: Literal[
+        "available",
+        "needs_install",
+        "missing_for_agent",
+        "missing",
+        "unknown",
+    ] = "unknown"
+    required: bool = True
+    needs_user: bool = False
+    detail: str = ""
+    suggested_action: str = ""
+    matches: list[CapabilityMatch] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CapabilityCheckReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    adapter: Literal["auto", "claude", "codex"] = "auto"
+    passed: bool
+    summary: str
+    needs: list[CapabilityNeed] = Field(default_factory=list)
+    gaps: list[CapabilityGap] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -858,6 +962,7 @@ class GoalIssue(BaseModel):
     severity: Literal["p0", "p1", "p2"]
     area: Literal[
         "architecture",
+        "capability",
         "decision",
         "checkpoint",
         "evidence",

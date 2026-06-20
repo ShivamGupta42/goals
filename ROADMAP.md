@@ -11,6 +11,40 @@ Goals owns the durable, portable, evidence-backed goal state in your repo. The
 directions below deepen that durable value rather than chase parity with native
 loops.
 
+For the Trust V1 dogfood follow-up plan, including the 48-issue improvement
+inventory and the proposed capability-gap architecture, see
+[`docs/TRUST_V1_LONG_TERM_IMPROVEMENT_PLAN.md`](docs/TRUST_V1_LONG_TERM_IMPROVEMENT_PLAN.md).
+
+## Capability gap management
+
+**Status:** Implemented (read-only vertical slice). `goals capability check`
+exists with text/JSON output, `--strict`, `--agent auto|claude|codex`, and
+explicit `--need ...` inputs for model-authored requirements. The analyzer also
+infers obvious browser/UI needs from goal and phase text, compares them against
+live skill discovery, and reports missing, bundled-but-not-installed, and
+wrong-agent skills.
+
+Capability gaps now surface in `goals issues`, `goals brief`, `goals check`, the
+dashboard, and full `goals next --full` handoffs. Codex skill discovery uses
+`~/.agents/skills` as the primary native root and keeps legacy `~/.codex/skills`
+as a fallback.
+
+### Direction
+
+- Durable capability profile and source events.
+- User-approved external skill/plugin source governance.
+- Browser/tool preflight adapters and dashboard verification wrappers.
+- Artifact classes and repair plans tied to capability gaps.
+- Repeated capability-gap memory promotion.
+
+### Open Questions
+
+- Should required missing capability be a P0 issue, or stay P1 while `goals check`
+  fails through its combined health gate?
+- Which external skill/plugin source descriptors should ship first, if any?
+- How should plugin/cache tool inventory be exposed without coupling Goals to one
+  host agent's private runtime layout?
+
 ## Portable goal-state spec v2
 
 **Status:** Forward-looking. v1 exists today. `goals export` writes

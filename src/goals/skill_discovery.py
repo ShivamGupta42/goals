@@ -21,7 +21,8 @@ from pydantic import BaseModel, ConfigDict
 _FENCE_RE = re.compile(r"(?m)^---[ \t]*$")
 
 CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
-CODEX_SKILLS_DIR = Path.home() / ".codex" / "skills"
+CODEX_SKILLS_DIR = Path.home() / ".agents" / "skills"
+LEGACY_CODEX_SKILLS_DIR = Path.home() / ".codex" / "skills"
 
 # Install targets — where the optional `goals skills install` copies bundled
 # skills so a native agent can invoke them directly.
@@ -97,6 +98,7 @@ def discover_skills(
     *,
     claude_dir: Path | None = None,
     codex_dir: Path | None = None,
+    codex_legacy_dir: Path | None = None,
     bundled_dir: Path | None = None,
 ) -> list[DiscoveredSkill]:
     """Scan the three skill sources and return deduped, sorted skills.
@@ -106,9 +108,14 @@ def discover_skills(
     missing source dir is skipped; a malformed or nameless ``SKILL.md`` is
     skipped without raising.
     """
+    codex_roots = [codex_dir if codex_dir is not None else CODEX_SKILLS_DIR]
+    if codex_legacy_dir is not None:
+        codex_roots.append(codex_legacy_dir)
+    elif codex_dir is None:
+        codex_roots.append(LEGACY_CODEX_SKILLS_DIR)
     sources: list[tuple[str, Path]] = [
         ("claude", claude_dir if claude_dir is not None else CLAUDE_SKILLS_DIR),
-        ("codex", codex_dir if codex_dir is not None else CODEX_SKILLS_DIR),
+        *[("codex", root) for root in codex_roots],
         ("bundled", bundled_dir if bundled_dir is not None else bundled_skills_root()),
     ]
 
@@ -116,7 +123,10 @@ def discover_skills(
     merged: dict[str, dict[str, tuple[str, Path]]] = {}
     for label, root in sources:
         for dir_name, (description, path) in _scan_source(root).items():
-            merged.setdefault(dir_name, {})[label] = (description, path)
+            # The modern Codex skill root is ~/.agents/skills; keep the legacy
+            # ~/.codex/skills root as a compatibility fallback without letting it
+            # shadow the primary path for the same skill.
+            merged.setdefault(dir_name, {}).setdefault(label, (description, path))
 
     skills: list[DiscoveredSkill] = []
     for dir_name in sorted(merged):
@@ -266,7 +276,10 @@ def _copy_into_place(src: Path, dest: Path) -> None:
 
 def render_skills_list(skills: list[DiscoveredSkill]) -> str:
     if not skills:
-        return "No skills discovered in ~/.claude/skills, ~/.codex/skills, or bundled."
+        return (
+            "No skills discovered in ~/.claude/skills, ~/.agents/skills, "
+            "legacy ~/.codex/skills, or bundled."
+        )
     lines = []
     for skill in skills:
         agents = ", ".join(skill.agents) if skill.agents else "not installed (bundled)"

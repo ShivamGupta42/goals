@@ -87,6 +87,7 @@ def recommended_checks(worktree: Path) -> list[str]:
         [
             "goals brief",
             "goals checkpoint current",
+            "goals capability check",
             "goals architecture check --strict",
             "goals merge-check",
             "goals source freshness --strict",
@@ -132,7 +133,7 @@ Required loop:
 4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
 5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion AND every load-bearing assumption, write a **runnable** check that fails if the thing were wrong; a check that cannot fail proves nothing, so make each one actually exercise the failure it guards. Prefer automated checks; a `manual` check is only for the genuinely non-automatable and must say why. Each verification's `covers` is the criterion text or the assumption id (e.g. `A-1234`). Put this in the evidence `verifications` list at `{plan.evidence_file}`.
 6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`, then `goals phase verify {plan.current_phase}` — the engine runs your checks and records the real results; you cannot mark a check passed yourself. Fix the build until every automated check passes.
-7. Run `goals issues` to find blockers, missing proof, unresolved source claims, or important user decisions before review.
+7. Run `goals capability check --agent {plan.adapter}` and `goals issues` to find missing skills/tools, blockers, missing proof, unresolved source claims, or important user decisions before review.
 8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
 9. If `goals brief` says `Waiting on: you`, or `goals issues` lists anything under `Needs The User`, ask exactly one plain-language question using the brief wording, then stop. Do not run review or accept until the user answers and the answer is recorded.
 10. Run `goals checkpoint current` to confirm the current checkpoint, unresolved proof, and next safe step.
@@ -149,7 +150,8 @@ Recommended checks for this repo:
 {checks}
 
 Skills:
-- Run `goals skills list` to see skills discovered live in `~/.claude/skills` and `~/.codex/skills` (plus goals' own bundled skills). Use the ones that fit this phase.
+- Run `goals skills list` to see skills discovered live in `~/.claude/skills`, `~/.agents/skills`, legacy `~/.codex/skills`, and goals' own bundled skills. Use the ones that fit this phase.
+- Run `goals capability check --agent {plan.adapter}` before relying on browser tooling, external services, specialist analysis, or an explicit `skill:name` requirement. If it reports a required missing capability, ask the user to approve a trusted skill/plugin source or choose a local fallback before continuing.
 
 Permission policy:
 - Before using an external service, connector, paid tool, production-affecting action, or destructive command, run `goals permission check NAME --kind plugin --action "plain-language action"`.

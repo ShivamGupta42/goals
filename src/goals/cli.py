@@ -17,7 +17,15 @@ from goals.architecture import (
     render_architecture_check_report,
     render_architecture_brief,
 )
+from goals.audit import (
+    build_audit_report,
+    build_event_lineage,
+    build_phase_lineage,
+    render_audit_report,
+    render_lineage,
+)
 from goals.brief import build_goal_brief, render_goal_brief
+from goals.capabilities import analyze_capabilities, render_capability_report
 from goals.checkpoints import build_current_checkpoint_brief, render_current_checkpoint_brief
 from goals.decisions import (
     build_decision_brief,
@@ -151,6 +159,7 @@ app = typer.Typer(help="Goals helps AI agents finish bigger tasks without losing
 adapter_app = typer.Typer(help="Native goal loop adapters.")
 architecture_app = typer.Typer(help="Render and record goal architecture maps.")
 assess_app = typer.Typer(help="Record the building journey — assumptions and problem breakdowns.")
+capability_app = typer.Typer(help="Check skill and tool capabilities before work proceeds.")
 context_app = typer.Typer(help="Sync the goal into portable AGENTS.md / CLAUDE.md.")
 checkpoint_app = typer.Typer(help="Record and inspect phase checkpoints.")
 decision_app = typer.Typer(help="Explain decisions with goal history.")
@@ -404,6 +413,7 @@ def context_sync(
 app.add_typer(adapter_app, name="adapter", rich_help_panel="Advanced building blocks")
 app.add_typer(architecture_app, name="architecture", rich_help_panel="Advanced building blocks")
 app.add_typer(assess_app, name="assess", rich_help_panel="Advanced building blocks")
+app.add_typer(capability_app, name="capability", rich_help_panel="Advanced building blocks")
 app.add_typer(checkpoint_app, name="checkpoint", rich_help_panel="Advanced building blocks")
 app.add_typer(context_app, name="context", rich_help_panel="Portability")
 app.add_typer(decision_app, name="decision", rich_help_panel="Advanced building blocks")
@@ -524,6 +534,49 @@ def issues(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_issue_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@capability_app.command("check")
+def capability_check(
+    agent: str = typer.Option(
+        "auto",
+        "--agent",
+        "--adapter",
+        help="Agent inventory to check against: auto, claude, or codex.",
+    ),
+    need: Optional[list[str]] = typer.Option(
+        None,
+        "--need",
+        help="Explicit capability need, e.g. skill:browser or browser:visual checks.",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when a required capability is missing.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check whether this goal has the skills/tools it appears to need."""
+
+    def run():
+        adapter = _validate_choice(agent, {"auto", "claude", "codex"}, "agent")
+        snapshot = load_active_snapshot(Path.cwd())
+        try:
+            report = analyze_capabilities(
+                snapshot,
+                adapter=adapter,  # type: ignore[arg-type]
+                explicit_needs=need or [],
+            )
+        except ValueError as exc:
+            raise GoalsError(str(exc)) from exc
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_capability_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
@@ -742,7 +795,14 @@ def run(
 
 
 @app.command(rich_help_panel="Advanced building blocks")
-def validate() -> None:
+def validate(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Also fail on dangling causal refs and artifact hash mismatches.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
     """Validate active goal state and registry files."""
 
     def run():
@@ -750,15 +810,44 @@ def validate() -> None:
         goal_dir = (
             Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
         )
-        store = EventStore(goal_dir)
-        derived = store.snapshot()
-        if not store.snapshot_path.exists():
-            raise GoalsError("Derived snapshot file is missing.")
-        stored = _load_json_model(None, store.snapshot_path, type(derived))
-        if stored.model_dump(mode="json") != derived.model_dump(mode="json"):
-            raise GoalsError("Derived snapshot does not match the event log. Run `goals repair`.")
         registries = validate_registries(Path.cwd())
-        typer.echo(f"Validated goal {snapshot.goal_id}; registries={len(registries)}")
+        report = build_audit_report(
+            goal_dir,
+            worktree=Path(snapshot.topology.worktree_path),
+            strict=strict,
+            registry_count=len(registries),
+        )
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_audit_report(report))
+        if not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Advanced building blocks")
+def lineage(
+    event: Optional[str] = typer.Option(None, "--event", help="Show lineage for an event id."),
+    phase: Optional[str] = typer.Option(None, "--phase", help="Show recent lineage for a phase id."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show why an event or phase exists by walking causal event links."""
+
+    def run():
+        if bool(event) == bool(phase):
+            raise GoalsError("Provide exactly one of --event or --phase.")
+        snapshot = load_active_snapshot(Path.cwd())
+        goal_dir = (
+            Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
+        )
+        events = EventStore(goal_dir).read_events()
+        result = build_event_lineage(events, event) if event else build_phase_lineage(events, phase or "")
+        if json_output:
+            typer.echo(result.model_dump_json(indent=2))
+        else:
+            typer.echo(render_lineage(result))
 
     _handle(run)
 
@@ -1756,7 +1845,7 @@ def phase_accept(phase_id: str) -> None:
 def skills_list(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
-    """List skills discovered in ~/.claude/skills, ~/.codex/skills, and bundled."""
+    """List skills discovered in agent skill dirs and bundled Goals skills."""
 
     def run():
         skills = discover_skills()

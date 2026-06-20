@@ -185,6 +185,8 @@ def _summary(
 
 
 def _plain_issue_summary(issue: GoalIssue) -> str:
+    if issue.area == "capability":
+        return "The agent may be missing a skill or tool needed to finish this safely."
     if issue.area == "gate" and "unsafe" in issue.summary.lower():
         return "The latest review found something unsafe, so the agent should not continue alone."
     if issue.area == "merge":
@@ -195,6 +197,8 @@ def _plain_issue_summary(issue: GoalIssue) -> str:
 
 
 def _plain_issue_reason(issue: GoalIssue) -> str:
+    if issue.area == "capability":
+        return issue.detail or "Missing capabilities can lead to guessed work instead of proven work."
     if issue.area == "gate":
         return "Continuing without an answer could make the work unsafe or incorrect."
     if issue.area == "merge":
@@ -217,6 +221,8 @@ def _plain_suggested_reply(issue: GoalIssue) -> str:
 
 
 def _plain_agent_summary(issue: GoalIssue) -> str:
+    if issue.area == "capability":
+        return "The agent should set up or choose an approved capability before continuing."
     if issue.area == "merge":
         return "The agent should resolve merge-readiness proof before merge."
     if issue.area == "source":
@@ -233,6 +239,8 @@ def _plain_agent_summary(issue: GoalIssue) -> str:
 def _plain_agent_reason(issue: GoalIssue) -> str:
     if issue.detail:
         return issue.detail
+    if issue.area == "capability":
+        return "This keeps skill and tooling gaps explicit instead of silently relying on guesses."
     if issue.area == "merge":
         return "This keeps coordination work with the agent unless a high-risk choice appears."
     if issue.area == "evidence":
@@ -242,6 +250,7 @@ def _plain_agent_reason(issue: GoalIssue) -> str:
 
 def _issue_title(issue: GoalIssue) -> str:
     labels = {
+        "capability": "Capability approval",
         "decision": "Decision needed",
         "checkpoint": "Checkpoint needs you",
         "gate": "Review needs you",
@@ -254,6 +263,7 @@ def _issue_title(issue: GoalIssue) -> str:
 def _agent_title(issue: GoalIssue) -> str:
     labels = {
         "architecture": "Answer architecture gap",
+        "capability": "Resolve capability gap",
         "checkpoint": "Complete checkpoint",
         "evidence": "Add missing proof",
         "gate": "Fix review issue",
@@ -274,6 +284,8 @@ def _checks_run(snapshot: GoalSnapshot) -> list[str]:
 
 
 def _action_source(issue: GoalIssue) -> str:
+    if issue.area == "capability":
+        return "capability"
     if issue.area == "checkpoint":
         return "checkpoint"
     if issue.area == "merge":
