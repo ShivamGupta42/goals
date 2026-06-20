@@ -31,7 +31,8 @@ def test_signal_carrying_facts_map_as_designed() -> None:
 
 def test_representative_category_precedence() -> None:
     def finding(fact: GateFactType) -> GateFinding:
-        return GateFinding(fact_type=fact, message="x")
+        # ref is harmless on non-ref facts and required on ref-bearing ones.
+        return GateFinding(fact_type=fact, message="x", ref="R-1")
 
     # BUG outranks GAP outranks VERIFICATION_MISS, regardless of order.
     bug_and_miss = [finding(GateFactType.NO_PASSING_CHECK), finding(GateFactType.CHECK_FAILED)]

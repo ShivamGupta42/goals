@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # v2 dropped the asset/creative/external-review/handoff event types and the
 # matching GoalSnapshot fields. Loading tolerates v1 state (storage skips
@@ -200,6 +200,17 @@ class Evidence(BaseModel):
     notes: str = ""
 
 
+# Facts that always identify a specific verification or assumption — the kernel sets
+# ``ref`` for these, and machine consumers may rely on it being present.
+_REF_BEARING_FACTS = frozenset(
+    {
+        GateFactType.VERIFICATION_UNRUNNABLE,
+        GateFactType.CHECK_FAILED,
+        GateFactType.MISSING_FALSIFIER,
+    }
+)
+
+
 class GateFinding(BaseModel):
     """One typed reason a phase is not acceptable: a mechanical fact plus its message.
 
@@ -213,6 +224,16 @@ class GateFinding(BaseModel):
     fact_type: GateFactType
     message: str
     ref: str = ""
+
+    @model_validator(mode="after")
+    def _ref_present_for_ref_bearing_facts(self) -> GateFinding:
+        # Enforce the kernel's invariant at the type boundary: a fact that names a
+        # specific verification/assumption must carry its id, so a regression that
+        # forgets ``ref`` fails loudly instead of silently shipping a finding a machine
+        # consumer can't resolve. (The reverse is intentionally not constrained.)
+        if self.fact_type in _REF_BEARING_FACTS and not self.ref.strip():
+            raise ValueError(f"{self.fact_type} finding requires a non-empty ref.")
+        return self
 
 
 class GateResult(BaseModel):

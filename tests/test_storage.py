@@ -494,3 +494,49 @@ def test_snapshot_load_strips_unknown_nested_field(tmp_path: Path) -> None:
     loaded = EventStore(goal_dir).snapshot()  # must not raise on the nested unknown fields
     assert loaded.phases[0].phase_id == "P1"
     assert loaded.topology.branch == "goal/g"
+
+
+def test_nested_model_classifies_every_supported_and_unsupported_shape() -> None:
+    """Lock the recursion contract: only single-model and list-of-model recurse;
+    every other annotation shape is left untouched (fail-safe under-strip)."""
+    import typing
+
+    from goals.models import GateVerdict, Phase, WorktreeLease
+    from goals.storage import _nested_model
+
+    # Supported — these recurse.
+    assert _nested_model(WorktreeLease) == ("single", WorktreeLease)
+    assert _nested_model(typing.Optional[WorktreeLease]) == ("single", WorktreeLease)
+    assert _nested_model(WorktreeLease | None) == ("single", WorktreeLease)
+    assert _nested_model(list[Phase]) == ("list", Phase)
+    assert _nested_model(typing.Optional[list[Phase]]) == ("list", Phase)
+
+    # Unsupported — these must classify to None (never recurse into the wrong shape).
+    assert _nested_model(str) is None
+    assert _nested_model(int) is None
+    assert _nested_model(list[str]) is None
+    assert _nested_model(dict[str, WorktreeLease]) is None  # dict-of-model not recursed
+    assert _nested_model(dict[str, str]) is None
+    assert _nested_model(tuple[Phase, ...]) is None
+    assert _nested_model(WorktreeLease | Phase) is None  # multi-arm union left alone
+    assert _nested_model(typing.Literal["a", "b"]) is None
+    assert _nested_model(GateVerdict) is None  # enum
+
+
+def test_ref_bearing_finding_requires_a_ref() -> None:
+    """The kernel's ref invariant is enforced at the type boundary."""
+    import pytest
+    from pydantic import ValidationError
+
+    # ref-bearing fact without a ref -> rejected.
+    for fact in (
+        GateFactType.CHECK_FAILED,
+        GateFactType.VERIFICATION_UNRUNNABLE,
+        GateFactType.MISSING_FALSIFIER,
+    ):
+        with pytest.raises(ValidationError):
+            GateFinding(fact_type=fact, message="m")
+
+    # ref-bearing fact with a ref -> accepted; non-ref fact needs no ref.
+    GateFinding(fact_type=GateFactType.CHECK_FAILED, message="m", ref="V-1")
+    GateFinding(fact_type=GateFactType.NO_PASSING_CHECK, message="m")

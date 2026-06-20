@@ -60,6 +60,11 @@ def _drop_unknown_fields(payload: object, model: type) -> object:
     wrote with fields this binary does not know, at the top level and inside nested
     models and lists of models. Non-model values pass through unchanged, so a genuine
     type mismatch still surfaces at ``model_validate`` rather than being masked.
+
+    Termination is bounded by the payload, not the type graph: recursion only descends
+    into strict child values of finite, acyclic JSON, so a self-referential *model*
+    could not loop (that would require self-referential *data*, which JSON cannot
+    express). No depth guard is needed.
     """
     if not isinstance(payload, dict):
         return payload
