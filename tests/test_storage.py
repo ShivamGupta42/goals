@@ -153,6 +153,83 @@ def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:
     assert (tmp_path / "goal" / "goal.json").exists()
 
 
+def test_replay_tolerates_future_evidence_and_artifact_fields(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump(), "future_event_payload": True},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={
+                "phase_id": "P1",
+                "evidence": {
+                    "checks_run": ["pytest"],
+                    "verifications": [
+                        {
+                            "verification_id": "V-future",
+                            "covers": "done",
+                            "command": "true",
+                            "future_verification_field": "ignored",
+                        }
+                    ],
+                    "acceptance_met": ["done"],
+                    "confidence": 0.9,
+                    "future_evidence_field": "ignored",
+                },
+            },
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_VERIFIED,
+            payload={
+                "phase_id": "P1",
+                "verifications": [
+                    {
+                        "verification_id": "V-future",
+                        "ran": True,
+                        "passed": True,
+                        "output_excerpt": "ok",
+                        "future_result_field": "ignored",
+                    }
+                ],
+                "artifacts": [
+                    {
+                        "path": "proof.txt",
+                        "sha256": "abc",
+                        "future_artifact_field": "ignored",
+                    }
+                ],
+            },
+        )
+    )
+
+    derived = store.snapshot()
+
+    evidence = derived.phases[0].evidence
+    assert evidence is not None
+    assert evidence.verifications[0].verification_id == "V-future"
+    assert evidence.verifications[0].passed is True
+    assert evidence.artifacts[0].path == "proof.txt"
+    assert evidence.artifacts[0].sha256 == "abc"
+
+
 def test_reaccepting_earlier_phase_keeps_later_open_phase_current(tmp_path: Path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",

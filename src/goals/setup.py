@@ -7,8 +7,8 @@ collision-safe bundled-skill installer.
 
 - **claude**: register this repo as a plugin marketplace and enable the `goals`
   plugin in ``~/.claude/settings.json``, plus install bundled skills.
-- **codex**: install bundled skills into ``~/.codex/skills``. (Per-project goal
-  context for Codex is synced into ``AGENTS.md`` by ``goals context sync``.)
+- **codex**: install bundled skills into ``~/.agents/skills``. (Per-project
+  goal context for Codex is synced into ``AGENTS.md`` by ``goals context sync``.)
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from goals.skill_discovery import install_bundled_skills
+from goals.skill_discovery import CODEX_SKILLS_DIR, install_bundled_skills
 from goals.storage import GoalsError, atomic_write_text
 
 MARKETPLACE_REPO = "ShivamGupta42/goals"
@@ -51,7 +51,7 @@ def setup_agents(
     codex_home: Path | None = None,
 ) -> SetupReport:
     claude_home = claude_home or (Path.home() / ".claude")
-    codex_home = codex_home or (Path.home() / ".codex")
+    codex_home = codex_home or CODEX_SKILLS_DIR.parent
     actions: list[SetupAction] = []
     for target in targets:
         if target == "claude":

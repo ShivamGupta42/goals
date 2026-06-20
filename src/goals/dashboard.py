@@ -12,6 +12,7 @@ from goals.architecture import (
 )
 from goals.audit import build_phase_lineage
 from goals.brief import build_goal_brief
+from goals.capabilities import analyze_capabilities
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
@@ -75,6 +76,7 @@ def render_dashboard(
     brief = build_goal_brief(snapshot)
     checkpoint = build_current_checkpoint_brief(snapshot)
     issue_report = analyze_goal_issues(snapshot)
+    capability_report = analyze_capabilities(snapshot)
 
     accepted = len([p for p in snapshot.phases if str(p.status) == "accepted"])
     total = len(snapshot.phases)
@@ -89,6 +91,7 @@ def render_dashboard(
     journey_section = _journey_html(snapshot)
     decisions_teaser = _decisions_teaser_html(snapshot)
     issues_section = _issues_section_html(issue_report)
+    capability_section = _capability_section_html(capability_report)
     evidence = _evidence_detail_html(snapshot, checkpoint)
     lineage_section = _lineage_section_html(snapshot, events or [])
     architecture_section = _architecture_section_html(
@@ -237,6 +240,7 @@ def render_dashboard(
 
     <h2 class="sec">Checks &amp; references</h2>
     {issues_section}
+    {capability_section}
     <details><summary>Proof &amp; evidence<span class="meta">{proof} of {total} recorded</span></summary>
       <div class="body">{evidence}</div>
     </details>
@@ -537,6 +541,34 @@ def _issues_section_html(report) -> str:
         f"<details{open_attr}><summary>Issues"
         f'<span class="meta {tone}">{_issues_meta(report)}</span></summary>'
         f'<div class="body">{_issues_html(report)}</div></details>'
+    )
+
+
+def _capability_section_html(report) -> str:
+    """Show capability gaps only when a goal appears to need missing tooling."""
+    if not report.gaps:
+        return ""
+    has_user = any(gap.needs_user for gap in report.gaps)
+    tone = "amber" if has_user else "muted"
+    open_attr = " open" if has_user else ""
+    items = "".join(
+        f'<li><span class="t">{escape(gap.title)}'
+        f'<span class="chip">{escape(gap.severity)}</span></span>'
+        + (f'<br><span class="d">{escape(gap.detail)}</span>' if gap.detail else "")
+        + (
+            f'<br><span class="d">Next: {escape(gap.suggested_action)}</span>'
+            if gap.suggested_action
+            else ""
+        )
+        + "</li>"
+        for gap in report.gaps[:8]
+    )
+    meta = f"{len(report.gaps)} gap" + ("" if len(report.gaps) == 1 else "s")
+    return (
+        f"<details{open_attr}><summary>Capabilities"
+        f'<span class="meta {tone}">{escape(meta)}</span></summary>'
+        f'<div class="body"><p>{escape(report.summary)}</p><ul class="kv">{items}</ul></div>'
+        "</details>"
     )
 
 

@@ -368,7 +368,15 @@ class GoalBriefAction(BaseModel):
     suggested_reply: str = ""
     what_happens_next: str = ""
     priority: Literal["blocking", "important", "later"] = "important"
-    source: Literal["checkpoint", "decision", "issue", "merge", "proof", "state"] = "issue"
+    source: Literal[
+        "capability",
+        "checkpoint",
+        "decision",
+        "issue",
+        "merge",
+        "proof",
+        "state",
+    ] = "issue"
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -663,6 +671,80 @@ class SourceFreshnessReport(BaseModel):
     agent_actions: list[str] = Field(default_factory=list)
 
 
+class CapabilityNeed(BaseModel):
+    """A capability the current goal or phase appears to need.
+
+    This is deliberately small and derived-first. Agents can supply explicit needs
+    at the CLI boundary, while Goals can infer obvious ones from the objective,
+    acceptance criteria, and recorded gaps. The model is safe to persist later but
+    does not require new event types for V1.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: str
+    title: str
+    category: Literal[
+        "browser",
+        "skill",
+        "tool",
+        "external_service",
+        "data",
+        "approval",
+        "other",
+    ] = "other"
+    required: bool = True
+    phase_id: str | None = None
+    query: str = ""
+    reason: str = ""
+    preferred_agents: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CapabilityMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    sources: list[str] = Field(default_factory=list)
+    agents: list[str] = Field(default_factory=list)
+    path: str = ""
+
+
+class CapabilityGap(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: str
+    title: str
+    category: str = "other"
+    severity: Literal["p0", "p1", "p2"] = "p1"
+    status: Literal[
+        "available",
+        "needs_install",
+        "missing_for_agent",
+        "missing",
+        "unknown",
+    ] = "unknown"
+    required: bool = True
+    needs_user: bool = False
+    detail: str = ""
+    suggested_action: str = ""
+    matches: list[CapabilityMatch] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class CapabilityCheckReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal_id: str
+    adapter: Literal["auto", "claude", "codex"] = "auto"
+    passed: bool
+    summary: str
+    needs: list[CapabilityNeed] = Field(default_factory=list)
+    gaps: list[CapabilityGap] = Field(default_factory=list)
+    user_questions: list[str] = Field(default_factory=list)
+    agent_actions: list[str] = Field(default_factory=list)
+
+
 class SelfEvolutionEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -880,6 +962,7 @@ class GoalIssue(BaseModel):
     severity: Literal["p0", "p1", "p2"]
     area: Literal[
         "architecture",
+        "capability",
         "decision",
         "checkpoint",
         "evidence",

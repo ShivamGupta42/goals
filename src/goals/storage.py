@@ -166,7 +166,8 @@ class EventStore:
             if not line.strip():
                 continue
             try:
-                events.append(Event.model_validate_json(line))
+                data = json.loads(line)
+                events.append(Event.model_validate(_drop_unknown_fields(data, Event)))
             except Exception as exc:  # noqa: BLE001
                 if _is_retired_event(line):
                     continue
@@ -214,7 +215,9 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_EVIDENCE:
             phase = _phase(snapshot, payload["phase_id"])
-            evidence = Evidence.model_validate(payload["evidence"])
+            evidence = Evidence.model_validate(
+                _drop_unknown_fields(payload["evidence"], Evidence)
+            )
             # Recorded evidence declares *what* will be verified; it can never assert
             # that a check passed. Strip any agent-set execution result so the only
             # path to ran/passed is the engine running it (PHASE_VERIFIED).
@@ -250,7 +253,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                         verification.exit_code = result.get("exit_code")
                         verification.output_sha256 = result.get("output_sha256", "")
                 phase.evidence.artifacts = [
-                    EvidenceArtifact.model_validate(item) for item in payload.get("artifacts", [])
+                    EvidenceArtifact.model_validate(
+                        _drop_unknown_fields(item, EvidenceArtifact)
+                    )
+                    for item in payload.get("artifacts", [])
                 ]
                 snapshot.current_phase = phase.phase_id
                 _mark_active_if_reopened(snapshot)
@@ -269,7 +275,9 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             phase = _phase(snapshot, payload["phase_id"])
-            checkpoint = PhaseCheckpoint.model_validate(payload["checkpoint"])
+            checkpoint = PhaseCheckpoint.model_validate(
+                _drop_unknown_fields(payload["checkpoint"], PhaseCheckpoint)
+            )
             _upsert_checkpoint(phase.checkpoints, checkpoint)
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
@@ -280,26 +288,40 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             elif snapshot.status == GoalStatus.COMPLETE:
                 snapshot.status = GoalStatus.ACTIVE
         elif event.event_type == EventType.DECISION_REQUESTED:
-            decision = Decision.model_validate(payload["decision"])
+            decision = Decision.model_validate(_drop_unknown_fields(payload["decision"], Decision))
             snapshot.decisions.append(decision)
             if payload["decision"].get("priority") == "blocking":
                 snapshot.status = GoalStatus.BLOCKED
         elif event.event_type == EventType.DECISION_RECORDED:
-            snapshot.judgements.append(JudgementRecord.model_validate(payload["judgement"]))
+            snapshot.judgements.append(
+                JudgementRecord.model_validate(
+                    _drop_unknown_fields(payload["judgement"], JudgementRecord)
+                )
+            )
         elif event.event_type == EventType.ASSUMPTION_RECORDED:
-            assumption = Assumption.model_validate(payload["assumption"])
+            assumption = Assumption.model_validate(
+                _drop_unknown_fields(payload["assumption"], Assumption)
+            )
             _upsert_assumption(snapshot.assumptions, assumption)
         elif event.event_type == EventType.BREAKDOWN_RECORDED:
-            breakdown = ProblemBreakdown.model_validate(payload["breakdown"])
+            breakdown = ProblemBreakdown.model_validate(
+                _drop_unknown_fields(payload["breakdown"], ProblemBreakdown)
+            )
             _upsert_breakdown(snapshot.breakdowns, breakdown)
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
-            snapshot.architecture = GoalArchitectureMap.model_validate(payload["architecture"])
+            snapshot.architecture = GoalArchitectureMap.model_validate(
+                _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)
+            )
         elif event.event_type == EventType.SOURCE_RECORDED:
-            source = SourceRecord.model_validate(payload["source"])
+            source = SourceRecord.model_validate(
+                _drop_unknown_fields(payload["source"], SourceRecord)
+            )
             if not any(existing.source_id == source.source_id for existing in snapshot.sources):
                 snapshot.sources.append(source)
             for claim_payload in payload.get("claims", []):
-                claim = SourceClaim.model_validate(claim_payload)
+                claim = SourceClaim.model_validate(
+                    _drop_unknown_fields(claim_payload, SourceClaim)
+                )
                 if not any(existing.claim == claim.claim for existing in snapshot.source_claims):
                     snapshot.source_claims.append(claim)
         elif event.event_type == EventType.LEARNING_CAPTURED:
