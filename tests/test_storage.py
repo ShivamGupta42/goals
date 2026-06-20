@@ -19,6 +19,7 @@ from goals.models import (
     GateVerdict,
     GoalSnapshot,
     GoalStatus,
+    PhaseStatus,
     WorktreeLease,
 )
 from goals.storage import EventStore
@@ -150,6 +151,70 @@ def test_event_append_and_snapshot_derivation(tmp_path: Path) -> None:
     assert derived.phases[0].reviews[0].verdict == GateVerdict.PASS
     assert derived.status == GoalStatus.ACTIVE
     assert (tmp_path / "goal" / "goal.json").exists()
+
+
+def test_reaccepting_earlier_phase_keeps_later_open_phase_current(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Demo goal",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/demo"
+        ),
+        phases=default_phases("Demo goal"),
+        current_phase="P1",
+    )
+    store = EventStore(tmp_path / "goal")
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.GOAL_CREATED,
+            payload={"snapshot": snapshot.model_dump()},
+        )
+    )
+    for phase_id in ("P1", "P2", "P3"):
+        store.append(
+            Event(
+                goal_id="demo",
+                event_type=EventType.PHASE_ACCEPTED,
+                payload={"phase_id": phase_id},
+            )
+        )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={"phase_id": "P4", "evidence": Evidence().model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={"phase_id": "P3", "evidence": Evidence().model_dump()},
+        )
+    )
+    store.append(
+        Event(
+            goal_id="demo",
+            event_type=EventType.PHASE_REVIEWED,
+            payload={
+                "phase_id": "P3",
+                "gate_result": GateResult(
+                    gate_id="phase-review", verdict=GateVerdict.PASS, summary="ok"
+                ).model_dump(),
+            },
+        )
+    )
+    store.append(
+        Event(goal_id="demo", event_type=EventType.PHASE_ACCEPTED, payload={"phase_id": "P3"})
+    )
+
+    derived = store.snapshot()
+
+    assert derived.status == GoalStatus.ACTIVE
+    assert derived.current_phase == "P4"
+    assert derived.phases[2].status == PhaseStatus.ACCEPTED
+    assert derived.phases[3].status == PhaseStatus.NEEDS_REVIEW
 
 
 def test_checkpoint_events_replay_and_upsert(tmp_path: Path) -> None:

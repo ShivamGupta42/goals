@@ -402,6 +402,6 @@ def _upsert_breakdown(breakdowns: list[ProblemBreakdown], breakdown: ProblemBrea
 
 def _next_pending_phase_id(snapshot: GoalSnapshot) -> str | None:
     for phase in snapshot.phases:
-        if phase.status == PhaseStatus.PENDING:
+        if phase.status != PhaseStatus.ACCEPTED:
             return phase.phase_id
     return None
