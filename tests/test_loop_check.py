@@ -11,7 +11,14 @@ def _skills() -> list[DiscoveredSkill]:
             sources=["claude"],
             agents=["claude"],
             path="/c/known-skill/SKILL.md",
-        )
+        ),
+        DiscoveredSkill(
+            name="bundled-skill",
+            description="Bundled but not installed.",
+            sources=["bundled"],
+            agents=[],
+            path="/b/bundled-skill/SKILL.md",
+        ),
     ]
 
 
@@ -135,6 +142,46 @@ def test_detects_unknown_skill() -> None:
         ]
     )
     assert "unknown-skill" in _codes(design, skills=_skills())
+
+
+def test_detects_bundled_skill_that_is_not_installed() -> None:
+    design = LoopDesign(
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="P",
+                acceptance_criteria=["A test passes."],
+                termination_conditions=["Done."],
+                skills=["bundled-skill"],
+            )
+        ]
+    )
+    report = check_loop(design, skills=_skills())
+
+    assert "skill-not-installed" in {finding.code for finding in report.findings}
+    finding = next(finding for finding in report.findings if finding.code == "skill-not-installed")
+    assert "only bundled" in finding.summary
+    assert "goals skills install --target both" in finding.suggested_fix
+
+
+def test_detects_skill_missing_for_target_agent() -> None:
+    design = LoopDesign(
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="P",
+                acceptance_criteria=["A test passes."],
+                termination_conditions=["Done."],
+                skills=["known-skill"],
+            )
+        ]
+    )
+    report = check_loop(design, skills=_skills(), target_agent="codex")
+
+    assert "skill-not-installed" in {finding.code for finding in report.findings}
+    finding = next(finding for finding in report.findings if finding.code == "skill-not-installed")
+    assert "for codex" in finding.summary
+    assert "~/.codex/skills" in finding.suggested_fix
 
 
 def test_detects_missing_evidence_requirement() -> None:

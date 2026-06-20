@@ -36,6 +36,13 @@ def _skills() -> list[DiscoveredSkill]:
             agents=["claude", "codex"],
             path="/c/shared-skill/SKILL.md",
         ),
+        DiscoveredSkill(
+            name="bundled-skill",
+            description="Bundled with Goals but not installed.",
+            sources=["bundled"],
+            agents=[],
+            path="/b/bundled-skill/SKILL.md",
+        ),
     ]
 
 
@@ -95,6 +102,14 @@ def test_attach_claude_only_skill_emits_codex_install_hint(tmp_path: Path) -> No
     combined = "\n".join(out)
     assert "goals-decision-explainer" in combined
     assert ".codex/skills" in combined  # the portability install suggestion
+
+
+def test_attach_bundled_skill_emits_install_hint(tmp_path: Path) -> None:
+    session = _session(tmp_path)
+    out = _drive(session, "add Plan", "attach bundled-skill")
+    combined = "\n".join(out)
+    assert "bundled-skill" in combined
+    assert "goals skills install --target both" in combined
 
 
 def test_attach_shared_skill_has_no_install_hint(tmp_path: Path) -> None:

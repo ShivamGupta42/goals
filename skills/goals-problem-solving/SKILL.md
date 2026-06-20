@@ -77,7 +77,7 @@ goals assess assume "..." --id <A-id> --status broken
 
 **6. Systemize — prevent repeat problems.** Only for recurring or costly problems.
 Turn the lesson into an environment change (a checklist, a decision rule, a
-template) via `goals improve`. Don't build a system before you understand the
+template) via `goals loop improve`. Don't build a system before you understand the
 problem.
 
 ## When NOT to use
