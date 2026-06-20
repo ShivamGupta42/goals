@@ -4,6 +4,7 @@ must stay free of that vocabulary.
 
 from pathlib import Path
 
+from goals.issues import _GATE_CATEGORY_ACTION
 from goals.models import GateFactType, GateFinding, GateFindingCategory
 from goals.rubric import category_for, representative_category
 
@@ -12,6 +13,13 @@ def test_every_fact_maps_to_a_category() -> None:
     # No fact may be left unmapped — category_for must total over the enum.
     for fact in GateFactType:
         assert isinstance(category_for(fact), GateFindingCategory)
+
+
+def test_every_category_has_a_next_step_action() -> None:
+    # If a category is added without a plain-language next step, goals check would
+    # silently fall back to the generic action — catch that omission here.
+    for category in GateFindingCategory:
+        assert category in _GATE_CATEGORY_ACTION
 
 
 def test_signal_carrying_facts_map_as_designed() -> None:

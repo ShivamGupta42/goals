@@ -147,6 +147,23 @@ def test_missing_falsifier_fact_carries_assumption_ref() -> None:
     assert falsifier and falsifier[0].ref == "A-load"
 
 
+def test_failed_check_and_missing_falsifier_keep_stable_order() -> None:
+    # When a ran-and-failed check co-occurs with an uncovered load-bearing assumption,
+    # CHECK_FAILED precedes MISSING_FALSIFIER — a stable order p0 consumers can rely on.
+    phase = Phase(
+        phase_id="P1",
+        title="Step",
+        goal="Do it",
+        evidence=Evidence(
+            verifications=[
+                Verification(covers="done", kind="auto", command="false", ran=True, passed=False)
+            ]
+        ),
+    )
+    facts = _facts(phase, load_bearing=[("A-load", "the premise")])
+    assert facts == [GateFactType.CHECK_FAILED, GateFactType.MISSING_FALSIFIER]
+
+
 def test_p0_mirrors_finding_messages_verbatim() -> None:
     phase = Phase(
         phase_id="P1",

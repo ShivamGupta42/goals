@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 import time
+import types
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterator
+from typing import Iterator, Union, get_args, get_origin
+
+from pydantic import BaseModel
 
 from goals.models import (
     Assumption,
@@ -51,11 +54,66 @@ def _is_retired_event(line: str) -> bool:
 
 
 def _drop_unknown_fields(payload: object, model: type) -> object:
-    """Strip top-level keys a model no longer declares (forward-compat load)."""
+    """Strip keys a model — and its declared nested models — no longer declares.
+
+    Forward-compat load: lets an older binary read an event or snapshot a newer one
+    wrote with fields this binary does not know, at the top level and inside nested
+    models and lists of models. Non-model values pass through unchanged, so a genuine
+    type mismatch still surfaces at ``model_validate`` rather than being masked.
+    """
     if not isinstance(payload, dict):
         return payload
     fields = getattr(model, "model_fields", {})
-    return {key: value for key, value in payload.items() if key in fields}
+    cleaned: dict = {}
+    for key, value in payload.items():
+        if key not in fields:
+            continue
+        cleaned[key] = _clean_nested(value, fields[key].annotation)
+    return cleaned
+
+
+def _clean_nested(value: object, annotation: object) -> object:
+    """Recurse into a value when its field declares a model or list-of-models."""
+    nested = _nested_model(annotation)
+    if nested is None:
+        return value
+    kind, submodel = nested
+    if kind == "single" and isinstance(value, dict):
+        return _drop_unknown_fields(value, submodel)
+    if kind == "list" and isinstance(value, list):
+        return [
+            _drop_unknown_fields(item, submodel) if isinstance(item, dict) else item
+            for item in value
+        ]
+    return value
+
+
+def _nested_model(annotation: object) -> tuple[str, type] | None:
+    """Classify a field annotation for nested forward-compat stripping.
+
+    Returns ``("single", Model)`` for ``Model`` / ``Optional[Model]``, ``("list", Model)``
+    for ``list[Model]`` / ``Optional[list[Model]]``, else ``None``. Other shapes (dicts,
+    unions of multiple models, scalars) are intentionally left untouched.
+    """
+    annotation = _unwrap_optional(annotation)
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return ("single", annotation)
+    if get_origin(annotation) is list:
+        args = get_args(annotation)
+        if len(args) == 1:
+            item = _unwrap_optional(args[0])
+            if isinstance(item, type) and issubclass(item, BaseModel):
+                return ("list", item)
+    return None
+
+
+def _unwrap_optional(annotation: object) -> object:
+    """Reduce ``X | None`` / ``Optional[X]`` to ``X`` (leave other unions alone)."""
+    if get_origin(annotation) in (Union, types.UnionType):
+        non_none = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(non_none) == 1:
+            return non_none[0]
+    return annotation
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -180,11 +238,10 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
             phase = _phase(snapshot, payload["phase_id"])
-            # Drop top-level GateResult keys this binary no longer declares, so an older
-            # binary can replay an event a newer one wrote with an added GateResult field
-            # (e.g. `findings`) — matching the snapshot-level forward-compat stance above.
-            # Top-level only: a field added *inside* a findings element is not stripped
-            # (GateFinding is extra="forbid"); add nested handling here if that ever arises.
+            # Drop GateResult keys this binary no longer declares — at the top level and
+            # inside nested models — so an older binary can replay an event a newer one
+            # wrote with an added field (e.g. `findings`, or a new field inside a finding).
+            # Matches the snapshot-level forward-compat stance above.
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )

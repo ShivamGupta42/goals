@@ -410,3 +410,87 @@ def test_phase_reviewed_replay_tolerates_unknown_gate_result_field(tmp_path: Pat
     p1 = next(phase for phase in loaded.phases if phase.phase_id == "P1")
     assert len(p1.reviews) == 1
     assert p1.reviews[0].verdict == GateVerdict.FAIL
+
+
+def test_replay_strips_unknown_field_inside_a_finding(tmp_path: Path) -> None:
+    """Nested forward-compat: a future sub-field on GateFinding must not brick replay."""
+    from goals.models import Event, EventType
+    from goals.runtime import default_phases
+
+    snapshot = GoalSnapshot(
+        goal_id="g",
+        objective="Ship it",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/g"
+        ),
+        phases=default_phases("Ship it"),
+        current_phase="P1",
+    )
+    created = Event(
+        goal_id="g",
+        event_type=EventType.GOAL_CREATED,
+        payload={"snapshot": snapshot.model_dump()},
+    )
+    gate_result = GateResult(
+        gate_id="phase-review",
+        verdict=GateVerdict.FAIL,
+        summary="Evidence is not verified by execution.",
+        p0=["Automated check V-1 ran and failed (covers done)."],
+        findings=[
+            GateFinding(
+                fact_type=GateFactType.CHECK_FAILED,
+                message="Automated check V-1 ran and failed (covers done).",
+                ref="V-1",
+            )
+        ],
+    ).model_dump()
+    # A newer binary added a field *inside* the finding (GateFinding is extra="forbid").
+    gate_result["findings"][0]["a_future_subfield"] = {"nested": 1}
+    reviewed = Event(
+        goal_id="g",
+        event_type=EventType.PHASE_REVIEWED,
+        payload={"phase_id": "P1", "gate_result": gate_result},
+    )
+
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    (goal_dir / "events.jsonl").write_text(
+        created.model_dump_json() + "\n" + reviewed.model_dump_json() + "\n"
+    )
+
+    loaded = EventStore(goal_dir).snapshot()  # must not raise on the nested unknown field
+    p1 = next(phase for phase in loaded.phases if phase.phase_id == "P1")
+    assert p1.reviews[0].findings[0].fact_type == GateFactType.CHECK_FAILED
+    assert p1.reviews[0].findings[0].ref == "V-1"
+
+
+def test_snapshot_load_strips_unknown_nested_field(tmp_path: Path) -> None:
+    """The same recursion protects the snapshot tree, not just gate results."""
+    from goals.models import Event, EventType
+    from goals.runtime import default_phases
+
+    snapshot = GoalSnapshot(
+        goal_id="g",
+        objective="Ship it",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/g"
+        ),
+        phases=default_phases("Ship it"),
+        current_phase="P1",
+    )
+    snap_dict = snapshot.model_dump()
+    # A future field inside a list-of-models element (list[Phase] is extra="forbid")...
+    snap_dict["phases"][0]["a_future_phase_field"] = "tomorrow"
+    # ...and inside a single-model field (topology is a WorktreeLease, extra="forbid").
+    snap_dict["topology"]["a_future_topology_field"] = "later"
+    created = Event(
+        goal_id="g", event_type=EventType.GOAL_CREATED, payload={"snapshot": snap_dict}
+    )
+
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    (goal_dir / "events.jsonl").write_text(created.model_dump_json() + "\n")
+
+    loaded = EventStore(goal_dir).snapshot()  # must not raise on the nested unknown fields
+    assert loaded.phases[0].phase_id == "P1"
+    assert loaded.topology.branch == "goal/g"
