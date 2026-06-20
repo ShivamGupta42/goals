@@ -3,7 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from goals.models import Event, EventType, Evidence, GateResult, GateVerdict, GoalSnapshot, Phase, WorktreeLease
+from goals.models import Event, EventType, Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, Phase, PhaseStatus, WorktreeLease
 from goals.storage import EventStore
 
 
@@ -428,15 +428,17 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
     evidence_file = worktree / "evidence.json"
     evidence_file.write_text(
         json.dumps(
-            {
-                "checks_run": ["pytest"],
-                "acceptance_met": ["Plan confirmed."],
-                "confidence": 0.9,
-                "verifications": [
-                    {"covers": "Plan confirmed.", "kind": "auto", "command": "true"}
-                ],
-            }
-        )
+                {
+                    "checks_run": ["pytest"],
+                    "acceptance_met": ["Plan confirmed."],
+                    "confidence": 0.9,
+                    "verifications": [
+                        {"covers": "P1.C1", "kind": "auto", "command": "true"},
+                        {"covers": "P1.C2", "kind": "auto", "command": "true"},
+                        {"covers": "P1.C3", "kind": "auto", "command": "true"},
+                    ],
+                }
+            )
     )
     run(
         [
@@ -621,7 +623,11 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
             "acceptance_met": ["done"],
             "confidence": 0.9,
             "notes": "done",
-            "verifications": [{"covers": "done", "kind": "auto", "command": "true"}],
+            "verifications": [
+                {"covers": "P1.C1", "kind": "auto", "command": "true"},
+                {"covers": "P1.C2", "kind": "auto", "command": "true"},
+                {"covers": "P1.C3", "kind": "auto", "command": "true"},
+            ],
         }
     )
     evidence_file = worktree / "evidence.json"
@@ -698,3 +704,145 @@ def test_phase_protocol_accepts_reviewed_phase(tmp_path: Path) -> None:
     assert "What Needs Your Answer" in brief.stdout
     assert "What happens next" in brief.stdout
     assert "Suggested reply" in brief.stdout
+
+
+def test_finish_refuses_incomplete_goal_and_exports_complete_goal(tmp_path: Path) -> None:
+    incomplete = tmp_path / "incomplete"
+    incomplete.mkdir()
+    init_repo(incomplete)
+    started = run(["python", "-m", "goals.cli", "start", "Finish gate demo"], incomplete)
+    worktree = Path(
+        next(line for line in started.stdout.splitlines() if line.startswith("Worktree:"))
+        .split("`", 2)[1]
+    )
+
+    not_ready = run_unchecked(["python", "-m", "goals.cli", "finish"], worktree)
+    assert not_ready.returncode == 1
+    assert "Goal is not complete" in not_ready.stdout
+
+    complete = tmp_path / "complete"
+    complete.mkdir()
+    snapshot = GoalSnapshot(
+        goal_id="done",
+        objective="Done goal",
+        status=GoalStatus.COMPLETE,
+        definition_of_done=["Done."],
+        topology=WorktreeLease(
+            base_repo=str(complete),
+            base_branch="",
+            worktree_path=str(complete),
+            branch="",
+        ),
+        phases=[
+            Phase(
+                phase_id="P1",
+                title="Done",
+                goal="Done",
+                status=PhaseStatus.ACCEPTED,
+                reviews=[GateResult(gate_id="phase-review", verdict=GateVerdict.PASS, summary="ok")],
+            )
+        ],
+        current_phase=None,
+    )
+    EventStore(complete / ".agent-workflow" / "goals" / "done").append(
+        Event(goal_id="done", event_type=EventType.GOAL_CREATED, payload={"snapshot": snapshot.model_dump()})
+    )
+
+    finished = run(["python", "-m", "goals.cli", "finish"], complete)
+    assert "Overall: pass" in finished.stdout
+    assert (complete / ".goals" / "goal-state.json").is_file()
+
+
+def test_loop_build_script_resets_by_default_and_append_is_explicit(tmp_path: Path) -> None:
+    script = tmp_path / "loop.txt"
+    script.write_text(
+        "\n".join(
+            [
+                "objective Demo",
+                "add Plan",
+                "accept Plan is clear",
+                "terminate Plan accepted",
+                "save",
+            ]
+        )
+    )
+    out = tmp_path / ".goals"
+
+    run(["python", "-m", "goals.cli", "loop", "build", "--out", str(out), "--script", str(script)], tmp_path)
+    run(["python", "-m", "goals.cli", "loop", "build", "--out", str(out), "--script", str(script)], tmp_path)
+    design = json.loads((out / "loop-design.json").read_text())
+    assert len(design["phases"]) == 1
+
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "build",
+            "--out",
+            str(out),
+            "--script",
+            str(script),
+            "--append",
+        ],
+        tmp_path,
+    )
+    appended = json.loads((out / "loop-design.json").read_text())
+    assert len(appended["phases"]) == 2
+
+
+def test_loop_activate_creates_runtime_phases_with_protocol(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    run(["git", "checkout", "-b", "feature"], repo)
+    script = repo / "loop.txt"
+    script.write_text(
+        "\n".join(
+            [
+                "objective Activate loop",
+                "dod Done",
+                "add Plan :: Make the plan",
+                "accept Plan is clear",
+                "terminate Plan accepted",
+                "attach goals-problem-solving",
+                "profile product-ux-review",
+                "save",
+            ]
+        )
+    )
+    run(["python", "-m", "goals.cli", "loop", "build", "--script", str(script)], repo)
+
+    activated = run(["python", "-m", "goals.cli", "loop", "activate", "--in-place"], repo)
+    assert "# Goal Started" in activated.stdout
+    goal_file = next((repo / ".agent-workflow" / "goals").glob("*/goal.json"))
+    snapshot = json.loads(goal_file.read_text())
+    phase = snapshot["phases"][0]
+
+    assert phase["acceptance_criteria"] == ["Plan is clear"]
+    assert phase["protocol"]["termination_conditions"] == ["Plan accepted"]
+    assert phase["protocol"]["skills"] == ["goals-problem-solving"]
+    assert phase["protocol"]["validation_profiles"] == ["product-ux-review"]
+
+
+def test_loop_activate_refuses_empty_design_before_creating_goal_state(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    run(["git", "checkout", "-b", "feature"], repo)
+    script = repo / "empty-loop.txt"
+    script.write_text("objective Empty loop\nsave\n")
+
+    run(["python", "-m", "goals.cli", "loop", "build", "--script", str(script)], repo)
+    activated = run_unchecked(["python", "-m", "goals.cli", "loop", "activate", "--in-place"], repo)
+
+    assert activated.returncode == 1
+    assert "at least one phase" in activated.stdout
+    assert not (repo / ".agent-workflow" / "goals").exists()
+
+
+def test_simulate_command_runs_regression_scenarios(tmp_path: Path) -> None:
+    result = run(["python", "-m", "goals.cli", "simulate", "--strict"], tmp_path)
+    assert "Goals Simulation Report" in result.stdout
+    assert "Overall: pass" in result.stdout

@@ -32,7 +32,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from goals.git_ops import slugify
-from goals.models import GoalSnapshot, Phase, WorktreeLease, utc_now
+from goals.models import GoalSnapshot, Phase, PhaseProtocol, WorktreeLease, utc_now
 from goals.portability import build_portable_state, render_goal_markdown
 from goals.skill_discovery import DiscoveredSkill, discover_skills
 from goals.storage import GoalsError, atomic_write_text
@@ -40,12 +40,6 @@ from goals.storage import GoalsError, atomic_write_text
 #: Bumped independently of the portable spec: this is the builder's own design
 #: artifact, not the vendor-neutral goal contract.
 LOOP_DESIGN_VERSION = 1
-
-#: Prefixes used when folding the richer design into the portable spec's flat
-#: ``acceptance_criteria`` list, so the round-tripped goal carries termination
-#: conditions and attached skills (and a reader can tell them apart).
-TERMINATE_PREFIX = "Terminate when: "
-SKILL_PREFIX = "Use skill: "
 
 _TRAILING_NUM_RE = re.compile(r"(\d+)$")
 
@@ -64,6 +58,7 @@ class LoopPhase(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     termination_conditions: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+    validation_profiles: list[str] = Field(default_factory=list)
 
 
 class LoopDesign(BaseModel):
@@ -149,10 +144,9 @@ def load_design(path: Path) -> LoopDesign:
 def to_snapshot(design: LoopDesign) -> GoalSnapshot:
     """Project the design into a valid :class:`GoalSnapshot`.
 
-    Termination conditions and attached skill references fold into the phase's
-    flat ``acceptance_criteria`` (with recognizable prefixes) so they survive
-    into the committable goal spec. The topology is a synthetic placeholder: the
-    portable spec is path-sanitized and only reads ``topology.branch``.
+    Termination conditions and attached skill references stay as structured
+    protocol metadata. The topology is a synthetic placeholder: the portable spec
+    is path-sanitized and only reads ``topology.branch``.
     """
     slug = slugify(design.objective) if design.objective else "loop"
     ids = [phase.phase_id for phase in design.phases]
@@ -167,7 +161,12 @@ def to_snapshot(design: LoopDesign) -> GoalSnapshot:
             phase_id=phase.phase_id,
             title=phase.title,
             goal=phase.goal,
-            acceptance_criteria=_portable_acceptance(phase),
+            acceptance_criteria=list(phase.acceptance_criteria),
+            protocol=PhaseProtocol(
+                termination_conditions=list(phase.termination_conditions),
+                skills=list(phase.skills),
+                validation_profiles=list(phase.validation_profiles),
+            ),
         )
         for phase in design.phases
     ]
@@ -191,14 +190,6 @@ def to_snapshot(design: LoopDesign) -> GoalSnapshot:
 def to_portable_state(design: LoopDesign) -> dict:
     """The portable goal-state dict for this design (via portability.py)."""
     return build_portable_state(to_snapshot(design))
-
-
-def _portable_acceptance(phase: LoopPhase) -> list[str]:
-    return [
-        *phase.acceptance_criteria,
-        *(f"{TERMINATE_PREFIX}{cond}" for cond in phase.termination_conditions),
-        *(f"{SKILL_PREFIX}{name}" for name in phase.skills),
-    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -230,6 +221,7 @@ _HELP = """Commands:
   goal <text>               set the selected phase's goal
   accept <text>             add an acceptance criterion to the selected phase
   terminate <text>          add a termination condition to the selected phase
+  profile <name>            attach a validation profile to the selected phase
   skills [query]            list skills discovered live (optionally filtered)
   attach <skill-name>       attach a discovered skill to the selected phase
   move <id> up|down         reorder a phase
@@ -350,6 +342,18 @@ def _cmd_terminate(session: BuilderSession, rest: str) -> BuilderResponse:
     return BuilderResponse(f"{phase.phase_id} termination += {rest}")
 
 
+def _cmd_profile(session: BuilderSession, rest: str) -> BuilderResponse:
+    phase = _selected_or_none(session)
+    if phase is None:
+        return BuilderResponse("Select a phase first (select <id>).")
+    if not rest:
+        return BuilderResponse("Usage: profile <name>")
+    if rest in phase.validation_profiles:
+        return BuilderResponse(f"{rest} is already attached to {phase.phase_id}.")
+    phase.validation_profiles.append(rest)
+    return BuilderResponse(f"{phase.phase_id} validation profile += {rest}")
+
+
 def _cmd_skills(session: BuilderSession, rest: str) -> BuilderResponse:
     matches = _search_skills(session.skills, rest)
     if not matches:
@@ -449,6 +453,7 @@ _COMMANDS = {
     "goal": _cmd_goal,
     "accept": _cmd_accept,
     "terminate": _cmd_terminate,
+    "profile": _cmd_profile,
     "skills": _cmd_skills,
     "attach": _cmd_attach,
     "move": _cmd_move,
@@ -513,6 +518,8 @@ def render_loop_text(design: LoopDesign, *, selected: str | None = None) -> str:
             lines.append(f"     accept: {criterion}")
         for cond in phase.termination_conditions:
             lines.append(f"     terminate: {cond}")
+        for profile in phase.validation_profiles:
+            lines.append(f"     profile: {profile}")
         for name in phase.skills:
             lines.append(f"     skill: {name}")
     return "\n".join(lines)
@@ -590,6 +597,9 @@ def _phase_html(phase: LoopPhase, by_name: dict[str, DiscoveredSkill]) -> str:
     if phase.termination_conditions:
         items = "".join(f"<li>{escape(c)}</li>" for c in phase.termination_conditions)
         parts.append(f'<p class="label">Termination</p><ul>{items}</ul>')
+    if phase.validation_profiles:
+        items = "".join(f"<li>{escape(c)}</li>" for c in phase.validation_profiles)
+        parts.append(f'<p class="label">Validation profiles</p><ul>{items}</ul>')
     if phase.skills:
         parts.append('<p class="label">Skills</p>')
         for name in phase.skills:

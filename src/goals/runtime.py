@@ -86,6 +86,7 @@ def default_phases(objective: str) -> list[Phase]:
 
 
 Workspace = Literal["auto", "worktree", "in_place"]
+GOALS_METADATA_PREFIXES = (".agent-workflow/", ".goals/")
 
 
 @dataclass
@@ -141,6 +142,8 @@ def create_goal(
     why: str = "",
     new_project: Path | None = None,
     workspace: Workspace = "auto",
+    phases: list[Phase] | None = None,
+    definition_of_done: list[str] | None = None,
 ) -> GoalSnapshot:
     base = _ensure_repo(cwd, new_project) if new_project is not None else cwd
     plan = resolve_workspace(base, requested=workspace, new_project_created=new_project is not None)
@@ -158,7 +161,7 @@ def create_goal(
                 "(worktrees are how you run several goals at once)."
             )
     if plan.mode == "worktree":
-        require_clean_repo(plan.repo)
+        require_clean_repo(plan.repo, ignored_prefixes=GOALS_METADATA_PREFIXES)
         if not has_commits(plan.repo):
             raise GoalsError(
                 "Repository has no commits. Create an initial commit before creating a goal."
@@ -176,15 +179,19 @@ def create_goal(
         goal_id=goal_id,
         objective=objective,
         why=why or "Keep a long-running agent task understandable, reviewable, and resumable.",
-        definition_of_done=[
+        definition_of_done=definition_of_done
+        if definition_of_done is not None
+        else [
             "All phases are accepted.",
             "The dashboard shows no blocking decisions.",
             "Evidence exists for completed work.",
         ],
         autonomy=autonomy,  # type: ignore[arg-type]
         topology=lease,
-        phases=default_phases(objective),
-        current_phase="P1",
+        phases=[phase.model_copy(deep=True) for phase in phases]
+        if phases is not None
+        else default_phases(objective),
+        current_phase=(phases[0].phase_id if phases else None) if phases is not None else "P1",
         last_updated=utc_now(),
     )
     goal_dir = Path(worktree) / ".agent-workflow" / "goals" / goal_id
@@ -196,11 +203,13 @@ def create_goal(
             payload={"snapshot": snapshot.model_dump()},
         )
     )
+    created = store.snapshot()
+    _refresh_portable_export(created)
     if plan.is_git:
         write_workflow_gitignore(plan.repo)
         if Path(worktree) != plan.repo:
             write_workflow_gitignore(worktree)
-    return store.snapshot()
+    return created
 
 
 def active_goal_dir(cwd: Path) -> Path:
@@ -274,7 +283,15 @@ def append_event(cwd: Path, event: Event) -> GoalSnapshot:
     goal_dir = active_goal_dir(cwd)
     store = EventStore(goal_dir)
     store.append(event)
-    return store.snapshot()
+    snapshot = store.snapshot()
+    _refresh_portable_export(snapshot)
+    return snapshot
+
+
+def _refresh_portable_export(snapshot: GoalSnapshot) -> None:
+    from goals.portability import export_snapshot
+
+    export_snapshot(snapshot)
 
 
 def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"]) -> GoalSnapshot:

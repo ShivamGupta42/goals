@@ -126,9 +126,14 @@ def current_branch(repo: Path) -> str:
     return branch
 
 
-def require_clean_repo(repo: Path) -> None:
+def require_clean_repo(repo: Path, *, ignored_prefixes: tuple[str, ...] = ()) -> None:
     result = run_git(["status", "--porcelain"], repo)
-    if result.stdout.strip():
+    dirty = [
+        line
+        for line in result.stdout.splitlines()
+        if line and not _ignored_status_line(line, ignored_prefixes)
+    ]
+    if dirty:
         raise GoalsError(
             "Refusing to create a goal from a dirty working tree. Commit or stash "
             "your changes first (`git status` to see them)."
@@ -138,6 +143,35 @@ def require_clean_repo(repo: Path) -> None:
 def has_commits(repo: Path) -> bool:
     result = run_git(["rev-parse", "--verify", "HEAD"], repo, check=False)
     return result.returncode == 0
+
+
+def _ignored_status_line(line: str, ignored_prefixes: tuple[str, ...]) -> bool:
+    if not ignored_prefixes:
+        return False
+    paths = _status_paths(line)
+    return bool(paths) and all(_matches_prefix(path, ignored_prefixes) for path in paths)
+
+
+def _status_paths(line: str) -> list[str]:
+    payload = line[3:] if len(line) > 3 else ""
+    if not payload:
+        return []
+    return [_clean_status_path(path) for path in payload.split(" -> ")]
+
+
+def _clean_status_path(path: str) -> str:
+    return path.strip().strip('"').removeprefix("./")
+
+
+def _matches_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
+    for prefix in prefixes:
+        normalized = prefix.strip().removeprefix("./")
+        if not normalized:
+            continue
+        directory = normalized if normalized.endswith("/") else f"{normalized}/"
+        if path == normalized.rstrip("/") or path.startswith(directory):
+            return True
+    return False
 
 
 def slugify(text: str, max_len: int = 32) -> str:

@@ -10,6 +10,7 @@ from goals.models import (
     GateResult,
     GateVerdict,
     GoalSnapshot,
+    JudgementRecord,
     Phase,
     PhaseStatus,
     WorktreeLease,
@@ -253,6 +254,34 @@ def test_merge_readiness_does_not_duplicate_existing_user_decision(tmp_path) -> 
     assert report.user_questions == []
 
 
+def test_merge_readiness_resolves_risk_with_linked_judgement(tmp_path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        evidence=Evidence(
+            changed_files=["src/app.py"],
+            checks_run=["pytest"],
+            acceptance_met=["Feature works."],
+            confidence=0.9,
+        ),
+        risks=["Production data migration approval is needed before merge."],
+        judgements=[
+            JudgementRecord(
+                question="Can we accept the production migration risk?",
+                choice="Accepted for this merge.",
+                rationale="The owner approved the deployment window.",
+                evidence_refs=["risk:1"],
+                confidence=0.9,
+            )
+        ],
+    )
+
+    report = analyze_merge_readiness(snapshot)
+
+    assert report.passed is True
+    assert report.user_questions == []
+    assert report.findings == []
+
+
 def _snapshot(
     tmp_path,
     *,
@@ -260,6 +289,7 @@ def _snapshot(
     mode: str = "single",
     risks: list[str] | None = None,
     decisions: list[Decision] | None = None,
+    judgements: list[JudgementRecord] | None = None,
     base_repo: Path | None = None,
     worktree_path: Path | None = None,
     branch: str = "goal/demo",
@@ -295,6 +325,7 @@ def _snapshot(
         status="complete",
         risks=risks or [],
         decisions=decisions or [],
+        judgements=judgements or [],
     )
 
 

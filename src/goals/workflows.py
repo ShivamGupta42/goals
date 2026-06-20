@@ -8,9 +8,11 @@ from goals.brief import build_goal_brief
 from goals.capabilities import analyze_capabilities
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.issues import analyze_goal_issues
+from goals.loop_builder import load_design, to_snapshot
 from goals.merge_readiness import analyze_merge_readiness
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.portability import export_goal
+from goals.storage import GoalsError
 from goals.models import (
     ArchitectureCheckReport,
     CapabilityCheckReport,
@@ -18,8 +20,11 @@ from goals.models import (
     GoalBrief,
     GoalIssueReport,
     GoalSnapshot,
+    GoalStatus,
     MergeReadinessReport,
     ModeAPlan,
+    PhaseStatus,
+    PortableExport,
 )
 from goals.registry import validate_registries
 from goals.runtime import claim_worktree, create_goal, emit_architecture, emit_dashboard, load_active_snapshot
@@ -50,6 +55,7 @@ class WorkflowCheck:
     architecture: ArchitectureCheckReport
     capability: CapabilityCheckReport
     registry_count: int
+    portable_path: Path | None = None
 
     @property
     def passed(self) -> bool:
@@ -69,6 +75,18 @@ class WorkflowView:
     portable_path: Path
 
 
+@dataclass(frozen=True)
+class WorkflowFinish:
+    snapshot: GoalSnapshot
+    check: WorkflowCheck
+    export: PortableExport
+
+    @property
+    def passed(self) -> bool:
+        phases_accepted = all(phase.status == PhaseStatus.ACCEPTED for phase in self.snapshot.phases)
+        return self.snapshot.status == GoalStatus.COMPLETE and phases_accepted and self.check.passed
+
+
 def start_workflow(
     objective: str,
     cwd: Path,
@@ -78,7 +96,21 @@ def start_workflow(
     why: str = "",
     new_project: Path | None = None,
     workspace: str = "auto",
+    loop: Path | None = None,
 ) -> WorkflowStart:
+    phases = None
+    definition_of_done = None
+    if loop is not None:
+        design = load_design(loop)
+        if not design.phases:
+            raise GoalsError("Loop design must include at least one phase before activation.")
+        loop_snapshot = to_snapshot(design)
+        phases = loop_snapshot.phases
+        definition_of_done = loop_snapshot.definition_of_done
+        objective = objective or loop_snapshot.objective
+        if not objective.strip():
+            raise GoalsError("Loop design must include an objective, or pass one to `goals start`.")
+        why = why or loop_snapshot.why
     snapshot = create_goal(
         objective,
         cwd,
@@ -86,6 +118,8 @@ def start_workflow(
         why=why,
         new_project=new_project,
         workspace=workspace,  # type: ignore[arg-type]
+        phases=phases,
+        definition_of_done=definition_of_done,
     )
     worktree = Path(snapshot.topology.worktree_path)
     dashboard_path = emit_dashboard(worktree)
@@ -101,11 +135,12 @@ def next_workflow(cwd: Path, *, agent: ModeAAdapter = "auto", full: bool = False
     return WorkflowNext(snapshot=snapshot, plan=plan, dashboard_path=dashboard_path)
 
 
-def check_workflow(cwd: Path) -> WorkflowCheck:
+def check_workflow(cwd: Path, *, refresh: bool = False) -> WorkflowCheck:
     claim_worktree(cwd)
     dashboard_path = emit_dashboard(cwd)
     snapshot = load_active_snapshot(cwd)
     worktree = Path(snapshot.topology.worktree_path)
+    export = export_goal(cwd) if refresh else None
     return WorkflowCheck(
         snapshot=snapshot,
         dashboard_path=dashboard_path,
@@ -116,6 +151,7 @@ def check_workflow(cwd: Path) -> WorkflowCheck:
         architecture=analyze_code_architecture(snapshot, worktree),
         capability=analyze_capabilities(snapshot),
         registry_count=len(validate_registries(worktree)),
+        portable_path=Path(export.markdown_path) if export is not None else None,
     )
 
 
@@ -131,6 +167,13 @@ def view_workflow(cwd: Path) -> WorkflowView:
         architecture_path=architecture_path,
         portable_path=portable_path,
     )
+
+
+def finish_workflow(cwd: Path) -> WorkflowFinish:
+    check = check_workflow(cwd, refresh=True)
+    export = export_goal(cwd)
+    snapshot = load_active_snapshot(cwd)
+    return WorkflowFinish(snapshot=snapshot, check=check, export=export)
 
 
 def render_start_workflow(report: WorkflowStart) -> str:
@@ -333,6 +376,43 @@ def _merge_lines(report: MergeReadinessReport) -> list[str]:
     if len(report.findings) > 6:
         lines.append(f"{len(report.findings) - 6} more finding(s); run `goals merge-check`.")
     return lines
+
+
+def render_finish_workflow(report: WorkflowFinish) -> str:
+    lines = [
+        "# Goal Finish",
+        "",
+        f"Goal: {report.snapshot.objective}",
+        f"Status: {report.snapshot.status}",
+        f"Overall: {'pass' if report.passed else 'needs attention'}",
+        f"Portable spec: `{report.export.markdown_path}`",
+        "",
+        "## Closeout Gate",
+    ]
+    if report.snapshot.status != GoalStatus.COMPLETE:
+        lines.append("- Goal is not complete; every phase must be reviewed and accepted first.")
+    unaccepted = [
+        phase.phase_id for phase in report.snapshot.phases if phase.status != PhaseStatus.ACCEPTED
+    ]
+    if unaccepted:
+        lines.append(f"- Unaccepted phases: {', '.join(unaccepted)}")
+    if not report.check.passed:
+        lines.append("- `goals check` still reports issues, merge risk, or architecture risk.")
+    if report.passed:
+        lines.append("- All phases are accepted and the final check passed.")
+    lines.extend(
+        [
+            "",
+            "## Check Summary",
+            f"- Issues: {report.check.issues.summary}",
+            f"- Merge: {report.check.merge.summary}",
+            f"- Architecture: {report.check.architecture.summary}",
+            "",
+            "Next:",
+            "- Commit the refreshed `.goals` portable state with the implementation.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
 
 
 def _architecture_lines(report: ArchitectureCheckReport) -> list[str]:

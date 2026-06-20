@@ -180,9 +180,10 @@ def test_termination_and_skills_survive_into_portable_spec(tmp_path: Path) -> No
         "attach shared-skill",
     )
     state = to_portable_state(session.design)
-    criteria = state["phases"][0]["acceptance_criteria"]
-    assert "Terminate when: User approves the plan." in criteria
-    assert "Use skill: shared-skill" in criteria
+    phase = state["phases"][0]
+    assert phase["acceptance_criteria"] == []
+    assert phase["protocol"]["termination_conditions"] == ["User approves the plan."]
+    assert phase["protocol"]["skills"] == ["shared-skill"]
 
 
 def test_save_writes_all_four_artifacts_and_round_trips(tmp_path: Path) -> None:

@@ -167,7 +167,12 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             )
         if phase.evidence is not None:
             issues.extend(_evidence_issues(phase.phase_id, phase.evidence, refs))
-            synthetic_review = review_phase(phase)
+            load_bearing = [
+                (assumption.assumption_id, assumption.statement)
+                for assumption in snapshot.assumptions
+                if assumption.depends_on and assumption.phase_id == phase.phase_id
+            ]
+            synthetic_review = review_phase(phase, load_bearing=load_bearing)
             if synthetic_review.verdict != GateVerdict.PASS and not phase.reviews:
                 issues.append(
                     GoalIssue(

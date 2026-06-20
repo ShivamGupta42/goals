@@ -98,6 +98,7 @@ from goals.permission_policy import decide_permission, render_permission_report
 from goals.registry import validate_registries
 from goals.rubric import category_for
 from goals.setup import render_setup_report, setup_agents
+from goals.simulate import render_simulation_report, run_simulations
 from goals.runtime import (
     append_event,
     claim_worktree,
@@ -109,6 +110,11 @@ from goals.runtime import (
     run_gate,
     transition_phase,
     verify_phase,
+)
+from goals.skill_capabilities import (
+    analyze_skill_capabilities,
+    quarantine_skill,
+    render_skill_capability_report,
 )
 from goals.sources import (
     analyze_source_freshness,
@@ -133,6 +139,7 @@ from goals.skill_discovery import (
     render_skills_list,
 )
 from goals.storage import EventStore, GoalsError, atomic_write_text
+from goals.tools import analyze_tools, record_tool_health, render_tool_health_report
 from goals.user_memory import (
     INTERVIEW_QUESTIONS,
     append_user_event,
@@ -147,8 +154,10 @@ from goals.user_memory import (
 )
 from goals.workflows import (
     check_workflow,
+    finish_workflow,
     next_workflow,
     render_check_workflow,
+    render_finish_workflow,
     render_start_workflow,
     render_view_workflow,
     start_workflow,
@@ -170,6 +179,7 @@ permission_app = typer.Typer(help="Explain whether a tool or action should ask t
 phase_app = typer.Typer(help="Agent phase protocol.")
 skills_app = typer.Typer(help="Discover and install skills from agent dirs.")
 source_app = typer.Typer(help="Record and inspect source evidence.")
+tools_app = typer.Typer(help="Inspect local tool capability health.")
 user_app = typer.Typer(help="Record and inspect private global user memory.")
 
 
@@ -226,7 +236,7 @@ def _handle(fn):
 
 @app.command(rich_help_panel="Simple workflow")
 def start(
-    objective: str,
+    objective: Optional[str] = typer.Argument(None),
     agent: ModeAAdapter = typer.Option(
         "auto",
         "--agent",
@@ -242,10 +252,15 @@ def start(
     in_place: bool = typer.Option(
         False, "--in-place", help="Work on the current branch (ignored on main/master)."
     ),
+    loop: Optional[Path] = typer.Option(
+        None, "--loop", help="Start from a saved loop-design.json or .goals directory."
+    ),
 ) -> None:
     """Start a goal and show the shortest next steps."""
 
     def run():
+        if objective is None and loop is None:
+            raise GoalsError("Provide an objective or --loop.")
         if worktree and in_place:
             raise GoalsError("Choose either --worktree or --in-place, not both.")
         requested = "worktree" if worktree else "in_place" if in_place else "auto"
@@ -262,13 +277,14 @@ def start(
                 )
                 requested = "worktree" if answer.strip().lower().startswith("w") else "in_place"
         report = start_workflow(
-            objective,
+            objective or "",
             Path.cwd(),
             agent=agent,
             autonomy=autonomy,
             why=why,
             new_project=new,
             workspace=requested,
+            loop=loop,
         )
         typer.echo(render_start_workflow(report))
 
@@ -307,12 +323,17 @@ def check(
         "--strict",
         help="Exit non-zero when the combined check needs attention.",
     ),
+    refresh: bool = typer.Option(
+        False,
+        "--refresh",
+        help="Refresh the portable `.goals` export while checking.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
     """Run the main read-only goal health checks in one command."""
 
     def run():
-        report = check_workflow(Path.cwd())
+        report = check_workflow(Path.cwd(), refresh=refresh)
         if json_output:
             typer.echo(
                 json.dumps(
@@ -332,6 +353,21 @@ def check(
             )
         else:
             typer.echo(render_check_workflow(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@app.command(rich_help_panel="Simple workflow")
+def finish(
+    strict: bool = typer.Option(True, "--strict/--no-strict", help="Exit non-zero if closeout is not ready."),
+) -> None:
+    """Run closeout checks and refresh portable state without bypassing phase gates."""
+
+    def run():
+        report = finish_workflow(Path.cwd())
+        typer.echo(render_finish_workflow(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
@@ -424,6 +460,7 @@ app.add_typer(permission_app, name="permission", rich_help_panel="Advanced build
 app.add_typer(phase_app, name="phase", rich_help_panel="Advanced building blocks")
 app.add_typer(skills_app, name="skills", rich_help_panel="Portability")
 app.add_typer(source_app, name="source", rich_help_panel="Advanced building blocks")
+app.add_typer(tools_app, name="tools", rich_help_panel="Advanced building blocks")
 app.add_typer(user_app, name="user", rich_help_panel="Advanced building blocks")
 
 
@@ -884,6 +921,24 @@ def repair() -> None:
 def cleanup() -> None:
     """Report cleanup candidates. V1 is conservative and does not delete worktrees."""
     typer.echo("Cleanup is report-only in v1. Remove goal worktrees manually after review.")
+
+
+@app.command(rich_help_panel="Advanced building blocks")
+def simulate(
+    strict: bool = typer.Option(
+        False, "--strict", help="Exit non-zero when a simulation scenario fails."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Run disposable workflow simulations for regression coverage."""
+
+    report = run_simulations()
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        typer.echo(render_simulation_report(report))
+    if strict and not report.passed:
+        raise typer.Exit(1)
 
 
 @adapter_app.command("check")
@@ -1361,6 +1416,36 @@ def source_freshness(
             typer.echo(report.model_dump_json(indent=2))
         else:
             typer.echo(render_source_freshness_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@tools_app.command("doctor")
+def tools_doctor(
+    record: bool = typer.Option(
+        False,
+        "--record",
+        help="Record the tool health snapshot in the active goal.",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when no usable native or browser capability is found.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Check native-agent and browser/tool capability health."""
+
+    def run():
+        report = analyze_tools()
+        if record:
+            report = record_tool_health(Path.cwd(), report)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_tool_health_report(report))
         if strict and not report.passed:
             raise typer.Exit(1)
 
@@ -1885,6 +1970,48 @@ def skills_install(
     _handle(run)
 
 
+@skills_app.command("preflight")
+def skills_preflight(
+    objective: Optional[str] = typer.Argument(
+        None, help="Objective to classify. Defaults to the active goal objective."
+    ),
+    strict: bool = typer.Option(
+        False, "--strict", help="Exit non-zero when required capabilities are missing."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Infer needed capabilities and surface missing or unavailable skills."""
+
+    def run():
+        target = objective
+        if target is None:
+            target = load_active_snapshot(Path.cwd()).objective
+        report = analyze_skill_capabilities(target)
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_skill_capability_report(report))
+        if strict and not report.passed:
+            raise typer.Exit(1)
+
+    _handle(run)
+
+
+@skills_app.command("import")
+def skills_import(
+    source: Path = typer.Argument(..., help="Directory containing a SKILL.md to quarantine."),
+    name: str = typer.Option("", "--name", help="Quarantine name; defaults to the source dir name."),
+) -> None:
+    """Copy an external skill into quarantine for review, not execution."""
+
+    def run():
+        target = quarantine_skill(source, name)
+        typer.echo(f"Quarantined skill for review: {target}")
+        typer.echo("Review provenance and contents before promoting it into an agent skill dir.")
+
+    _handle(run)
+
+
 def _default_loop_out(out: Optional[Path]) -> Path:
     return out.expanduser() if out is not None else Path.cwd() / ".goals"
 
@@ -1897,6 +2024,11 @@ def loop_build(
     script: Optional[Path] = typer.Option(
         None, "--script", help="Run builder commands from a file instead of prompting."
     ),
+    append: bool = typer.Option(
+        False,
+        "--append",
+        help="When replaying --script, append to an existing design instead of rebuilding from empty.",
+    ),
 ) -> None:
     """Interactively compose a goal loop (or replay a command script)."""
 
@@ -1904,9 +2036,11 @@ def loop_build(
         out_dir = _default_loop_out(out)
         session = new_session(out_dir)
         design_file = out_dir / "loop-design.json"
-        if design_file.exists():
+        if design_file.exists() and (script is None or append):
             session.design = load_design(design_file)
             typer.echo(f"Loaded existing design from {design_file}")
+        elif design_file.exists() and script is not None:
+            typer.echo(f"Rebuilding from empty design; use --append to extend {design_file}")
         if script is not None:
             if not script.exists():
                 raise GoalsError(f"Script not found: {script}")
@@ -1914,6 +2048,41 @@ def loop_build(
             run_script(session, commands, write=typer.echo)
         else:
             run_builder(session, write=typer.echo)
+
+    _handle(run)
+
+
+@loop_app.command("activate")
+def loop_activate(
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory holding loop-design.json (default: ./.goals)."
+    ),
+    agent: ModeAAdapter = typer.Option(
+        "auto",
+        "--agent",
+        "--adapter",
+        help="Native agent to prepare instructions for.",
+    ),
+    autonomy: str = typer.Option("standard", help="careful, standard, fast, or swarm"),
+    worktree: bool = typer.Option(False, "--worktree", help="Force an isolated worktree."),
+    in_place: bool = typer.Option(False, "--in-place", help="Work on the current branch."),
+) -> None:
+    """Start an executable goal from a saved loop design."""
+
+    def run():
+        if worktree and in_place:
+            raise GoalsError("Choose either --worktree or --in-place, not both.")
+        requested = "worktree" if worktree else "in_place" if in_place else "auto"
+        loop_dir = _default_loop_out(out)
+        report = start_workflow(
+            "",
+            Path.cwd(),
+            agent=agent,
+            autonomy=autonomy,
+            workspace=requested,
+            loop=loop_dir,
+        )
+        typer.echo(render_start_workflow(report))
 
     _handle(run)
 

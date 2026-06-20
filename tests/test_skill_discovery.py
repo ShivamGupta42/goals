@@ -8,11 +8,21 @@ from goals.skill_discovery import (
 )
 
 
-def _write_skill(root: Path, name: str, description: str = "Does a thing.") -> Path:
+def _write_skill(
+    root: Path,
+    name: str,
+    description: str = "Does a thing.",
+    capabilities: list[str] | None = None,
+) -> Path:
     skill_dir = root / name
     skill_dir.mkdir(parents=True, exist_ok=True)
+    capability_lines = ""
+    if capabilities:
+        capability_lines = "capabilities:\n" + "".join(
+            f"  - {capability}\n" for capability in capabilities
+        )
     (skill_dir / "SKILL.md").write_text(
-        f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
+        f"---\nname: {name}\ndescription: {description}\n{capability_lines}---\n\n# {name}\n",
         encoding="utf-8",
     )
     return skill_dir
@@ -52,6 +62,16 @@ def test_present_in_both_unions_and_uses_claude_precedence(tmp_path: Path) -> No
     # claude wins the displayed description (precedence claude > codex > bundled).
     assert shared.description == "From Claude."
     assert "/claude/" in shared.path
+
+
+def test_shared_skill_capabilities_are_merged_across_sources(tmp_path: Path) -> None:
+    _write_skill(tmp_path / "codex", "shared", capabilities=["frontend-build"])
+    _write_skill(tmp_path / "bundled", "shared", capabilities=["product-ux-review"])
+
+    shared = {s.name: s for s in _discover(tmp_path)}["shared"]
+
+    assert shared.sources == ["codex", "bundled"]
+    assert shared.capabilities == ["frontend-build", "product-ux-review"]
 
 
 def test_top_level_only_ignores_nested_subskills(tmp_path: Path) -> None:

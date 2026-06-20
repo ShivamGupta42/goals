@@ -349,9 +349,14 @@ def _merge_risk_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
         lowered = text.lower()
         if not _contains_any(lowered, MERGE_RISK_PATTERNS + USER_DECISION_PATTERNS):
             continue
-        needs_user = _contains_any(lowered, USER_DECISION_PATTERNS) and not _covered_by_decision(
-            snapshot, lowered
-        )
+        risk_status, decision_refs = _risk_status(snapshot, source, lowered)
+        if risk_status in {
+            "accepted-risk",
+            "intentional-scope-limit",
+            "production-follow-up",
+        }:
+            continue
+        needs_user = _contains_any(lowered, USER_DECISION_PATTERNS) and not decision_refs
         severity = "p0" if needs_user else "p1"
         findings.append(
             MergeReadinessFinding(
@@ -369,6 +374,8 @@ def _merge_risk_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
                     else "Resolve or record the merge risk before accepting the goal as merge-ready."
                 ),
                 needs_user=needs_user,
+                risk_status="blocker" if needs_user else risk_status,
+                decision_refs=decision_refs,
             )
         )
     return _dedupe_findings(findings)
@@ -444,12 +451,35 @@ def _merge_sensitive_text(snapshot: GoalSnapshot) -> list[tuple[str, str]]:
     return items
 
 
-def _covered_by_decision(snapshot: GoalSnapshot, risk_text: str) -> bool:
+def _risk_status(snapshot: GoalSnapshot, source: str, risk_text: str) -> tuple[str, list[str]]:
+    refs = _covering_judgement_refs(snapshot, source, risk_text)
+    if refs:
+        if _contains_any(risk_text, ["simulation", "simulated", "out of scope", "scope limit"]):
+            return "intentional-scope-limit", refs
+        if _contains_any(risk_text, ["production follow-up", "production followup", "later production"]):
+            return "production-follow-up", refs
+        return "accepted-risk", refs
+    return "unknown", []
+
+
+def _covering_judgement_refs(snapshot: GoalSnapshot, source: str, risk_text: str) -> list[str]:
     risk_terms = {
         term
         for term in ["migration", "production", "data", "destructive", "breaking", "api"]
         if term in risk_text
     }
+    refs: list[str] = []
+    for judgement in snapshot.judgements:
+        if source in judgement.evidence_refs:
+            refs.append(judgement.judgement_id)
+            continue
+        judgement_text = " ".join(
+            [judgement.question, judgement.choice, judgement.rationale, *judgement.evidence_refs]
+        ).lower()
+        if risk_terms and any(term in judgement_text for term in risk_terms):
+            refs.append(judgement.judgement_id)
+    if refs:
+        return sorted(set(refs))
     for decision in snapshot.decisions:
         surfaced, _ = should_surface_decision(decision)
         if not surfaced:
@@ -464,8 +494,8 @@ def _covered_by_decision(snapshot: GoalSnapshot, risk_text: str) -> bool:
             ]
         ).lower()
         if risk_terms and any(term in decision_text for term in risk_terms):
-            return True
-    return False
+            refs.append(decision.decision_id)
+    return sorted(set(refs))
 
 
 def _git_worktrees(repo: Path) -> list[dict[str, str | Path]]:

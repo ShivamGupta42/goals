@@ -7,14 +7,15 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# v3 adds causal event metadata and engine-owned evidence proof fields. Loading
-# tolerates older state through defaults, so this bump is a signal, not a hard gate.
+# v3 adds causal event metadata, engine-owned evidence proof fields, and
+# skill-first runtime state. Loading tolerates older state through defaults, so
+# this bump is a signal, not a hard gate.
 SCHEMA_VERSION = 3
 
 # Version of the portable, vendor-neutral goal-state spec written to `.goals/`.
 # Bumped independently of the internal SCHEMA_VERSION because this is the
 # external contract other agents (Claude Code, Codex, Cursor, ...) read.
-PORTABLE_SPEC_VERSION = 1
+PORTABLE_SPEC_VERSION = 2
 
 
 def utc_now() -> str:
@@ -61,6 +62,7 @@ class GateFactType(StrEnum):
     CHECK_FAILED = "check_failed"
     NO_PASSING_CHECK = "no_passing_check"
     MISSING_FALSIFIER = "missing_falsifier"
+    CRITERION_UNVERIFIED = "criterion_unverified"
 
 
 class GateFindingCategory(StrEnum):
@@ -86,6 +88,7 @@ class EventType(StrEnum):
     ARCHITECTURE_UPDATED = "architecture_updated"
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
+    TOOL_HEALTH_RECORDED = "tool_health_recorded"
 
 
 class Event(BaseModel):
@@ -137,6 +140,16 @@ class PhaseCheckpoint(BaseModel):
     notes: str = ""
 
 
+class PhaseProtocol(BaseModel):
+    """Structured loop protocol metadata attached to a runtime phase."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    termination_conditions: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    validation_profiles: list[str] = Field(default_factory=list)
+
+
 class Phase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -145,6 +158,7 @@ class Phase(BaseModel):
     goal: str
     status: PhaseStatus = PhaseStatus.PENDING
     acceptance_criteria: list[str] = Field(default_factory=list)
+    protocol: PhaseProtocol = Field(default_factory=PhaseProtocol)
     evidence: "Evidence | None" = None
     reviews: list["GateResult"] = Field(default_factory=list)
     checkpoints: list[PhaseCheckpoint] = Field(default_factory=list)
@@ -164,20 +178,21 @@ class WorktreeLease(BaseModel):
 class Verification(BaseModel):
     """One check that earns trust by execution, not narration.
 
-    ``covers`` names what this proves: an acceptance criterion (verbatim) or an
-    assumption id (e.g. ``A-1234``). An ``auto`` verification is a runnable
+    ``covers`` names what this proves: a criterion id (e.g. ``P1.C1``), legacy
+    acceptance criterion text, or an assumption id (e.g. ``A-1234``). An ``auto`` verification is a runnable
     ``command``; the engine — never the agent — runs it via ``goals phase verify``
     and sets ``ran``/``passed`` from the real exit code, so a passing result cannot
     be fabricated. A ``manual`` verification is for the genuinely non-automatable
-    (e.g. a visual check) and must carry a ``rationale``; it counts as coverage but
-    never as executed proof, so a phase can never be all-narration.
+    (e.g. a visual check) and must carry a ``rationale``. ``production`` and
+    ``waived`` are explicit non-local coverage markers and must also explain why
+    no local automated proof is appropriate.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     verification_id: str = Field(default_factory=lambda: f"V-{uuid4().hex[:8]}")
     covers: str
-    kind: Literal["auto", "manual"] = "auto"
+    kind: Literal["auto", "manual", "production", "waived"] = "auto"
     command: str = ""
     rationale: str = ""
     ran: bool = False
@@ -222,6 +237,46 @@ class Evidence(BaseModel):
     notes: str = ""
 
 
+class ToolHealthCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    capability: str
+    status: Literal["ok", "missing", "unhealthy", "fallback"] = "missing"
+    detail: str = ""
+    fallback: str = ""
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+class ToolHealthReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    passed: bool
+    summary: str
+    checks: list[ToolHealthCheck] = Field(default_factory=list)
+    recorded: bool = False
+
+
+class SkillCapabilityFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability: str
+    status: Literal["installed", "bundled-only", "other-agent", "quarantined", "unknown"]
+    skill: str = ""
+    detail: str = ""
+    suggested_action: str = ""
+
+
+class SkillCapabilityReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    objective: str
+    passed: bool
+    summary: str
+    findings: list[SkillCapabilityFinding] = Field(default_factory=list)
+    user_choices: list[str] = Field(default_factory=list)
+
+
 # Facts that always identify a specific verification or assumption — the kernel sets
 # ``ref`` for these, and machine consumers may rely on it being present.
 _REF_BEARING_FACTS = frozenset(
@@ -229,6 +284,7 @@ _REF_BEARING_FACTS = frozenset(
         GateFactType.VERIFICATION_UNRUNNABLE,
         GateFactType.CHECK_FAILED,
         GateFactType.MISSING_FALSIFIER,
+        GateFactType.CRITERION_UNVERIFIED,
     }
 )
 
@@ -942,6 +998,14 @@ class MergeReadinessFinding(BaseModel):
     suggested_action: str = ""
     needs_user: bool = False
     evidence_refs: list[str] = Field(default_factory=list)
+    risk_status: Literal[
+        "unknown",
+        "blocker",
+        "accepted-risk",
+        "intentional-scope-limit",
+        "production-follow-up",
+    ] = "unknown"
+    decision_refs: list[str] = Field(default_factory=list)
 
 
 class MergeReadinessReport(BaseModel):
@@ -1033,6 +1097,7 @@ class GoalSnapshot(BaseModel):
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None
+    tool_health: list[ToolHealthCheck] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     learnings: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
@@ -1064,6 +1129,24 @@ class ContextSyncResult(BaseModel):
     created: list[str] = Field(default_factory=list)
     updated: list[str] = Field(default_factory=list)
     unchanged: list[str] = Field(default_factory=list)
+
+
+class SimulationScenarioResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    passed: bool
+    summary: str
+    checks: list[str] = Field(default_factory=list)
+    friction: list[str] = Field(default_factory=list)
+
+
+class SimulationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    passed: bool
+    summary: str
+    scenarios: list[SimulationScenarioResult] = Field(default_factory=list)
 
 
 class NativeGoalEmission(BaseModel):
