@@ -51,11 +51,9 @@ Under the hood it's a small CLI + plugin over plain files you own. The goal
 lifecycle — `start` → assess → a phase loop where each step's checks must *run*
 before it's accepted → `finish`:
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/ShivamGupta42/goals/main/docs/assets/lifecycle.png" alt="Goal lifecycle: start → assess (PACERS) → phase loop (evidence → verify → accept) → finish" width="380">
-</p>
+![Goal lifecycle: start to assess (PACERS) to a phase loop (evidence, verify, accept) to finish](docs/assets/lifecycle.png)
 
-<sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 2`.</sub>
+<sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 1`.</sub>
 
 See [**docs/architecture.md**](docs/architecture.md) for the full set: system
 architecture, the goal lifecycle, skill-first discovery + capability gaps, and the
