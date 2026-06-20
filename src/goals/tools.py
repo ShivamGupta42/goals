@@ -6,7 +6,6 @@ from pathlib import Path
 
 from goals.models import Event, EventType, ToolHealthCheck, ToolHealthReport
 from goals.runtime import append_event, load_active_snapshot
-from goals.storage import GoalsError
 
 
 CHROME_PATHS = (
