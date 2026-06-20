@@ -49,7 +49,8 @@ Goals is the part that keeps it organized, legible, and accountable.
 
 Under the hood it's a small CLI + plugin over plain files you own. The goal
 lifecycle — `start` → assess → a phase loop where each step's checks must *run*
-before it's accepted → `finish`:
+before it's accepted → `finish`. The **assess** step follows PACERS, a method for
+[solving problems without rushing](https://medium.com/@shivam.gupta42/how-to-solve-problems-without-rushing-6a329be5e6ae):
 
 ![Goal lifecycle: start to assess (PACERS) to a phase loop (evidence, verify, accept) to finish](docs/assets/lifecycle.png)
 
