@@ -2,6 +2,7 @@ import hashlib
 from pathlib import Path
 
 from goals.audit import build_audit_report
+from goals.dashboard import render_dashboard
 from goals.models import Event, EventType, Evidence, GoalSnapshot, Verification, WorktreeLease
 from goals.runtime import append_event, create_goal, default_phases, verify_phase
 from goals.storage import EventStore
@@ -102,3 +103,54 @@ def test_phase_verify_records_output_and_artifact_hashes(tmp_path: Path) -> None
     assert verified.verifications[0].output_sha256 == hashlib.sha256(b"verified\n").hexdigest()
     assert verified.artifacts[0].path == "proof.txt"
     assert verified.artifacts[0].sha256 == hashlib.sha256(b"proof\n").hexdigest()
+
+
+def test_strict_audit_fails_when_hashed_artifact_changes(tmp_path: Path) -> None:
+    create_goal("Trust proof", tmp_path, workspace="in_place")
+    proof = tmp_path / "proof.txt"
+    proof.write_text("proof\n", encoding="utf-8")
+    snapshot = append_event(
+        tmp_path,
+        Event(
+            goal_id="trust-proof",
+            event_type=EventType.PHASE_EVIDENCE,
+            payload={
+                "phase_id": "P1",
+                "evidence": Evidence(
+                    changed_files=["proof.txt"],
+                    verifications=[Verification(covers="proof exists", command="true")],
+                ).model_dump(),
+            },
+        ),
+    )
+    verify_phase(tmp_path, "P1")
+    proof.write_text("changed\n", encoding="utf-8")
+    goal_dir = tmp_path / ".agent-workflow" / "goals" / snapshot.goal_id
+
+    report = build_audit_report(goal_dir, worktree=tmp_path, strict=True)
+
+    assert not report.passed
+    assert len(report.artifact_mismatches) == 1
+    mismatch = report.artifact_mismatches[0]
+    assert mismatch.path == "proof.txt"
+    assert mismatch.reason == "sha256 mismatch"
+    assert mismatch.expected_sha256 == hashlib.sha256(b"proof\n").hexdigest()
+    assert mismatch.actual_sha256 == hashlib.sha256(b"changed\n").hexdigest()
+
+
+def test_dashboard_shows_lineage_diagnostic_when_chain_is_unavailable(tmp_path: Path) -> None:
+    snapshot = _snapshot()
+    snapshot.topology.worktree_path = str(tmp_path)
+    output = tmp_path / "dashboard.html"
+    event = Event(
+        goal_id="demo",
+        event_type=EventType.GOAL_CREATED,
+        payload={"snapshot": snapshot.model_dump()},
+    )
+
+    render_dashboard(snapshot, output, events=[event])
+
+    html = output.read_text(encoding="utf-8")
+    assert "Lineage" in html
+    assert "unavailable" in html
+    assert "No events found for phase: P1" in html

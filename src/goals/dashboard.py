@@ -572,8 +572,8 @@ def _lineage_section_html(snapshot: GoalSnapshot, events: list[Event]) -> str:
         return ""
     try:
         lineage = build_phase_lineage(events, phase_id)
-    except Exception:  # noqa: BLE001
-        return ""
+    except Exception as exc:  # noqa: BLE001
+        return _lineage_diagnostic_html(str(exc))
     items = []
     latest_chain = lineage.chains[-1] if lineage.chains else []
     for item in latest_chain:
@@ -590,6 +590,14 @@ def _lineage_section_html(snapshot: GoalSnapshot, events: list[Event]) -> str:
         f'<details><summary>Lineage<span class="meta">{escape(meta)}</span></summary>'
         '<div class="body"><p>Latest causal chain for the current phase.</p>'
         f'<ul class="kv">{"".join(items)}</ul></div></details>'
+    )
+
+
+def _lineage_diagnostic_html(message: str) -> str:
+    return (
+        '<details><summary>Lineage<span class="meta amber">unavailable</span></summary>'
+        "<div class=\"body\"><p>Lineage could not be rendered from the event log.</p>"
+        f"<p>{escape(message)}</p></div></details>"
     )
 
 
