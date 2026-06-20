@@ -52,7 +52,7 @@ lifecycle — `start` → assess → a phase loop where each step's checks must 
 before it's accepted → `finish`:
 
 <p align="center">
-  <img src="docs/assets/lifecycle.png" alt="Goal lifecycle: start → assess (PACERS) → phase loop (evidence → verify → accept) → finish" width="380">
+  <img src="https://raw.githubusercontent.com/ShivamGupta42/goals/main/docs/assets/lifecycle.png" alt="Goal lifecycle: start → assess (PACERS) → phase loop (evidence → verify → accept) → finish" width="380">
 </p>
 
 <sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 2`.</sub>
