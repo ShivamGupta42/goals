@@ -123,7 +123,12 @@ def discover_skills(
     for dir_name in sorted(merged):
         by_label = merged[dir_name]
         best = min(by_label, key=lambda label: _SOURCE_PRECEDENCE[label])
-        description, capabilities, path = by_label[best]
+        description, _capabilities, path = by_label[best]
+        capabilities = sorted(
+            capability
+            for _, source_capabilities, _ in by_label.values()
+            for capability in source_capabilities
+        )
         present = set(by_label)
         skills.append(
             DiscoveredSkill(

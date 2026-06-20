@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from goals.skill_capabilities import analyze_skill_capabilities, quarantine_skill
 from goals.skill_discovery import DiscoveredSkill
+from goals.storage import GoalsError
 
 
 def _skill(
@@ -67,6 +70,30 @@ def test_skill_preflight_requires_agent_available_skills() -> None:
     assert {finding.status for finding in other_agent.findings} == {"other-agent"}
 
 
+def test_skill_preflight_prefers_installed_candidate_over_unavailable_skill() -> None:
+    report = analyze_skill_capabilities(
+        "Build a frontend landing page",
+        skills=[
+            _skill(
+                "claude-frontend",
+                capabilities=["frontend-build", "product-ux-review"],
+                sources=["claude"],
+                agents=["claude"],
+            ),
+            _skill(
+                "codex-frontend",
+                capabilities=["frontend-build", "product-ux-review"],
+                sources=["codex"],
+                agents=["codex"],
+            ),
+        ],
+    )
+
+    assert report.passed is True
+    assert {finding.skill for finding in report.findings} == {"codex-frontend"}
+    assert {finding.status for finding in report.findings} == {"installed"}
+
+
 def test_external_skill_import_enters_quarantine_before_trust(tmp_path: Path) -> None:
     source = tmp_path / "external"
     source.mkdir()
@@ -93,3 +120,20 @@ def test_external_skill_import_enters_quarantine_before_trust(tmp_path: Path) ->
     assert target.joinpath("SKILL.md").is_file()
     assert report.passed is False
     assert any(finding.status == "quarantined" for finding in report.findings)
+
+
+def test_external_skill_import_rejects_symlinks(tmp_path: Path) -> None:
+    source = tmp_path / "external"
+    source.mkdir()
+    (source / "SKILL.md").write_text(
+        "---\nname: external\ndescription: External skill.\n---\n",
+        encoding="utf-8",
+    )
+    secret = tmp_path / "secret.txt"
+    secret.write_text("do-not-copy\n", encoding="utf-8")
+    (source / "leaked.txt").symlink_to(secret)
+
+    with pytest.raises(GoalsError, match="contains a symlink"):
+        quarantine_skill(source, "external", root=tmp_path / "quarantine")
+
+    assert not (tmp_path / "quarantine").exists()

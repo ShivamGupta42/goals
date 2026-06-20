@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Literal
 
 from goals.models import SkillCapabilityFinding, SkillCapabilityReport
 from goals.skill_discovery import DiscoveredSkill, discover_skills
@@ -15,6 +16,13 @@ CAPABILITY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "security-review": ("auth", "security", "permission", "payment", "stripe", "secret"),
     "skill-authoring": ("skill", "skills", "codex skill", "claude skill"),
     "goal-workflow": ("goal", "workflow", "phase", "evidence", "loop"),
+}
+
+SkillAvailability = Literal["installed", "bundled-only", "other-agent"]
+_AVAILABILITY_RANK: dict[SkillAvailability, int] = {
+    "installed": 0,
+    "bundled-only": 1,
+    "other-agent": 2,
 }
 
 
@@ -64,6 +72,7 @@ def quarantine_skill(source: Path, name: str, *, root: Path | None = None) -> Pa
         raise GoalsError(f"Skill source not found: {source}")
     if not source.is_dir():
         raise GoalsError(f"Skill source must be a directory: {source}")
+    _reject_symlinks(source)
     if not (source / "SKILL.md").is_file():
         raise GoalsError(f"Skill source has no SKILL.md: {source}")
     safe_name = _safe_name(name or source.name)
@@ -105,20 +114,26 @@ def _finding_for_capability(
 ) -> SkillCapabilityFinding:
     candidates = [skill for skill in skills if capability in _skill_capabilities(skill)]
     if candidates:
-        skill = candidates[0]
-        if skill.agents:
-            status = "installed" if "codex" in skill.agents else "other-agent"
-            action = (
-                ""
-                if status == "installed"
-                else f"Copy or install {skill.name} for Codex before relying on it."
-            )
+        skill = min(
+            candidates,
+            key=lambda item: (_AVAILABILITY_RANK[_availability(item)], item.name),
+        )
+        status = _availability(skill)
+        if status == "installed":
             return SkillCapabilityFinding(
                 capability=capability,
-                status=status,  # type: ignore[arg-type]
+                status=status,
                 skill=skill.name,
                 detail=f"Found in {', '.join(skill.sources)}; agents={', '.join(skill.agents)}.",
-                suggested_action=action,
+                suggested_action="",
+            )
+        if status == "other-agent":
+            return SkillCapabilityFinding(
+                capability=capability,
+                status=status,
+                skill=skill.name,
+                detail=f"Found in {', '.join(skill.sources)}; agents={', '.join(skill.agents)}.",
+                suggested_action=f"Copy or install {skill.name} for Codex before relying on it.",
             )
         return SkillCapabilityFinding(
             capability=capability,
@@ -151,6 +166,14 @@ def _skill_capabilities(skill: DiscoveredSkill) -> set[str]:
     return capabilities
 
 
+def _availability(skill: DiscoveredSkill) -> SkillAvailability:
+    if "codex" in skill.agents:
+        return "installed"
+    if skill.agents:
+        return "other-agent"
+    return "bundled-only"
+
+
 def _quarantined_has_capability(root: Path, capability: str) -> bool:
     if not root.is_dir():
         return False
@@ -163,6 +186,14 @@ def _quarantined_has_capability(root: Path, capability: str) -> bool:
         if capability in text or needle in text:
             return True
     return False
+
+
+def _reject_symlinks(source: Path) -> None:
+    if source.is_symlink():
+        raise GoalsError(f"Skill source may not be a symlink: {source}")
+    for path in source.rglob("*"):
+        if path.is_symlink():
+            raise GoalsError(f"Skill source contains a symlink and was not imported: {path}")
 
 
 def _safe_name(name: str) -> str:
