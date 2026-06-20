@@ -15,6 +15,7 @@ from goals.models import (
     Assumption,
     Decision,
     Evidence,
+    EvidenceArtifact,
     Event,
     EventType,
     GateResult,
@@ -179,6 +180,7 @@ class EventStore:
             events = self.read_events()
             if any(existing.event_id == event.event_id for existing in events):
                 return
+            event = _with_causality(events, event)
             snapshot = derive_snapshot(events + [event])
             lines = [existing.model_dump_json() for existing in events]
             lines.append(event.model_dump_json())
@@ -220,6 +222,9 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 verification.passed = False
                 verification.output_excerpt = ""
                 verification.ran_at = ""
+                verification.exit_code = None
+                verification.output_sha256 = ""
+            evidence.artifacts = []
             phase.evidence = evidence
             phase.status = PhaseStatus.NEEDS_REVIEW
             # New evidence invalidates any prior review: a PASS must reflect the
@@ -239,6 +244,11 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                         verification.passed = bool(result.get("passed"))
                         verification.output_excerpt = result.get("output_excerpt", "")
                         verification.ran_at = result.get("ran_at", "")
+                        verification.exit_code = result.get("exit_code")
+                        verification.output_sha256 = result.get("output_sha256", "")
+                phase.evidence.artifacts = [
+                    EvidenceArtifact.model_validate(item) for item in payload.get("artifacts", [])
+                ]
                 # Re-running checks changes the proof, so any prior review is stale.
                 phase.reviews.clear()
         elif event.event_type == EventType.PHASE_REVIEWED:
@@ -293,6 +303,65 @@ def _phase(snapshot: GoalSnapshot, phase_id: str):
         if phase.phase_id == phase_id:
             return phase
     raise GoalsError(f"Unknown phase id: {phase_id}")
+
+
+def _with_causality(events: list[Event], event: Event) -> Event:
+    """Fill Trust V1 causal metadata for a newly appended event.
+
+    Call sites can still construct plain events. The store owns the durable log,
+    so it is the safest place to attach consistent trace and cause defaults.
+    """
+    trace_id = event.trace_id or _trace_id(events, event)
+    caused_by = event.caused_by
+    if caused_by is None and event.event_type != EventType.GOAL_CREATED:
+        caused_by = _infer_cause(events, event)
+    return event.model_copy(update={"trace_id": trace_id, "caused_by": caused_by})
+
+
+def _trace_id(events: list[Event], event: Event) -> str:
+    for existing in events:
+        if existing.trace_id:
+            return existing.trace_id
+    return event.goal_id
+
+
+def _infer_cause(events: list[Event], event: Event) -> str | None:
+    phase_id = event.payload.get("phase_id")
+    if isinstance(phase_id, str):
+        if event.event_type == EventType.PHASE_VERIFIED:
+            return _latest_event_id(events, EventType.PHASE_EVIDENCE, phase_id)
+        if event.event_type == EventType.PHASE_REVIEWED:
+            return _latest_event_id(events, EventType.PHASE_VERIFIED, phase_id) or _latest_event_id(
+                events, EventType.PHASE_EVIDENCE, phase_id
+            )
+        if event.event_type == EventType.PHASE_ACCEPTED:
+            return _latest_event_id(events, EventType.PHASE_REVIEWED, phase_id)
+        if event.event_type == EventType.PHASE_EVIDENCE:
+            return _latest_event_id(events, EventType.PHASE_STARTED, phase_id)
+        if event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
+            return _latest_phase_event_id(events, phase_id)
+    if event.event_type == EventType.DECISION_RECORDED:
+        return _latest_event_id(events, EventType.DECISION_REQUESTED)
+    return events[-1].event_id if events else None
+
+
+def _latest_event_id(
+    events: list[Event], event_type: EventType, phase_id: str | None = None
+) -> str | None:
+    for existing in reversed(events):
+        if existing.event_type != event_type:
+            continue
+        if phase_id is not None and existing.payload.get("phase_id") != phase_id:
+            continue
+        return existing.event_id
+    return None
+
+
+def _latest_phase_event_id(events: list[Event], phase_id: str) -> str | None:
+    for existing in reversed(events):
+        if existing.payload.get("phase_id") == phase_id:
+            return existing.event_id
+    return events[-1].event_id if events else None
 
 
 def _upsert_checkpoint(checkpoints: list[PhaseCheckpoint], checkpoint: PhaseCheckpoint) -> None:
