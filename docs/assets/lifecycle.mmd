@@ -1,0 +1,32 @@
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    primaryColor: "#EDE9FE"
+    primaryBorderColor: "#6B50FF"
+    primaryTextColor: "#1F2937"
+    lineColor: "#6B50FF"
+    edgeLabelBackground: "#ffffff"
+    fontSize: "15px"
+---
+flowchart TD
+    A["<b>1 · Tell it your goal, in plain English</b><br/>you: goals start  ·  or /goals:create"]
+    B["<b>2 · Goals breaks it into clear steps</b><br/>and writes down its assumptions<br/><i>the 'assess' step</i>"]
+    C["<b>3 · The AI agent does just the next step</b><br/>agent: goals next"]
+    D{"<b>4 · Goals runs the step's proof-checks for real</b><br/>runnable tests of each &quot;done&quot; rule —<br/>not just the agent's say-so. Did they pass?<br/>goals phase verify"}
+    E["<b>5 · Step checked off, proof saved</b><br/>goals phase accept"]
+    F["<b>6 · Finished — with a full, readable record</b><br/>goals finish"]
+    DASH(["<b>Anytime: see status, decisions &amp; proof</b><br/>on a page anyone can read<br/>goals check  ·  goals view (dashboard)"])
+
+    A --> B --> C --> D
+    D -- "not yet: fix &amp; retry" --> C
+    D -- "yes" --> E
+    E -- "more steps" --> C
+    E -- "last step" --> F
+    C -.-> DASH
+
+    classDef youstep fill:#DDD2FF,stroke:#6B50FF,stroke-width:3px,color:#1F2937;
+    classDef look fill:#F3F0FF,stroke:#8A7BD8,stroke-width:2px,color:#1F2937;
+    class A,F youstep;
+    class DASH look;

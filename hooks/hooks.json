@@ -3,14 +3,14 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "goals hooks session-start" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-bootstrap.sh hooks session-start" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "goals hooks stop" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-bootstrap.sh hooks stop" }
         ]
       }
     ]

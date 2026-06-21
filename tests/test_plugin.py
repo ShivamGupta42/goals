@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -118,8 +119,11 @@ def test_hooks_json_wires_session_start_and_stop() -> None:
         for entry in group
         for h in entry["hooks"]
     ]
-    assert "goals hooks session-start" in cmds
-    assert "goals hooks stop" in cmds
+    # Hooks run THROUGH the self-bootstrapping wrapper so the plugin installs its
+    # own CLI on first use — but still resolve to `goals hooks <event>`.
+    assert any(c.endswith("hooks session-start") and "plugin-bootstrap.sh" in c for c in cmds)
+    assert any(c.endswith("hooks stop") and "plugin-bootstrap.sh" in c for c in cmds)
+    assert all("${CLAUDE_PLUGIN_ROOT}" in c for c in cmds)
 
 
 def test_commands_exist_with_frontmatter() -> None:
@@ -127,3 +131,58 @@ def test_commands_exist_with_frontmatter() -> None:
         text = (REPO / "commands" / f"{name}.md").read_text()
         assert text.startswith("---")  # frontmatter
         assert "description:" in text
+
+
+# --- self-bootstrapping plugin wrapper ------------------------------------- #
+BOOTSTRAP = REPO / "scripts" / "plugin-bootstrap.sh"
+
+
+def test_bootstrap_wrapper_exists_and_is_executable() -> None:
+    assert BOOTSTRAP.exists()
+    assert os.access(BOOTSTRAP, os.X_OK)
+
+
+def test_bootstrap_wrapper_contract() -> None:
+    text = BOOTSTRAP.read_text()
+    # installs from the plugin's OWN bundled source (the cloned repo)
+    assert "uv tool install" in text
+    assert "CLAUDE_PLUGIN_ROOT" in text
+    # diagnostics must go to stderr so stdout stays clean for the hook's JSON
+    assert ">&2" in text
+    # fail-open: a session hook must never crash the session
+    assert "exit 0" in text
+
+
+def test_bootstrap_fast_paths_to_existing_goals(tmp_path: Path) -> None:
+    # With a `goals` already on PATH, the wrapper must exec it directly and emit
+    # ONLY its output (no install noise leaking into the hook's stdout).
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stub = bindir / "goals"
+    stub.write_text('#!/bin/sh\necho "STUB:$*"\n')
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}"}
+    res = subprocess.run(
+        [str(BOOTSTRAP), "hooks", "session-start"],
+        capture_output=True, text=True, env=env,
+    )
+    assert res.returncode == 0
+    assert res.stdout.strip() == "STUB:hooks session-start"
+
+
+def test_bootstrap_fails_open_when_cli_unavailable(tmp_path: Path) -> None:
+    # No goals, no uv, no usable plugin root → exit 0 with empty stdout, never
+    # crashing the session. (Hermetic: empty PATH means no curl/network.)
+    emptybin = tmp_path / "empty"
+    emptybin.mkdir()
+    env = {
+        "PATH": str(emptybin),
+        "HOME": str(tmp_path),
+        "CLAUDE_PLUGIN_ROOT": str(tmp_path / "nope"),
+    }
+    res = subprocess.run(
+        [str(BOOTSTRAP), "hooks", "session-start"],
+        capture_output=True, text=True, env=env,
+    )
+    assert res.returncode == 0
+    assert res.stdout == ""

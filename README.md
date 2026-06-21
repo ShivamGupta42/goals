@@ -4,7 +4,7 @@
 plan, decisions, and proof in files you own so you can trust, verify, fix, and
 resume the work.
 
-![Goals keeps your AI's plan and proof alive across /clear](docs/marketing-refresh/assets/goals-hero-opt.gif)
+![Goals keeps your AI's plan and proof alive across /clear](docs/assets/goals-hero-opt.gif)
 
 **Just say what you want — for example:**
 
@@ -39,8 +39,8 @@ Anyone using AI to get real work done:
    you say the goal
          │
          ▼
-   Goals breaks it into clear steps  ──▶   your AI does the next step
-         ▲                                        │
+   Goals breaks it into clear steps  ──▶   the AI agent does the next step
+         ▲                                             │
          │            you say yes   ◀──── plain decision + proof it works
          └─────────  repeat until done — with a record of everything  ◀─┘
 ```
@@ -48,37 +48,66 @@ Anyone using AI to get real work done:
 Goals runs the **workflow**; your AI assistant (Claude Code, Codex, …) does the **work**.
 Goals is the part that keeps it organized, legible, and accountable.
 
-Under the hood it's a small CLI + plugin over plain files you own. The goal
-lifecycle — `start` → assess → a phase loop where each step's checks must *run*
-before it's accepted → `finish`:
+Under the hood it's a small **CLI plus a plugin**, working over **plain files in
+your own project** — so the goal, the decisions, and the proof are yours and
+survive a `/clear` or a brand-new session. The **assess** step follows PACERS, a
+method for [solving problems without rushing](https://medium.com/@shivam.gupta42/how-to-solve-problems-without-rushing-6a329be5e6ae).
 
-![Goal lifecycle](docs/marketing-refresh/assets/architecture-2.svg)
+Here's the whole loop — each step in plain English, with the command behind it
+(click to enlarge):
 
-See [**docs/marketing-refresh/02-architecture-diagrams.md**](docs/marketing-refresh/02-architecture-diagrams.md)
-for the full set: system architecture, the goal lifecycle, skill-first discovery +
-capability gaps, and the portability layer that lets a goal survive `/clear`.
+<p align="center">
+  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 say your goal (goals start), 2 Goals breaks it into steps and names assumptions, 3 the AI agent does the next step (goals next), 4 Goals runs the step's proof-checks for real (goals phase verify), 5 step checked off with proof (goals phase accept), 6 finished with a full record (goals finish) — plus a dashboard you can read anytime (goals view)" width="520"></a>
+</p>
+
+And you never lose the thread: a **dashboard anyone can read** shows status,
+decisions, and proof at a glance (click to view full size):
+
+<p align="center">
+  <a href="docs/assets/dashboard-hero.png"><img src="docs/assets/dashboard-hero.png" alt="The Goals dashboard — a human-readable view of the goal, its building journey, and proof. Click to view full size." width="300"></a>
+</p>
+
+<sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 2`.</sub>
+
+See [**docs/architecture.md**](docs/architecture.md) for the full set: system
+architecture, the goal lifecycle, skill-first discovery + capability gaps, and the
+portability layer that lets a goal survive `/clear`.
 
 ## Get started
 
-**1. Install Goals** — one line. It installs everything it needs (including `uv` and
-Python); nothing required up front.
+### Claude Code
 
-**macOS / Linux**
+Two lines — that's the whole install:
+
+```text
+/plugin marketplace add ShivamGupta42/goals
+/plugin install goals@goals
+```
+
+The first session installs the `goals` CLI for you (macOS/Linux): the plugin
+ships its own source and bootstraps it on first run — no separate step. Prefer
+the terminal? `goals setup --agent claude` does the same.
+
+### Codex
 
 ```bash
+goals setup --agent codex
+```
+
+Codex picks up Goals' skills from `~/.agents/skills`; run `goals context sync` in a
+project to expose the goal in `AGENTS.md`.
+
+### Manual / Windows
+
+Install the CLI directly — one line — then `goals setup --agent both`:
+
+```bash
+# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.sh | sh
 ```
-
-**Windows (PowerShell)**
-
 ```powershell
+# Windows (PowerShell)
 irm https://raw.githubusercontent.com/ShivamGupta42/goals/main/install.ps1 | iex
-```
-
-**2. Connect your AI assistant** — one command, for Claude Code *and* Codex:
-
-```bash
-goals setup --agent both        # or: --agent claude  |  --agent codex
 ```
 
 That's it. Now just talk to it in Claude Code:
