@@ -19,6 +19,7 @@ from goals.loop_builder import LoopDesign, LoopPhase
 from goals.skill_discovery import DiscoveredSkill, discover_skills
 
 Severity = Literal["p0", "p1", "p2"]
+AgentName = Literal["claude", "codex"]
 
 #: A default termination condition `--fix` adds when a loop has none.
 DEFAULT_TERMINATION = "All acceptance criteria for the final phase are met."
@@ -97,17 +98,20 @@ class LoopCheckReport(BaseModel):
 
 
 def check_loop(
-    design: LoopDesign, *, skills: list[DiscoveredSkill] | None = None
+    design: LoopDesign,
+    *,
+    skills: list[DiscoveredSkill] | None = None,
+    target_agent: AgentName | None = None,
 ) -> LoopCheckReport:
     """Run every detector and return a severity-sorted report."""
     discovered = skills if skills is not None else discover_skills()
-    known = {skill.name for skill in discovered}
+    by_name = {skill.name: skill for skill in discovered}
     findings: list[LoopCheckFinding] = []
     findings += _check_no_progress(design)
     findings += _check_termination(design)
     findings += _check_duplicate_and_empty_phases(design)
     findings += _check_vague_acceptance(design)
-    findings += _check_skill_refs(design, known)
+    findings += _check_skill_refs(design, by_name, target_agent=target_agent)
     findings += _check_evidence_requirement(design)
     findings.sort(key=lambda f: _SEVERITY_ORDER[f.severity])
     passed = not findings
@@ -228,11 +232,17 @@ def _check_vague_acceptance(design: LoopDesign) -> list[LoopCheckFinding]:
     return findings
 
 
-def _check_skill_refs(design: LoopDesign, known: set[str]) -> list[LoopCheckFinding]:
+def _check_skill_refs(
+    design: LoopDesign,
+    by_name: dict[str, DiscoveredSkill],
+    *,
+    target_agent: AgentName | None,
+) -> list[LoopCheckFinding]:
     findings: list[LoopCheckFinding] = []
     for phase in design.phases:
         for name in phase.skills:
-            if name not in known:
+            skill = by_name.get(name)
+            if skill is None:
                 findings.append(
                     LoopCheckFinding(
                         severity="p1",
@@ -245,7 +255,54 @@ def _check_skill_refs(design: LoopDesign, known: set[str]) -> list[LoopCheckFind
                         phase_id=phase.phase_id,
                     )
                 )
+                continue
+            if _skill_needs_install(skill, target_agent):
+                findings.append(
+                    LoopCheckFinding(
+                        severity="p1",
+                        code="skill-not-installed",
+                        summary=_skill_install_summary(phase.phase_id, skill, target_agent),
+                        suggested_fix=_skill_install_fix(skill, target_agent),
+                        phase_id=phase.phase_id,
+                    )
+                )
     return findings
+
+
+def _skill_needs_install(skill: DiscoveredSkill, target_agent: AgentName | None) -> bool:
+    if target_agent is not None:
+        return target_agent not in skill.agents
+    return not skill.agents
+
+
+def _skill_install_summary(
+    phase_id: str,
+    skill: DiscoveredSkill,
+    target_agent: AgentName | None,
+) -> str:
+    if target_agent is not None:
+        return (
+            f"Phase {phase_id} references skill {skill.name!r}, which is not installed "
+            f"for {target_agent}."
+        )
+    return (
+        f"Phase {phase_id} references skill {skill.name!r}, which is only bundled "
+        "with Goals and is not installed in an agent skill dir."
+    )
+
+
+def _skill_install_fix(skill: DiscoveredSkill, target_agent: AgentName | None) -> str:
+    if "bundled" in skill.sources:
+        target = target_agent or "both"
+        return (
+            f"Run `goals skills install --target {target}` to install bundled Goals "
+            "skills, or remove the skill from the phase."
+        )
+    if target_agent == "codex":
+        return "Install or copy the skill into ~/.agents/skills, or remove it from the phase."
+    if target_agent == "claude":
+        return "Install or copy the skill into ~/.claude/skills, or remove it from the phase."
+    return "Install or copy the skill into an agent skill dir, or remove it from the phase."
 
 
 def _check_evidence_requirement(design: LoopDesign) -> list[LoopCheckFinding]:
@@ -271,7 +328,10 @@ def _check_evidence_requirement(design: LoopDesign) -> list[LoopCheckFinding]:
 # Auto-fix (safe, reversible suggestions only)
 # --------------------------------------------------------------------------- #
 def apply_fixes(
-    design: LoopDesign, *, skills: list[DiscoveredSkill] | None = None
+    design: LoopDesign,
+    *,
+    skills: list[DiscoveredSkill] | None = None,
+    target_agent: AgentName | None = None,
 ) -> tuple[LoopDesign, list[str]]:
     """Return a fixed copy of the design plus a list of changes applied.
 
@@ -281,7 +341,7 @@ def apply_fixes(
     """
     fixed = design.model_copy(deep=True)
     changes: list[str] = []
-    report = check_loop(fixed, skills=skills)
+    report = check_loop(fixed, skills=skills, target_agent=target_agent)
     codes = {finding.code for finding in report.findings if finding.auto_fixable}
 
     if "duplicate-phase-id" in codes:
@@ -293,7 +353,7 @@ def apply_fixes(
         )
     if "no-evidence-requirement" in codes:
         # Re-check after structural fixes so phase ids in the report are current.
-        for finding in check_loop(fixed, skills=skills).findings:
+        for finding in check_loop(fixed, skills=skills, target_agent=target_agent).findings:
             if finding.code == "no-evidence-requirement" and finding.phase_id:
                 phase = _phase(fixed, finding.phase_id)
                 if phase is not None:

@@ -792,6 +792,44 @@ def test_loop_build_script_resets_by_default_and_append_is_explicit(tmp_path: Pa
     assert len(appended["phases"]) == 2
 
 
+def test_loop_check_target_agent_reports_bundled_skill_not_installed(tmp_path: Path) -> None:
+    script = tmp_path / "loop.txt"
+    script.write_text(
+        "\n".join(
+            [
+                "objective Skill install check",
+                "add Plan",
+                "accept Plan has a passing test.",
+                "terminate Plan accepted.",
+                "attach goals-problem-solving",
+                "save",
+            ]
+        )
+    )
+    out = tmp_path / ".goals"
+    isolated_home = tmp_path / "home"
+
+    run(["python", "-m", "goals.cli", "loop", "build", "--out", str(out), "--script", str(script)], tmp_path)
+    checked = run_with_env(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "check",
+            "--out",
+            str(out),
+            "--target-agent",
+            "codex",
+        ],
+        tmp_path,
+        {"HOME": str(isolated_home)},
+    )
+
+    assert "skill-not-installed" in checked.stdout
+    assert "goals skills install --target codex" in checked.stdout
+
+
 def test_loop_activate_creates_runtime_phases_with_protocol(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

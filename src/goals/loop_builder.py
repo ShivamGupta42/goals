@@ -683,6 +683,11 @@ def _install_hint(skill: DiscoveredSkill) -> str:
     form (not the expanded absolute home path) so the hint is safe to embed in
     the committable, path-free ``.goals/loop.html`` export.
     """
+    if not skill.agents:
+        return (
+            f"Suggestion: install {skill.name} into an agent skill dir before relying "
+            "on it (`goals skills install --target both` for bundled skills)."
+        )
     if "claude" in skill.agents and "codex" not in skill.agents:
         return (
             f"Suggestion: install {skill.name} into ~/.agents/skills so the loop "

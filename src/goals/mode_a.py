@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from goals.adapters import adapter_check
+from goals.adapter_inventory import check_adapter
 from goals.criteria import criterion_refs
 from goals.memory import derive_memory_suggestions, load_memory, render_memory_suggestions
 from goals.models import Evidence, GoalSnapshot, ModeAPlan, Phase, Verification
@@ -16,6 +16,11 @@ from goals.user_memory import (
 )
 
 ModeAAdapter = Literal["auto", "claude", "codex"]
+
+
+def adapter_check(name: str) -> tuple[bool, str]:
+    status = check_adapter(name)
+    return status.ready, status.detail
 
 
 def build_mode_a_plan(

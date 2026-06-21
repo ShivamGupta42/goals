@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-labelledby="title desc">
+  <title id="title">Goals simple LinkedIn card</title>
+  <desc id="desc">A minimal social card for Goals: your AI does the work, Goals keeps the plan and proof.</desc>
+  <defs>
+    <style>
+      .bg { fill: #fbfaf6; }
+      .ink { fill: #111827; }
+      .muted { fill: #667085; }
+      .blue { fill: #2563eb; }
+      .green { fill: #16a34a; }
+      .amber { fill: #d97706; }
+      .card { fill: #fff; stroke: #d0d5dd; stroke-width: 2; }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
+      .brand { font-size: 132px; font-weight: 850; }
+      .headline { font-size: 58px; font-weight: 760; }
+      .sub { font-size: 34px; font-weight: 520; }
+      .pill { font-size: 28px; font-weight: 720; }
+      .small { font-size: 24px; font-weight: 520; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1672" height="941"/>
+
+  <g transform="translate(132 155)">
+    <text class="brand ink" x="0" y="0">GOALS</text>
+    <text class="headline ink" x="4" y="122">Your AI does the work.</text>
+    <text class="headline ink" x="4" y="194">Goals keeps the plan and proof.</text>
+    <text class="sub muted" x="6" y="272">A no-nonsense workflow engine for agent work you can read, decide on, and trust.</text>
+  </g>
+
+  <g transform="translate(136 562)">
+    <rect class="card" x="0" y="0" width="392" height="152" rx="28"/>
+    <circle class="blue" cx="70" cy="76" r="30"/>
+    <path d="M54 76h32M54 92h22" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+    <text class="pill ink" x="126" y="68">Readable plan</text>
+    <text class="small muted" x="126" y="104">clear steps, plain done lines</text>
+  </g>
+
+  <g transform="translate(640 562)">
+    <rect class="card" x="0" y="0" width="392" height="152" rx="28"/>
+    <circle class="green" cx="70" cy="76" r="30"/>
+    <path d="M55 78l10 11 22-29" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="pill ink" x="126" y="68">Plain decisions</text>
+    <text class="small muted" x="126" y="104">what needs you is obvious</text>
+  </g>
+
+  <g transform="translate(1144 562)">
+    <rect class="card" x="0" y="0" width="392" height="152" rx="28"/>
+    <circle class="amber" cx="70" cy="76" r="30"/>
+    <path d="M55 78l10 11 22-29" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="pill ink" x="126" y="68">Proof ran</text>
+    <text class="small muted" x="126" y="104">done is earned, not asserted</text>
+  </g>
+
+  <path d="M134 810H1538" stroke="#d0d5dd" stroke-width="2" stroke-linecap="round"/>
+  <text class="small muted" x="136" y="862">Open source · Claude Code + Codex · files you own</text>
+</svg>

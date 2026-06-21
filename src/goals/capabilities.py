@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from goals.adapter_inventory import NativeAdapterInventory
 from goals.models import (
     CapabilityCheckReport,
     CapabilityGap,
@@ -56,18 +57,25 @@ def analyze_capabilities(
     adapter: CapabilityAdapter = "auto",
     explicit_needs: list[str] | None = None,
     skills: list[DiscoveredSkill] | None = None,
+    inventory: NativeAdapterInventory | None = None,
 ) -> CapabilityCheckReport:
     """Compare goal/phase capability needs with the live skill inventory."""
     if adapter not in {"auto", "claude", "codex"}:
         raise ValueError("adapter must be auto, claude, or codex.")
-    inventory = skills if skills is not None else discover_skills()
+    skill_inventory = (
+        skills
+        if skills is not None
+        else inventory.skills
+        if inventory is not None
+        else discover_skills()
+    )
     needs = _dedupe_needs(
         [
             *derive_capability_needs(snapshot),
             *[parse_need_spec(spec, snapshot) for spec in (explicit_needs or [])],
         ]
     )
-    gaps = [_evaluate_need(need, inventory, adapter) for need in needs]
+    gaps = [_evaluate_need(need, skill_inventory, adapter) for need in needs]
     actionable = [gap for gap in gaps if gap.status != "available"]
     required_open = [gap for gap in actionable if gap.required]
     user_questions = [gap.suggested_action for gap in actionable if gap.needs_user]
