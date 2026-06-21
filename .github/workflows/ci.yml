@@ -13,6 +13,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
       - run: uv run pytest -q
+      - run: uv build --wheel --out-dir /tmp/goals-wheel-check
+      - run: uv run python scripts/check_bundled_skill_wheel.py /tmp/goals-wheel-check/*.whl
       - run: uv run ruff check .
       - run: uv run goals validate || true
-

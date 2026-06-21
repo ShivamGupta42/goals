@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import typer
 from pydantic import ValidationError
@@ -26,12 +26,18 @@ from goals.audit import (
 )
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.capabilities import analyze_capabilities, render_capability_report
-from goals.checkpoints import build_current_checkpoint_brief, render_current_checkpoint_brief
-from goals.decisions import (
-    build_decision_brief,
-    build_decision_context,
-    render_decision_brief,
-    render_decision_explanation,
+from goals.checkpoints import render_current_checkpoint_brief
+from goals.checkpoint_workflows import (
+    current_checkpoint,
+    record_checkpoint as record_checkpoint_workflow,
+    render_checkpoint_list,
+    waive_checkpoint as waive_checkpoint_workflow,
+)
+from goals.decisions import render_decision_brief
+from goals.decision_workflows import (
+    decision_brief_workflow,
+    explain_decision_workflow,
+    record_decision as record_decision_workflow,
 )
 from goals.issues import analyze_goal_issues, render_issue_report
 from goals.memory import (
@@ -54,6 +60,7 @@ from goals.loop_builder import (
     save_design,
 )
 from goals.loop_check import (
+    AgentName,
     apply_fixes,
     check_loop,
     render_fix_summary,
@@ -81,8 +88,6 @@ from goals.models import (
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
-    GoalStatus,
-    JudgementRecord,
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
@@ -92,9 +97,15 @@ from goals.models import (
     SourceRecord,
     Subproblem,
     UserMemoryEvent,
-    utc_now,
 )
 from goals.permission_policy import decide_permission, render_permission_report
+from goals.phase_workflows import (
+    accept_phase,
+    record_phase_evidence,
+    review_phase_workflow,
+    start_phase,
+    verify_phase_workflow,
+)
 from goals.registry import validate_registries
 from goals.rubric import category_for
 from goals.setup import render_setup_report, setup_agents
@@ -107,20 +118,19 @@ from goals.runtime import (
     emit_dashboard,
     load_active_snapshot,
     resolve_workspace,
-    run_gate,
-    transition_phase,
-    verify_phase,
 )
-from goals.skill_capabilities import (
-    analyze_skill_capabilities,
-    quarantine_skill,
-    render_skill_capability_report,
+from goals.skill_capabilities import render_skill_capability_report
+from goals.skill_workflows import (
+    import_skill,
+    install_skills as install_skills_workflow,
+    list_skills as list_skills_workflow,
+    preflight_skills,
 )
-from goals.sources import (
-    analyze_source_freshness,
-    render_claim_summary,
-    render_source_freshness_report,
-    render_source_summary,
+from goals.sources import render_claim_summary, render_source_freshness_report, render_source_summary
+from goals.source_workflows import (
+    record_source,
+    source_freshness as source_freshness_workflow,
+    source_list as source_list_workflow,
 )
 from goals.portability import (
     CONTEXT_TARGETS,
@@ -132,14 +142,10 @@ from goals.portability import (
     render_native_goal_emission,
     sync_context_files,
 )
-from goals.skill_discovery import (
-    discover_skills,
-    install_bundled_skills,
-    render_install_report,
-    render_skills_list,
-)
+from goals.skill_discovery import render_install_report, render_skills_list
 from goals.storage import EventStore, GoalsError, atomic_write_text
-from goals.tools import analyze_tools, record_tool_health, render_tool_health_report
+from goals.tools import render_tool_health_report
+from goals.tool_workflows import tool_doctor
 from goals.user_memory import (
     INTERVIEW_QUESTIONS,
     append_user_event,
@@ -147,9 +153,7 @@ from goals.user_memory import (
     events_from_insights,
     forget_claim,
     load_user_memory,
-    mark_interview_prompted,
     record_interview_answers,
-    render_post_goal_interview,
     render_user_memory,
 )
 from goals.workflows import (
@@ -676,8 +680,7 @@ def checkpoint_current(
     """Show the current checkpoint in plain language."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        brief = build_current_checkpoint_brief(snapshot)
+        brief = current_checkpoint(Path.cwd())
         if json_output:
             typer.echo(brief.model_dump_json(indent=2))
         else:
@@ -691,28 +694,7 @@ def checkpoint_list() -> None:
     """List recorded phase checkpoints."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        lines = ["# Phase Checkpoints", ""]
-        found = False
-        for phase in snapshot.phases:
-            if not phase.checkpoints:
-                continue
-            found = True
-            lines.append(f"## {phase.phase_id} - {phase.title}")
-            for checkpoint in phase.checkpoints:
-                required = "required" if checkpoint.required else "optional"
-                user = " user" if checkpoint.needs_user else ""
-                lines.append(
-                    f"- [{checkpoint.status}][{checkpoint.kind}][{required}{user}] "
-                    f"{checkpoint.checkpoint_id}: {checkpoint.title}"
-                )
-                if checkpoint.summary:
-                    lines.append(f"  Summary: {checkpoint.summary}")
-                if checkpoint.evidence_refs:
-                    lines.append(f"  Evidence: {', '.join(checkpoint.evidence_refs)}")
-        if not found:
-            lines.append("- No checkpoints recorded.")
-        typer.echo("\n".join(lines) + "\n")
+        typer.echo(render_checkpoint_list(load_active_snapshot(Path.cwd())))
 
     _handle(run)
 
@@ -746,34 +728,19 @@ def checkpoint_record(
     """Record or update a phase checkpoint."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        phase = _phase_or_error(snapshot, phase_id)
-        existing = _checkpoint_or_none(phase, checkpoint_id)
-        checkpoint = PhaseCheckpoint(
-            checkpoint_id=checkpoint_id,
+        record_checkpoint_workflow(
+            Path.cwd(),
+            phase_id,
+            checkpoint_id,
             kind=kind,
-            title=title or (existing.title if existing else checkpoint_id),
+            title=title,
             status=status,
             required=required,
             needs_user=needs_user or status == CheckpointStatus.NEEDS_USER,
-            summary=summary or (existing.summary if existing else ""),
-            evidence_refs=evidence_refs
-            if evidence_refs is not None
-            else (existing.evidence_refs if existing else []),
-            decision_refs=decision_refs
-            if decision_refs is not None
-            else (existing.decision_refs if existing else []),
-            created_at=existing.created_at if existing else utc_now(),
-            updated_at=utc_now(),
-            notes=notes or (existing.notes if existing else ""),
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.PHASE_CHECKPOINT_RECORDED,
-                payload={"phase_id": phase_id, "checkpoint": checkpoint.model_dump()},
-            ),
+            summary=summary,
+            evidence_refs=evidence_refs,
+            decision_refs=decision_refs,
+            notes=notes,
         )
         typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id}")
 
@@ -789,28 +756,7 @@ def checkpoint_waive(
     """Waive an existing required checkpoint with a reason."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        phase = _phase_or_error(snapshot, phase_id)
-        existing = _checkpoint_or_none(phase, checkpoint_id)
-        if existing is None:
-            raise GoalsError(f"Unknown checkpoint id for {phase_id}: {checkpoint_id}")
-        checkpoint = existing.model_copy(
-            update={
-                "status": CheckpointStatus.WAIVED,
-                "needs_user": False,
-                "summary": reason,
-                "updated_at": utc_now(),
-                "notes": reason,
-            }
-        )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.PHASE_CHECKPOINT_RECORDED,
-                payload={"phase_id": phase_id, "checkpoint": checkpoint.model_dump()},
-            ),
-        )
+        waive_checkpoint_workflow(Path.cwd(), phase_id, checkpoint_id, reason)
         typer.echo(f"Waived checkpoint {checkpoint_id} for {phase_id}")
 
     _handle(run)
@@ -1353,7 +1299,6 @@ def source_add(
     """Record source evidence for research, business, or technical claims."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
         source = SourceRecord(
             title=title,
             locator=locator,
@@ -1375,17 +1320,7 @@ def source_add(
                     confidence=confidence,
                 )
             )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.SOURCE_RECORDED,
-                payload={
-                    "source": source.model_dump(),
-                    "claims": [item.model_dump() for item in claims],
-                },
-            ),
-        )
+        record_source(Path.cwd(), source, claims=claims)
         typer.echo(f"Recorded source: {source.source_id}")
 
     _handle(run)
@@ -1410,8 +1345,7 @@ def source_freshness(
     def run():
         if max_age_days is not None and max_age_days < 1:
             raise GoalsError("max-age-days must be greater than 0.")
-        snapshot = load_active_snapshot(Path.cwd())
-        report = analyze_source_freshness(snapshot, max_age_days=max_age_days)
+        report = source_freshness_workflow(Path.cwd(), max_age_days=max_age_days)
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -1439,9 +1373,7 @@ def tools_doctor(
     """Check native-agent and browser/tool capability health."""
 
     def run():
-        report = analyze_tools()
-        if record:
-            report = record_tool_health(Path.cwd(), report)
+        report = tool_doctor(Path.cwd(), record=record)
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -1459,20 +1391,19 @@ def source_list(
     """List source evidence and source-backed claims for the active goal."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
+        report = source_list_workflow(Path.cwd())
         if json_output:
             typer.echo(
                 json.dumps(
                     {
-                        "sources": [source.model_dump(mode="json") for source in snapshot.sources],
-                        "claims": [
-                            claim.model_dump(mode="json") for claim in snapshot.source_claims
-                        ],
+                        "sources": [source.model_dump(mode="json") for source in report.sources],
+                        "claims": [claim.model_dump(mode="json") for claim in report.claims],
                     },
                     indent=2,
                 )
             )
         else:
+            snapshot = load_active_snapshot(Path.cwd())
             typer.echo("Sources:")
             typer.echo(render_source_summary(snapshot))
             typer.echo("Claims:")
@@ -1492,15 +1423,13 @@ def decision_explain(
     def run():
         if level not in {"basic", "detailed", "technical"}:
             raise GoalsError("level must be basic, detailed, or technical.")
-        snapshot = load_active_snapshot(Path.cwd())
-        context = build_decision_context(snapshot, _personalization_or_none())
         decision = _load_json_model(None, file, Decision)
-        if not decision.suggested_reply:
-            decision.suggested_reply = f"I choose: {decision.recommendation}"
-        decision.what_we_know = decision.what_we_know or []
-        decision.evidence_refs = decision.evidence_refs or []
-        decision.uncertainty = decision.uncertainty or []
-        explanation = render_decision_explanation(decision, context, level=level)  # type: ignore[arg-type]
+        explanation = explain_decision_workflow(
+            Path.cwd(),
+            decision,
+            level=level,  # type: ignore[arg-type]
+            personalization=_personalization_or_none(),
+        )
         if json_output:
             typer.echo(explanation.model_dump_json(indent=2))
         else:
@@ -1539,28 +1468,21 @@ def decision_record(
     """
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        record = JudgementRecord(
+        report = record_decision_workflow(
+            Path.cwd(),
             question=question,
             choice=choice,
-            rationale=why,
             decided_by=_validate_choice(by, {"user", "agent"}, "by"),  # type: ignore[arg-type]
+            why=why,
             reversible=reversible,
             phase_id=phase,
             evidence_refs=evidence or [],
             profile_claim_ids=profile_claim or [],
             confidence=confidence,
         )
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.DECISION_RECORDED,
-                payload={"judgement": record.model_dump()},
-            ),
-        )
-        _maybe_record_user_judgement_signal(snapshot.goal_id, record)
-        typer.echo(f"Recorded decision: {record.judgement_id}")
+        if report.warning:
+            typer.echo(report.warning, err=True)
+        typer.echo(f"Recorded decision: {report.record.judgement_id}")
 
     _handle(run)
 
@@ -1572,8 +1494,7 @@ def decision_brief(
     """Show the important user decisions in a compact plain-language brief."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
-        brief = build_decision_brief(snapshot, _personalization_or_none())
+        brief = decision_brief_workflow(Path.cwd(), _personalization_or_none())
         if json_output:
             typer.echo(brief.model_dump_json(indent=2))
         else:
@@ -1806,33 +1727,12 @@ def _personalization_or_none():
         return None
 
 
-def _maybe_record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> None:
-    if record.decided_by != "user":
-        return
-    summary = f"For '{record.question}', the user chose '{record.choice}'."
-    if record.rationale:
-        summary += f" Rationale: {record.rationale}"
-    try:
-        append_user_event(
-            UserMemoryEvent(
-                kind="judgement",
-                area="decision",
-                summary=summary,
-                source="judgement",
-                goal_id=goal_id,
-                confidence=record.confidence or 0.5,
-            )
-        )
-    except GoalsError as exc:
-        typer.echo(f"User memory warning: {exc}", err=True)
-
-
 @phase_app.command("start")
 def phase_start(phase_id: str) -> None:
     """Record that a phase has started."""
 
     def run():
-        transition_phase(Path.cwd(), phase_id, "start")
+        start_phase(Path.cwd(), phase_id)
         typer.echo(f"Started phase {phase_id}")
 
     _handle(run)
@@ -1849,20 +1749,12 @@ def phase_evidence(
     """Record phase evidence from a JSON object."""
 
     def run():
-        snapshot = load_active_snapshot(Path.cwd())
         if file is not None and evidence_json is not None:
             raise GoalsError("Provide evidence as inline JSON or --file, not both.")
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
         evidence = _load_json_model(evidence_json, file, Evidence)
-        append_event(
-            Path.cwd(),
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.PHASE_EVIDENCE,
-                payload={"phase_id": phase_id, "evidence": evidence.model_dump()},
-            ),
-        )
+        record_phase_evidence(Path.cwd(), phase_id, evidence)
         typer.echo(f"Recorded evidence for {phase_id}")
 
     _handle(run)
@@ -1878,13 +1770,14 @@ def phase_verify(phase_id: str) -> None:
     """
 
     def run():
-        results = verify_phase(Path.cwd(), phase_id)
-        passed = sum(1 for r in results if r["passed"])
-        for r in results:
+        report = verify_phase_workflow(Path.cwd(), phase_id)
+        for r in report.results:
             mark = "PASS" if r["passed"] else "FAIL"
             typer.echo(f"  [{mark}] {r['verification_id']}")
-        typer.echo(f"Verified {phase_id}: {passed}/{len(results)} automated check(s) passed.")
-        if passed != len(results):
+        typer.echo(
+            f"Verified {phase_id}: {report.passed_count}/{len(report.results)} automated check(s) passed."
+        )
+        if not report.passed:
             raise typer.Exit(1)
 
     _handle(run)
@@ -1895,7 +1788,7 @@ def phase_review(phase_id: str) -> None:
     """Run the typed phase review gate."""
 
     def run():
-        result = run_gate(Path.cwd(), phase_id)
+        result = review_phase_workflow(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
         if result.verdict != GateVerdict.PASS:
             if result.findings:
@@ -1914,14 +1807,12 @@ def phase_accept(phase_id: str) -> None:
     """Accept a reviewed phase."""
 
     def run():
-        snapshot = transition_phase(Path.cwd(), phase_id, "accept")
+        report = accept_phase(Path.cwd(), phase_id)
         typer.echo(f"Accepted phase {phase_id}")
-        if snapshot.status == GoalStatus.COMPLETE:
-            try:
-                if mark_interview_prompted(snapshot.goal_id):
-                    typer.echo(render_post_goal_interview(snapshot.goal_id))
-            except GoalsError as exc:
-                typer.echo(f"User memory warning: {exc}", err=True)
+        if report.warning:
+            typer.echo(report.warning, err=True)
+        if report.interview:
+            typer.echo(report.interview)
 
     _handle(run)
 
@@ -1933,7 +1824,7 @@ def skills_list(
     """List skills discovered in agent skill dirs and bundled Goals skills."""
 
     def run():
-        skills = discover_skills()
+        skills = list_skills_workflow()
         if json_output:
             typer.echo(json.dumps([skill.model_dump() for skill in skills], indent=2))
         else:
@@ -1961,7 +1852,7 @@ def skills_install(
     def run():
         choice = _validate_choice(target, {"claude", "codex", "both"}, "target")
         targets = ["claude", "codex"] if choice == "both" else [choice]
-        report = install_bundled_skills(targets, force=force)
+        report = install_skills_workflow(targets, force=force)
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -1986,7 +1877,7 @@ def skills_preflight(
         target = objective
         if target is None:
             target = load_active_snapshot(Path.cwd()).objective
-        report = analyze_skill_capabilities(target)
+        report = preflight_skills(target)
         if json_output:
             typer.echo(report.model_dump_json(indent=2))
         else:
@@ -2005,7 +1896,7 @@ def skills_import(
     """Copy an external skill into quarantine for review, not execution."""
 
     def run():
-        target = quarantine_skill(source, name)
+        target = import_skill(source, name)
         typer.echo(f"Quarantined skill for review: {target}")
         typer.echo("Review provenance and contents before promoting it into an agent skill dir.")
 
@@ -2120,19 +2011,29 @@ def loop_check(
     fix: bool = typer.Option(
         False, "--fix", help="Apply safe, reversible fixes and re-save the design."
     ),
+    target_agent: Optional[str] = typer.Option(
+        None,
+        "--target-agent",
+        help="Require referenced skills to be installed for claude or codex.",
+    ),
 ) -> None:
     """Lint a designed loop for issues (and optionally auto-fix the safe ones)."""
 
     def run():
         out_dir = _default_loop_out(out)
         design = load_design(out_dir)
+        target = (
+            cast(AgentName, _validate_choice(target_agent, {"claude", "codex"}, "target-agent"))
+            if target_agent is not None
+            else None
+        )
         if fix:
-            fixed, changes = apply_fixes(design)
+            fixed, changes = apply_fixes(design, target_agent=target)
             if changes:
                 save_design(fixed, out_dir)
             typer.echo(render_fix_summary(changes))
             design = fixed
-        report = check_loop(design)
+        report = check_loop(design, target_agent=target)
         typer.echo(render_loop_check_report(report))
         if report.has_blocking:
             raise typer.Exit(1)

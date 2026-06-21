@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-labelledby="title desc">
+  <title id="title">Goals LinkedIn workflow card</title>
+  <desc id="desc">A simple social image showing how Goals turns a user goal into clear steps, AI work, proof, and done.</desc>
+  <defs>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#111827" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2937"/>
+    </marker>
+    <style>
+      .bg { fill: #fbfaf6; }
+      .ink { fill: #141b24; }
+      .muted { fill: #667085; }
+      .line { stroke: #1f2937; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .dash { stroke: #98a2b3; stroke-width: 3; fill: none; stroke-linecap: round; stroke-dasharray: 8 12; }
+      .card { fill: #ffffff; stroke: #1f2937; stroke-width: 3; rx: 22; filter: url(#softShadow); }
+      .smallCard { fill: #ffffff; stroke: #d0d5dd; stroke-width: 2; rx: 18; }
+      .blue { fill: #2563eb; }
+      .green { fill: #16a34a; }
+      .amber { fill: #d97706; }
+      .violet { fill: #6d5dfc; }
+      .chipBlue { fill: #eaf2ff; stroke: #2563eb; stroke-width: 2; }
+      .chipGreen { fill: #eaf8ef; stroke: #16a34a; stroke-width: 2; }
+      .chipAmber { fill: #fff5df; stroke: #d97706; stroke-width: 2; }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { font-size: 118px; font-weight: 840; letter-spacing: 0; }
+      .subtitle { font-size: 42px; font-weight: 560; letter-spacing: 0; }
+      .caption { font-size: 28px; font-weight: 520; letter-spacing: 0; }
+      .stepTitle { font-size: 29px; font-weight: 760; letter-spacing: 0; }
+      .stepSub { font-size: 20px; font-weight: 500; letter-spacing: 0; }
+      .tiny { font-size: 18px; font-weight: 680; letter-spacing: 0; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1672" height="941"/>
+
+  <g transform="translate(118 166)">
+    <text class="title ink" x="0" y="0">GOALS</text>
+    <text class="subtitle ink" x="4" y="72">Keep your AI on a plan you can read.</text>
+    <text class="caption muted" x="6" y="128">Your AI does the work. Goals keeps the plan, decisions, and proof.</text>
+  </g>
+
+  <g transform="translate(136 368)">
+    <rect class="smallCard" x="0" y="0" width="394" height="164" rx="22"/>
+    <circle class="violet" cx="58" cy="58" r="24"/>
+    <path d="M48 58h20M58 48v20" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+    <text class="stepTitle ink" x="98" y="58">You say the goal</text>
+    <text class="stepSub muted" x="98" y="94">Plain English, not config.</text>
+  </g>
+
+  <g transform="translate(136 626)">
+    <rect class="smallCard" x="0" y="0" width="394" height="116" rx="22"/>
+    <circle class="green" cx="58" cy="58" r="24"/>
+    <path d="M47 58l8 9 17-21" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="stepTitle ink" x="98" y="52">Plain decisions</text>
+    <text class="stepSub muted" x="98" y="84">What needs you is readable.</text>
+  </g>
+
+  <g transform="translate(608 308)">
+    <rect class="card" x="0" y="0" width="228" height="150" rx="24"/>
+    <rect class="chipBlue" x="31" y="30" width="56" height="56" rx="16"/>
+    <path d="M46 58h26M46 72h18" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/>
+    <text class="stepTitle ink" x="31" y="112">Clear steps</text>
+    <text class="stepSub muted" x="31" y="137">with done lines</text>
+  </g>
+
+  <g transform="translate(934 308)">
+    <rect class="card" x="0" y="0" width="228" height="150" rx="24"/>
+    <rect class="chipGreen" x="31" y="30" width="56" height="56" rx="16"/>
+    <path d="M44 61c12-16 28-16 40 0M52 72h24" stroke="#16a34a" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <text class="stepTitle ink" x="31" y="112">AI work</text>
+    <text class="stepSub muted" x="31" y="137">Claude Code / Codex</text>
+  </g>
+
+  <g transform="translate(1260 308)">
+    <rect class="card" x="0" y="0" width="228" height="150" rx="24"/>
+    <rect class="chipAmber" x="31" y="30" width="56" height="56" rx="16"/>
+    <path d="M47 57l9 10 18-24" stroke="#d97706" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M102 48h62M102 66h42" stroke="#98a2b3" stroke-width="5" stroke-linecap="round"/>
+    <text class="stepTitle ink" x="31" y="112">Proof ran</text>
+    <text class="stepSub muted" x="31" y="137">not guessed</text>
+  </g>
+
+  <g transform="translate(934 590)">
+    <rect class="card" x="0" y="0" width="228" height="150" rx="24"/>
+    <rect class="chipGreen" x="31" y="30" width="56" height="56" rx="16"/>
+    <path d="M47 57l9 10 18-24" stroke="#16a34a" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="stepTitle ink" x="31" y="112">Done</text>
+    <text class="stepSub muted" x="31" y="137">with a record</text>
+  </g>
+
+  <path class="line" d="M530 450 C560 420 575 394 608 383" marker-end="url(#arrow)"/>
+  <path class="line" d="M836 383 H934" marker-end="url(#arrow)"/>
+  <path class="line" d="M1162 383 H1260" marker-end="url(#arrow)"/>
+  <path class="line" d="M1374 458 C1350 542 1257 626 1162 660" marker-end="url(#arrow)"/>
+  <path class="dash" d="M934 640 C780 628 642 612 530 671"/>
+
+  <g transform="translate(620 610)">
+    <rect class="smallCard" x="0" y="0" width="232" height="84" rx="20"/>
+    <circle class="green" cx="44" cy="42" r="17"/>
+    <path d="M36 42l6 6 12-16" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="tiny ink" x="74" y="37">You approve</text>
+    <text class="tiny muted" x="74" y="61">when it matters</text>
+  </g>
+
+  <g transform="translate(1259 598)">
+    <rect class="smallCard" x="0" y="0" width="229" height="96" rx="20"/>
+    <circle class="amber" cx="44" cy="48" r="17"/>
+    <path d="M37 39h14l7 7v13H37zM51 39v8h7" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="tiny ink" x="74" y="42">Files you own</text>
+    <text class="tiny muted" x="74" y="66">state + evidence</text>
+  </g>
+</svg>

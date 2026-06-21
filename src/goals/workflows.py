@@ -3,15 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from goals.architecture import analyze_code_architecture
-from goals.brief import build_goal_brief
-from goals.capabilities import analyze_capabilities
-from goals.checkpoints import build_current_checkpoint_brief
-from goals.issues import analyze_goal_issues
+from goals.health import GoalHealthReport, build_goal_health
 from goals.loop_builder import load_design, to_snapshot
-from goals.merge_readiness import analyze_merge_readiness
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
-from goals.portability import export_goal
+from goals.projections import emit_dashboard, export_goal, refresh_goal_outputs
 from goals.storage import GoalsError
 from goals.models import (
     ArchitectureCheckReport,
@@ -26,8 +21,7 @@ from goals.models import (
     PhaseStatus,
     PortableExport,
 )
-from goals.registry import validate_registries
-from goals.runtime import claim_worktree, create_goal, emit_architecture, emit_dashboard, load_active_snapshot
+from goals.runtime import claim_worktree, create_goal, load_active_snapshot
 
 
 @dataclass(frozen=True)
@@ -48,6 +42,7 @@ class WorkflowNext:
 class WorkflowCheck:
     snapshot: GoalSnapshot
     dashboard_path: Path
+    health: GoalHealthReport
     brief: GoalBrief
     checkpoint: CurrentCheckpointBrief
     issues: GoalIssueReport
@@ -59,12 +54,7 @@ class WorkflowCheck:
 
     @property
     def passed(self) -> bool:
-        return (
-            not self.issues.issues
-            and self.merge.passed
-            and self.architecture.passed
-            and self.capability.passed
-        )
+        return self.health.passed
 
 
 @dataclass(frozen=True)
@@ -137,29 +127,30 @@ def next_workflow(cwd: Path, *, agent: ModeAAdapter = "auto", full: bool = False
 
 def check_workflow(cwd: Path, *, refresh: bool = False) -> WorkflowCheck:
     claim_worktree(cwd)
-    dashboard_path = emit_dashboard(cwd)
     snapshot = load_active_snapshot(cwd)
     worktree = Path(snapshot.topology.worktree_path)
     export = export_goal(cwd) if refresh else None
+    health = build_goal_health(snapshot, worktree)
+    dashboard_path = emit_dashboard(cwd, health=health)
     return WorkflowCheck(
         snapshot=snapshot,
         dashboard_path=dashboard_path,
-        brief=build_goal_brief(snapshot),
-        checkpoint=build_current_checkpoint_brief(snapshot),
-        issues=analyze_goal_issues(snapshot),
-        merge=analyze_merge_readiness(snapshot),
-        architecture=analyze_code_architecture(snapshot, worktree),
-        capability=analyze_capabilities(snapshot),
-        registry_count=len(validate_registries(worktree)),
+        health=health,
+        brief=health.brief,
+        checkpoint=health.checkpoint,
+        issues=health.issues,
+        merge=health.merge,
+        architecture=health.architecture,
+        capability=health.capability,
+        registry_count=health.registry_count,
         portable_path=Path(export.markdown_path) if export is not None else None,
     )
 
 
 def view_workflow(cwd: Path) -> WorkflowView:
     claim_worktree(cwd)
-    dashboard_path = emit_dashboard(cwd)
-    architecture_path = emit_architecture(cwd)
-    portable_path = Path(export_goal(cwd).markdown_path)
+    export, architecture_path, dashboard_path = refresh_goal_outputs(cwd)
+    portable_path = Path(export.markdown_path)
     snapshot = load_active_snapshot(cwd)
     return WorkflowView(
         snapshot=snapshot,

@@ -61,6 +61,7 @@ def render_dashboard(
     architecture: GoalArchitectureMap | None = None,
     architecture_path: Path | None = None,
     events: list[Event] | None = None,
+    health=None,
 ) -> None:
     """Render the read-only goal dashboard.
 
@@ -73,10 +74,14 @@ def render_dashboard(
     # map is a phase-derived placeholder we hide as noise.
     has_recorded_architecture = architecture is not None or snapshot.architecture is not None
     architecture = architecture or architecture_for_snapshot(snapshot)
-    brief = build_goal_brief(snapshot)
-    checkpoint = build_current_checkpoint_brief(snapshot)
-    issue_report = analyze_goal_issues(snapshot)
-    capability_report = analyze_capabilities(snapshot)
+    brief = health.brief if health is not None else build_goal_brief(snapshot)
+    checkpoint = (
+        health.checkpoint if health is not None else build_current_checkpoint_brief(snapshot)
+    )
+    issue_report = health.issues if health is not None else analyze_goal_issues(snapshot)
+    capability_report = health.capability if health is not None else analyze_capabilities(snapshot)
+    architecture_check = health.architecture if health is not None else None
+    source_freshness = health.source_freshness if health is not None else None
 
     accepted = len([p for p in snapshot.phases if str(p.status) == "accepted"])
     total = len(snapshot.phases)
@@ -95,9 +100,13 @@ def render_dashboard(
     evidence = _evidence_detail_html(snapshot, checkpoint)
     lineage_section = _lineage_section_html(snapshot, events or [])
     architecture_section = _architecture_section_html(
-        snapshot, architecture, architecture_path, has_recorded_architecture
+        snapshot,
+        architecture,
+        architecture_path,
+        has_recorded_architecture,
+        architecture_check,
     )
-    sources_section = _sources_section_html(snapshot)
+    sources_section = _sources_section_html(snapshot, source_freshness)
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -573,7 +582,11 @@ def _capability_section_html(report) -> str:
 
 
 def _architecture_section_html(
-    snapshot: GoalSnapshot, architecture, architecture_path, has_recorded: bool
+    snapshot: GoalSnapshot,
+    architecture,
+    architecture_path,
+    has_recorded: bool,
+    architecture_check=None,
 ) -> str:
     """Show the architecture map only when an agent recorded a real one."""
     if not has_recorded:
@@ -581,18 +594,18 @@ def _architecture_section_html(
     return (
         f'<details><summary>Architecture map<span class="meta">{_arch_meta(architecture)}</span>'
         "</summary>"
-        f'<div class="body">{_architecture_detail_html(snapshot, architecture, architecture_path)}</div>'
+        f'<div class="body">{_architecture_detail_html(snapshot, architecture, architecture_path, architecture_check)}</div>'
         "</details>"
     )
 
 
-def _sources_section_html(snapshot: GoalSnapshot) -> str:
+def _sources_section_html(snapshot: GoalSnapshot, source_freshness=None) -> str:
     """Show Sources only when sources or claims exist."""
     if not snapshot.sources and not snapshot.source_claims:
         return ""
     return (
         f'<details><summary>Sources<span class="meta">{_sources_meta(snapshot)}</span></summary>'
-        f'<div class="body">{_sources_html(snapshot)}</div></details>'
+        f'<div class="body">{_sources_html(snapshot, source_freshness)}</div></details>'
     )
 
 
@@ -697,11 +710,12 @@ def _architecture_detail_html(
     snapshot: GoalSnapshot,
     architecture: GoalArchitectureMap,
     architecture_path: Path | None,
+    architecture_check=None,
 ) -> str:
     if not architecture.nodes:
         return "<p>No architecture recorded yet.</p>"
     arch_brief = build_architecture_brief(architecture)
-    check = analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
+    check = architecture_check or analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
     diagram = _architecture_svg(architecture)
     cap = (
         '<p class="cap">Built outlined in sage · in progress in clay · planned in gold</p>'
@@ -858,10 +872,10 @@ def _issues_html(report) -> str:
     return f'<p>{escape(report.summary)}</p><ul class="kv">{items}</ul>'
 
 
-def _sources_html(snapshot: GoalSnapshot) -> str:
+def _sources_html(snapshot: GoalSnapshot, source_freshness=None) -> str:
     if not snapshot.sources and not snapshot.source_claims:
         return "<p>No sources recorded yet.</p>"
-    freshness = analyze_source_freshness(snapshot)
+    freshness = source_freshness or analyze_source_freshness(snapshot)
     unresolved = unresolved_claims(snapshot)
     warning = (
         f"<p>{len(unresolved)} claim(s) need source cleanup.</p>"

@@ -5,9 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import Literal
 
-from goals.architecture import architecture_for_snapshot, render_architecture_markdown
 from goals.checkpoints import phase_checkpoint_blockers
-from goals.dashboard import render_dashboard
 from goals.git_ops import (
     DEFAULT_BRANCHES,
     create_worktree,
@@ -289,9 +287,9 @@ def append_event(cwd: Path, event: Event) -> GoalSnapshot:
 
 
 def _refresh_portable_export(snapshot: GoalSnapshot) -> None:
-    from goals.portability import export_snapshot
+    from goals.projections import refresh_portable_export
 
-    export_snapshot(snapshot)
+    refresh_portable_export(snapshot)
 
 
 def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"]) -> GoalSnapshot:
@@ -445,26 +443,16 @@ def verify_phase(cwd: Path, phase_id: str, *, timeout: int = 120) -> list[dict]:
     return results
 
 
-def emit_dashboard(cwd: Path) -> Path:
-    snapshot = load_active_snapshot(cwd)
-    goal_dir = (
-        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
-    )
-    events = EventStore(goal_dir).read_events()
-    output_path = goal_dir / "dashboard.html"
-    architecture_path = emit_architecture(cwd)
-    render_dashboard(snapshot, output_path, architecture_path=architecture_path, events=events)
-    return output_path
+def emit_dashboard(cwd: Path, *, health=None) -> Path:
+    from goals.projections import emit_dashboard as _emit_dashboard
+
+    return _emit_dashboard(cwd, health=health)
 
 
 def emit_architecture(cwd: Path) -> Path:
-    snapshot = load_active_snapshot(cwd)
-    goal_dir = (
-        Path(snapshot.topology.worktree_path) / ".agent-workflow" / "goals" / snapshot.goal_id
-    )
-    architecture_path = goal_dir / "architecture.md"
-    render_architecture_markdown(architecture_for_snapshot(snapshot), architecture_path)
-    return architecture_path
+    from goals.projections import emit_architecture as _emit_architecture
+
+    return _emit_architecture(cwd)
 
 
 def write_workflow_gitignore(repo: Path) -> None:

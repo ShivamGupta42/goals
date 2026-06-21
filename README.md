@@ -1,7 +1,8 @@
 # Goals
 
-**A no-nonsense goal workflow engine.** It keeps your AI on a plan you can read,
-decide on, and trust — and proves each step actually ran before it counts as done.
+**A no-nonsense workflow engine for long-running agent loops.** Goals keeps the
+plan, decisions, and proof in files you own so you can trust, verify, fix, and
+resume the work.
 
 ![Goals keeps your AI's plan and proof alive across /clear](docs/marketing-refresh/assets/goals-hero-opt.gif)
 
@@ -14,14 +15,14 @@ decide on, and trust — and proves each step actually ran before it counts as d
 
 ## What Goals does
 
-- **Breaks a big goal into clear steps.** Whatever you ask for, Goals splits it into
-  ordered steps, each with a plain "done" line — so a big ask never turns into a mess.
-- **Talks in plain words, not jargon.** Status, decisions, and "what needs you" are
-  written for a person — no codes, no wall of technical output.
-- **Shows proof, doesn't guess.** Every step has to show what was checked and what
-  changed, so *done* really means done.
-- **Lets you shape how it works.** Build the workflow once, check it for gaps, and
-  improve it as you learn what works.
+- **Trust the loop.** State, decisions, evidence, and history stay readable while
+  the work keeps moving.
+- **Verify before done.** Checks actually run before a step is accepted, so "done"
+  is earned instead of asserted.
+- **Fix what breaks.** Failed verification points to the next repair instead of
+  vague retrying.
+- **Resume without losing the thread.** Portable files survive `/clear`, new
+  sessions, and agent switches.
 
 ## Who it's for
 

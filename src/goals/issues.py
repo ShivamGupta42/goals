@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
@@ -8,6 +9,8 @@ from goals.decisions import should_surface_decision
 from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
+    ArchitectureCheckReport,
+    CapabilityCheckReport,
     CheckpointStatus,
     GateFindingCategory,
     GateVerdict,
@@ -15,7 +18,9 @@ from goals.models import (
     GoalIssueReport,
     GoalSnapshot,
     GoalStatus,
+    MergeReadinessReport,
     PhaseStatus,
+    SourceFreshnessReport,
 )
 from goals.rubric import representative_category
 from goals.sources import analyze_source_freshness, unresolved_claims
@@ -32,16 +37,29 @@ _GATE_CATEGORY_ACTION: dict[GateFindingCategory, str] = {
 }
 
 
-def analyze_goal_issues(snapshot: GoalSnapshot) -> GoalIssueReport:
+@dataclass(frozen=True)
+class AnalyzerResults:
+    capability: CapabilityCheckReport | None = None
+    architecture: ArchitectureCheckReport | None = None
+    merge: MergeReadinessReport | None = None
+    source_freshness: SourceFreshnessReport | None = None
+
+
+def analyze_goal_issues(
+    snapshot: GoalSnapshot,
+    *,
+    analyzer_results: AnalyzerResults | None = None,
+) -> GoalIssueReport:
+    analyzer_results = analyzer_results or AnalyzerResults()
     issues: list[GoalIssue] = []
     issues.extend(_state_issues(snapshot))
     issues.extend(_phase_issues(snapshot))
     issues.extend(_decision_issues(snapshot))
-    issues.extend(_source_issues(snapshot))
-    issues.extend(_capability_issues(snapshot))
+    issues.extend(_source_issues(snapshot, analyzer_results.source_freshness))
+    issues.extend(_capability_issues(snapshot, analyzer_results.capability))
     issues.extend(_risk_issues(snapshot))
-    issues.extend(_architecture_issues(snapshot))
-    issues.extend(_merge_readiness_issues(snapshot))
+    issues.extend(_architecture_issues(snapshot, analyzer_results.architecture))
+    issues.extend(_merge_readiness_issues(snapshot, analyzer_results.merge))
     user_questions = [issue.summary for issue in issues if issue.needs_user]
     agent_actions = _unique(
         [
@@ -325,7 +343,10 @@ def _decision_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return issues
 
 
-def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+def _source_issues(
+    snapshot: GoalSnapshot,
+    source_freshness: SourceFreshnessReport | None = None,
+) -> list[GoalIssue]:
     issues = [
         GoalIssue(
             severity="p1",
@@ -349,7 +370,7 @@ def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                     evidence_refs=[f"source:{source_id}" for source_id in claim.source_ids],
                 )
             )
-    freshness = analyze_source_freshness(snapshot)
+    freshness = source_freshness or analyze_source_freshness(snapshot)
     for finding in freshness.findings:
         issues.append(
             GoalIssue(
@@ -365,8 +386,11 @@ def _source_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return issues
 
 
-def _capability_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_capabilities(snapshot)
+def _capability_issues(
+    snapshot: GoalSnapshot,
+    capability: CapabilityCheckReport | None = None,
+) -> list[GoalIssue]:
+    report = capability or analyze_capabilities(snapshot)
     return [
         GoalIssue(
             severity=gap.severity,
@@ -393,7 +417,10 @@ def _risk_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     ]
 
 
-def _architecture_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+def _architecture_issues(
+    snapshot: GoalSnapshot,
+    architecture: ArchitectureCheckReport | None = None,
+) -> list[GoalIssue]:
     issues = [
         GoalIssue(
             severity="p2",
@@ -403,7 +430,7 @@ def _architecture_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
         )
         for question in (snapshot.architecture.questions if snapshot.architecture else [])
     ]
-    report = analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
+    report = architecture or analyze_code_architecture(snapshot, Path(snapshot.topology.worktree_path))
     issues.extend(
         GoalIssue(
             severity=finding.severity,
@@ -419,8 +446,11 @@ def _architecture_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return issues
 
 
-def _merge_readiness_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
-    report = analyze_merge_readiness(snapshot)
+def _merge_readiness_issues(
+    snapshot: GoalSnapshot,
+    merge: MergeReadinessReport | None = None,
+) -> list[GoalIssue]:
+    report = merge or analyze_merge_readiness(snapshot)
     return [
         GoalIssue(
             severity=finding.severity,

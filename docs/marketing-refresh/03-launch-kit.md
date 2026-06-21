@@ -3,19 +3,20 @@
 **Phase P3 deliverable (part 2).** Copy + checklist for promoting Goals as an OSS
 project, refreshed to include the five features the `marketing` branch omits
 (executed-proof gates, PACERS building journey, skill-first architecture, Trust V1
-capability gaps, typed gate findings). Positioning is unchanged: **a no-nonsense
-goal workflow engine.** Every `goals ...` command below is real (`goals --help`).
+capability gaps, typed gate findings). Positioning is now focused on
+**long-running agent loops you can trust, verify, fix, and resume.** Every
+`goals ...` command below is real (`goals --help`).
 
 ---
 
 ## A. One-liners (use everywhere, identically)
 
-- **Goals** — a no-nonsense goal workflow engine. Keeps your AI on a plan you can
-  read, decide on, and trust.
-- Your AI wanders and makes decisions you can't follow. Goals keeps it on a plan
-  you can read — and **proves each step ran** before it counts as done.
-- Tell your AI what you want in plain English. Goals turns it into tracked steps,
-  records the decisions, and won't check a step off until its checks actually pass.
+- **Goals** — a no-nonsense workflow engine for long-running agent loops you can
+  trust, verify, fix, and resume.
+- Agent loops run longer than your attention. Goals keeps the plan, decisions,
+  and proof in files you own so the work stays verifiable.
+- Tell your AI what you want in plain English. Goals tracks the loop, runs proof
+  before done, and lets you resume without losing the thread.
 
 ## B. Feature bullets (the "what you get" table)
 
@@ -35,8 +36,9 @@ goal workflow engine.** Every `goals ...` command below is real (`goals --help`)
 ```md
 # Goals
 
-**A no-nonsense goal workflow engine.** Keeps your AI on a plan you can read,
-decide on, and trust — and proves each step ran before it counts as done.
+**A no-nonsense workflow engine for long-running agent loops.** Goals keeps the
+plan, decisions, and proof in files you own so you can trust, verify, fix, and
+resume the work.
 
 ![hero demo](docs/marketing/assets/goals-demo-color.gif)   <!-- re-record: see follow-ups -->
 
@@ -87,7 +89,53 @@ Then in Claude Code: `/goals:create "build me a weight-loss tracking app"`
 
 Lead with the pain, show the GIF, link last. Keep self-promo <10% of activity.
 
-## F. X / build-in-public thread (refreshed beats)
+## F. LinkedIn + X / build-in-public
+
+### LinkedIn post (loop-trust version)
+
+```text
+Loop engineering is becoming popular.
+
+It feels like the next step in working with AI coding agents.
+
+I've been running /loop in Claude Code on personal projects for months.
+
+It is powerful. But the more loops I run, the more one thing stands out:
+
+𝐀 𝐥𝐨𝐨𝐩 𝐧𝐞𝐞𝐝𝐬 𝐦𝐨𝐫𝐞 𝐭𝐡𝐚𝐧 𝐚 𝐩𝐫𝐨𝐦𝐩𝐭.
+
+It needs a plan it can carry across sessions, a way to verify the work against your actual goal, and a record of what it decided while you were out of the loop.
+
+That is what I am building with 𝐆𝐨𝐚𝐥𝐬.
+
+𝐆𝐨𝐚𝐥𝐬 is a small CLI + plugin for Claude Code and Codex. It gives your agent a set of commands for creating the goal, getting the next step, checking status, viewing the dashboard, explaining decisions, and improving the loop itself.
+
+Goals saves the work done in your loops in 𝐟𝐢𝐥𝐞𝐬 𝐲𝐨𝐮 𝐨𝐰𝐧: the goal, current phase, decisions, evidence, failed checks, and history.
+
+Can we make agents run longer? We can.
+
+The better question is: can we make longer runs something you can 𝐭𝐫𝐮𝐬𝐭, 𝐯𝐞𝐫𝐢𝐟𝐲, 𝐟𝐢𝐱, and 𝐜𝐨𝐧𝐭𝐢𝐧𝐮𝐞?
+
+That is where Goals comes in:
+
+- 𝐏𝐥𝐚𝐢𝐧-𝐄𝐧𝐠𝐥𝐢𝐬𝐡 𝐠𝐨𝐚𝐥𝐬: start from what you want and turn it into tracked phases.
+- 𝐃𝐮𝐫𝐚𝐛𝐥𝐞 𝐬𝐭𝐚𝐭𝐞: keep the plan, decisions, evidence, failed checks, and history in readable files you own.
+- 𝐕𝐞𝐫𝐢𝐟𝐢𝐞𝐝 𝐬𝐭𝐞𝐩𝐬: accept a step only after the proof actually runs.
+- 𝐅𝐢𝐱𝐚𝐛𝐥𝐞 𝐟𝐚𝐢𝐥𝐮𝐫𝐞𝐬: use failed checks to point to the next repair instead of vague retrying.
+- 𝐃𝐞𝐜𝐢𝐬𝐢𝐨𝐧 𝐞𝐱𝐩𝐥𝐚𝐢𝐧𝐞𝐫𝐬: explain technical choices in light of your goal, risk, and reversibility, not just specs.
+- 𝐑𝐞𝐬𝐮𝐦𝐚𝐛𝐥𝐞 𝐰𝐨𝐫𝐤: continue after /clear, a new session, or switching between Claude Code and Codex.
+- 𝐇𝐮𝐦𝐚𝐧 𝐯𝐢𝐞𝐰: open a readable dashboard with `goals view`.
+- 𝐋𝐨𝐨𝐩 𝐢𝐦𝐩𝐫𝐨𝐯𝐞𝐦𝐞𝐧𝐭: use `goals loop` when the same issues keep repeating.
+
+The project is open source:
+https://github.com/ShivamGupta42/goals
+
+If you are experimenting with long-running loops, try Goals on one real task and tell me where the workflow still feels hard to trust.
+
+#LoopEngineering #AIAgents #ClaudeCode #OpenSource
+```
+
+### X / build-in-public thread (refreshed beats)
 
 1. The pain: your agent forgets the plan on `/clear` and says "done" when it isn't.
 2. The fix: plain-English goal → tracked phases, in files you own.
@@ -143,8 +191,12 @@ Done locally (in `docs/marketing-refresh/assets/`):
 3. ✅ **SVG → PNG social preview** — `architecture-1.png`, `architecture-2.png`
    (2× via `rsvg-convert`). Use `architecture-2.png` (the lifecycle) as the
    GitHub social-preview image.
+4. ✅ **Loop-trust LinkedIn card** — `goals-linkedin-loop-trust.png`, rebuilt as a
+   text-first deterministic Creative Production asset after the generated visual
+   tested as decorative. Message: long-running loops you can trust, verify, fix,
+   and resume. Footer includes the repo link.
 
 Still owner actions (remote — can't be done locally):
 
-4. **Push the branch / submit** the awesome-list PRs and post to HN/Reddit/X —
+5. **Push the branch / submit** the awesome-list PRs and post to HN/Reddit/X —
    gated on per-channel approval (`goals permission check`). Copy is ready above.

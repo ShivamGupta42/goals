@@ -30,7 +30,6 @@ from goals.models import (
     Phase,
     PortableExport,
 )
-from goals.runtime import load_active_snapshot
 from goals.storage import atomic_write_text
 
 NativeAdapter = Literal["claude", "codex"]
@@ -436,6 +435,12 @@ def _current_phase_or_none(snapshot: GoalSnapshot) -> Phase | None:
         if phase.phase_id == snapshot.current_phase:
             return phase
     return None
+
+
+def load_active_snapshot(cwd: Path) -> GoalSnapshot:
+    from goals.runtime import load_active_snapshot as _load_active_snapshot
+
+    return _load_active_snapshot(cwd)
 
 
 def _bullets(items: list[str]) -> list[str]:
