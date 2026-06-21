@@ -21,6 +21,8 @@ resume the work.
   is earned instead of asserted.
 - **Fix what breaks.** Failed verification points to the next repair instead of
   vague retrying.
+- **Reuse proven loops.** Import an external loop or catalog, answer only the
+  missing details, and let Goals validate it before it becomes your workflow.
 - **Resume without losing the thread.** Portable files survive `/clear`, new
   sessions, and agent switches.
 
@@ -115,8 +117,35 @@ That's it. Now just talk to it in Claude Code:
 | You type | What happens |
 | --- | --- |
 | `/goals:create "build me a weight-loss tracking app"` | Goals turns it into a tracked plan and starts step 1 |
+| `/goals:import https://signals.forwardfuture.ai/loop-library/` | Import an external loop/catalog, ask for missing details, and validate it for Claude |
 | `/goals:next` | Do the next step; Goals saves the proof and checks it off |
 | `/goals:check` | See where things stand and what (if anything) needs *you* |
+
+### Import a loop
+
+Have a loop library, catalog file, or reusable workflow from another project?
+Import it directly from Claude Code:
+
+```text
+/goals:import https://signals.forwardfuture.ai/loop-library/
+```
+
+If the source contains multiple loops or placeholders, Goals asks Claude Code to
+ask you the missing questions, then reruns with `--select` and repeated
+`--answer KEY=value` flags. It writes the loop design, portable goal files, and
+HTML preview into the loop output directory, records source hashes/provenance,
+and runs `goals loop check --target-agent claude` before you activate it.
+
+Terminal equivalent:
+
+```bash
+goals loop import https://signals.forwardfuture.ai/loop-library/ --out .goals --no-prompt
+goals loop check --out .goals --target-agent claude
+goals loop activate --out .goals --agent claude
+```
+
+See [Importing Loops](docs/LOOP_IMPORT.md) for supported source shapes,
+selection, answers, provenance, and validation profiles.
 
 Prefer the terminal? Use `goals start "…"`, then `goals next` and `goals check` — see
 [The command set](#the-command-set).
@@ -152,7 +181,8 @@ Most people only need these:
 | `goals next` | Get the next step, ready to hand to your AI |
 | `goals check` | Plain-language status: progress, proof, and what needs you |
 | `goals view` | Open the dashboard — your goal at a glance, for humans |
-| `goals loop` | Design, check, and improve the workflow itself |
+| `goals loop import <source>` | Import a loop/catalog from a URL, file, directory, or builder script |
+| `goals loop build/check/activate/improve` | Design, validate, start from, and improve the workflow itself |
 
 ## For developers
 
@@ -160,6 +190,13 @@ Under the hood, Goals is a small CLI + Claude Code / Codex plugin. It keeps goal
 evidence, decisions, and an append-only history as plain files in your repo, plus a
 portable spec any agent can pick up. On `main` it works in an isolated git worktree so
 your checkout stays clean. `goals check --json` gives agents a machine-readable view.
+
+Loop imports are intentionally adapter-shaped: a source reader loads URLs/files,
+a catalog adapter parses JSON/YAML/HTML fallbacks/builder scripts, and the normalizer
+turns one selected loop into Goals' durable `loop-design.json`. Validation profiles
+such as `imported-loop`, `browser-ux-loop`, and `benchmark-loop` live in
+`registries/profiles.yml` and expand reusable proof requirements during export,
+activation, and checking without hiding missing authored stop conditions.
 
 Note: `goals start` runs in a git project (it makes a safe, isolated copy to work in).
 Run `goals --help` for the full CLI, portability commands, and the visual loop builder.

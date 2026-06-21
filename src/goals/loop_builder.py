@@ -61,6 +61,20 @@ class LoopPhase(BaseModel):
     validation_profiles: list[str] = Field(default_factory=list)
 
 
+class LoopSourceMetadata(BaseModel):
+    """Where an imported loop came from, without making the source executable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str
+    effective_source: str = ""
+    source_sha256: str = ""
+    selected: str = ""
+    content_sha256: str = ""
+    imported_at: str = Field(default_factory=utc_now)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class LoopDesign(BaseModel):
     """A composed goal loop. Compiles to the portable spec; renders to HTML."""
 
@@ -70,6 +84,7 @@ class LoopDesign(BaseModel):
     objective: str = ""
     why: str = ""
     definition_of_done: list[str] = Field(default_factory=list)
+    source_metadata: LoopSourceMetadata | None = None
     phases: list[LoopPhase] = Field(default_factory=list)
 
 
@@ -96,6 +111,7 @@ def save_design(
     out_dir: Path,
     *,
     skills: list[DiscoveredSkill] | None = None,
+    profile_root: Path | None = None,
 ) -> LoopSaveResult:
     """Write the design artifact, the portable spec pair, and the HTML export.
 
@@ -110,14 +126,15 @@ def save_design(
     markdown_path = out_dir / MARKDOWN_FILENAME
     html_path = out_dir / HTML_FILENAME
 
-    snapshot = to_snapshot(design)
-    atomic_write_text(design_path, design.model_dump_json(indent=2) + "\n")
+    projected = with_validation_profiles(design, root=profile_root)
+    snapshot = to_snapshot(projected, expand_profiles=False)
+    atomic_write_text(design_path, design.model_dump_json(indent=2, exclude_none=True) + "\n")
     atomic_write_text(
         state_path,
         json.dumps(build_portable_state(snapshot), indent=2, ensure_ascii=False) + "\n",
     )
     atomic_write_text(markdown_path, render_goal_markdown(snapshot))
-    atomic_write_text(html_path, render_loop_html(design, skills=discovered))
+    atomic_write_text(html_path, render_loop_html(projected, skills=discovered, expand_profiles=False))
     return LoopSaveResult(
         design_path=str(design_path),
         state_path=str(state_path),
@@ -138,18 +155,54 @@ def load_design(path: Path) -> LoopDesign:
         raise GoalsError(f"Invalid loop design at {path}: {exc}") from exc
 
 
+def profile_root_for_loop_path(path: Path, *, cwd: Path | None = None) -> Path:
+    """Infer the project root that owns a loop design path.
+
+    The normal durable layout is ``<project>/.goals/loop-design.json``. Custom
+    output dirs are allowed; for those, walk upward to find the owning registry.
+    """
+    candidate = path.expanduser()
+    if not candidate.is_absolute() and cwd is not None:
+        candidate = cwd / candidate
+    design_dir = candidate.parent if candidate.name == DESIGN_FILENAME else candidate
+    if design_dir.name == ".goals":
+        return design_dir.parent
+    for parent in (design_dir, *design_dir.parents):
+        if (parent / "registries" / "profiles.yml").exists():
+            return parent
+    return cwd or Path.cwd()
+
+
 # --------------------------------------------------------------------------- #
 # Portable-spec projection (reuse, never reinvent, portability.py)
 # --------------------------------------------------------------------------- #
-def to_snapshot(design: LoopDesign) -> GoalSnapshot:
+def with_validation_profiles(design: LoopDesign, *, root: Path | None = None) -> LoopDesign:
+    """Materialize profile proof rules for export/runtime projections.
+
+    The saved ``loop-design.json`` keeps profile names as the durable design
+    source. Projections call this helper so profile behavior is consistent for
+    imported loops, hand-authored loops, activation, and HTML export.
+    """
+    from goals.validation_profiles import apply_validation_profiles
+
+    return apply_validation_profiles(design, root=root).design
+
+
+def to_snapshot(
+    design: LoopDesign,
+    *,
+    expand_profiles: bool = True,
+    profile_root: Path | None = None,
+) -> GoalSnapshot:
     """Project the design into a valid :class:`GoalSnapshot`.
 
     Termination conditions and attached skill references stay as structured
     protocol metadata. The topology is a synthetic placeholder: the portable spec
     is path-sanitized and only reads ``topology.branch``.
     """
-    slug = slugify(design.objective) if design.objective else "loop"
-    ids = [phase.phase_id for phase in design.phases]
+    projected = with_validation_profiles(design, root=profile_root) if expand_profiles else design
+    slug = slugify(projected.objective) if projected.objective else "loop"
+    ids = [phase.phase_id for phase in projected.phases]
     duplicates = sorted({pid for pid in ids if ids.count(pid) > 1})
     if duplicates:
         # A hand-edited loop-design.json could collide ids; the portable spec
@@ -168,13 +221,13 @@ def to_snapshot(design: LoopDesign) -> GoalSnapshot:
                 validation_profiles=list(phase.validation_profiles),
             ),
         )
-        for phase in design.phases
+        for phase in projected.phases
     ]
     return GoalSnapshot(
         goal_id=slug,
-        objective=design.objective or "Untitled loop",
-        why=design.why,
-        definition_of_done=list(design.definition_of_done),
+        objective=projected.objective or "Untitled loop",
+        why=projected.why,
+        definition_of_done=list(projected.definition_of_done),
         topology=WorktreeLease(
             base_repo=".",
             base_branch="main",
@@ -419,13 +472,22 @@ def _cmd_check(session: BuilderSession, rest: str) -> BuilderResponse:
         from goals.loop_check import check_loop, render_loop_check_report
     except ImportError:  # pragma: no cover - until Phase 2 lands
         return BuilderResponse("Loop checking is not available yet.")
-    report = check_loop(session.design, skills=session.skills)
+    report = check_loop(
+        session.design,
+        skills=session.skills,
+        profile_root=_profile_root_for_out_dir(session.out_dir),
+    )
     return BuilderResponse(render_loop_check_report(report))
 
 
 def _cmd_save(session: BuilderSession, rest: str) -> BuilderResponse:
     out_dir = Path(rest).expanduser() if rest else session.out_dir
-    result = save_design(session.design, out_dir, skills=session.skills)
+    result = save_design(
+        session.design,
+        out_dir,
+        skills=session.skills,
+        profile_root=_profile_root_for_out_dir(out_dir),
+    )
     return BuilderResponse(
         "Saved:\n"
         f"- design:   {result.design_path}\n"
@@ -433,6 +495,10 @@ def _cmd_save(session: BuilderSession, rest: str) -> BuilderResponse:
         f"- markdown: {result.markdown_path}\n"
         f"- html:     {result.html_path}"
     )
+
+
+def _profile_root_for_out_dir(out_dir: Path) -> Path:
+    return profile_root_for_loop_path(out_dir)
 
 
 def _cmd_help(session: BuilderSession, rest: str) -> BuilderResponse:
@@ -525,23 +591,32 @@ def render_loop_text(design: LoopDesign, *, selected: str | None = None) -> str:
     return "\n".join(lines)
 
 
-def render_loop_html(design: LoopDesign, *, skills: list[DiscoveredSkill] | None = None) -> str:
+def render_loop_html(
+    design: LoopDesign,
+    *,
+    skills: list[DiscoveredSkill] | None = None,
+    expand_profiles: bool = True,
+    profile_root: Path | None = None,
+) -> str:
     """Render a standalone, server-free HTML visualization of the loop.
 
     Skill availability (and the Claude-only install hint) is resolved live from
     ``skills`` so the HTML reflects the environment it is exported in.
     """
+    projected = (
+        with_validation_profiles(design, root=profile_root) if expand_profiles else design
+    )
     discovered = skills if skills is not None else discover_skills()
     by_name = {skill.name: skill for skill in discovered}
-    objective = escape(design.objective or "Untitled loop")
-    dod = "".join(f"<li>{escape(item)}</li>" for item in design.definition_of_done)
+    objective = escape(projected.objective or "Untitled loop")
+    dod = "".join(f"<li>{escape(item)}</li>" for item in projected.definition_of_done)
     # Arrows connect phases, so the first phase has none.
     phases_html = '<div class="arrow">&darr;</div>'.join(
-        _phase_html(phase, by_name) for phase in design.phases
+        _phase_html(phase, by_name) for phase in projected.phases
     )
-    if not design.phases:
+    if not projected.phases:
         phases_html = '<p class="empty">No phases yet.</p>'
-    why_html = f'<p class="why">{escape(design.why)}</p>' if design.why else ""
+    why_html = f'<p class="why">{escape(projected.why)}</p>' if projected.why else ""
     dod_html = f"<h2>Definition of Done</h2><ul>{dod}</ul>" if dod else ""
     return f"""<!DOCTYPE html>
 <html lang="en">

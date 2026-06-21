@@ -3,8 +3,36 @@ kind: profiles
 profiles:
   generic:
     label: Generic project
-    gates: [phase-review, safety-check]
   web-app:
     label: Web app
-    gates: [phase-review, safety-check, ux-review]
-
+  imported-loop:
+    label: Imported loop
+    description: A loop imported from a catalog or external source.
+    acceptance_criteria:
+      - Evidence is recorded against the imported loop step before this phase is accepted.
+    termination_conditions:
+      - The imported loop stop condition is satisfied or an explicit blocker is recorded.
+  benchmark-loop:
+    label: Benchmark loop
+    description: Baseline, compare, and keep only verified improvements.
+    acceptance_criteria:
+      - The baseline and current measurement use the same documented method.
+      - Evidence records the measured result and whether it regressed.
+  browser-ux-loop:
+    label: Browser UX loop
+    description: Browser or screenshot based verification for user-facing loops.
+    acceptance_criteria:
+      - Browser or screenshot evidence is recorded for the affected user-visible state.
+      - Any untested screen size, mode, or interaction remains an explicit known gap.
+  experiment-loop:
+    label: Experiment loop
+    description: Comparable candidate runs with guard-safe promotion.
+    acceptance_criteria:
+      - Candidate results are compared against the same evaluation conditions.
+      - Promotion, rollback, or stop reason is recorded with evidence.
+  repository-maintenance-loop:
+    label: Repository maintenance loop
+    description: Repository cleanup, branch, or release work with local proof.
+    acceptance_criteria:
+      - Repository state was inspected before changing files.
+      - Relevant tests or checks are recorded after the retained change.

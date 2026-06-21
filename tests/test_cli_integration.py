@@ -3,6 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from goals.loop_builder import LoopDesign, LoopPhase
 from goals.models import Event, EventType, Evidence, GateResult, GateVerdict, GoalSnapshot, GoalStatus, Phase, PhaseStatus, WorktreeLease
 from goals.storage import EventStore
 
@@ -792,6 +793,143 @@ def test_loop_build_script_resets_by_default_and_append_is_explicit(tmp_path: Pa
     assert len(appended["phases"]) == 2
 
 
+def test_loop_import_catalog_writes_design_and_expands_profiles(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "loops": [
+                    {
+                        "slug": "test-stabilizer-loop",
+                        "title": "The test stabilizer loop",
+                        "useWhen": "Use when [N] consecutive full-suite runs must pass.",
+                        "verification": {
+                            "title": "The full test suite passes for [N] consecutive runs.",
+                            "detail": "No blind sleep or retry hides the cause.",
+                        },
+                        "steps": [
+                            "Choose the test suite and [N].",
+                            "Fix the most frequent flake.",
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    out = tmp_path / ".goals"
+
+    imported = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "import",
+            str(catalog),
+            "--out",
+            str(out),
+            "--select",
+            "test-stabilizer-loop",
+            "--answer",
+            "N=3",
+            "--no-prompt",
+        ],
+        tmp_path,
+    )
+
+    assert "Imported loop: The test stabilizer loop" in imported.stdout
+    design = json.loads((out / "loop-design.json").read_text())
+    assert design["objective"] == "The test stabilizer loop"
+    assert "[N]" not in json.dumps(design)
+    assert "imported-loop" in design["phases"][0]["validation_profiles"]
+    assert design["source_metadata"]["content_sha256"]
+    assert any("Evidence is recorded" in item for item in design["phases"][0]["acceptance_criteria"])
+    state = json.loads((out / "goal-state.json").read_text())
+    assert any(
+        "Evidence is recorded against the imported loop step" in item["text"]
+        for item in state["phases"][0]["acceptance_criteria"]
+    )
+
+
+def test_loop_import_uses_output_repo_profile_registry(tmp_path: Path) -> None:
+    loop_repo = tmp_path / "loop-repo"
+    loop_repo.mkdir()
+    init_repo(loop_repo)
+    (loop_repo / "registries" / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "kind: profiles",
+                "profiles:",
+                "  local-profile:",
+                "    label: Local profile",
+                "    acceptance_criteria:",
+                "      - Imported output repo proof is recorded.",
+            ]
+        )
+    )
+    target_repo = tmp_path / "target-repo"
+    target_repo.mkdir()
+    init_repo(target_repo)
+    catalog = target_repo / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "title": "External profile loop",
+                "profiles": ["local-profile"],
+                "steps": ["Do the profiled work."],
+                "verification": "Done.",
+            }
+        )
+    )
+    out = loop_repo / ".goals"
+
+    run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "import",
+            str(catalog),
+            "--out",
+            str(out),
+            "--no-prompt",
+        ],
+        target_repo,
+    )
+
+    state = json.loads((out / "goal-state.json").read_text())
+    criteria = [item["text"] for item in state["phases"][0]["acceptance_criteria"]]
+    assert "Imported output repo proof is recorded." in criteria
+
+
+def test_loop_import_refuses_to_overwrite_existing_artifacts_without_force(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"title": "One", "steps": ["Do one."], "verification": "Done."}))
+    out = tmp_path / ".goals"
+    out.mkdir()
+    (out / "loop-design.json").write_text("{}")
+
+    refused = run_unchecked(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "import",
+            str(catalog),
+            "--out",
+            str(out),
+            "--no-prompt",
+        ],
+        tmp_path,
+    )
+
+    assert refused.returncode == 1
+    assert "Refusing to overwrite" in refused.stdout
+
+
 def test_loop_check_target_agent_reports_bundled_skill_not_installed(tmp_path: Path) -> None:
     script = tmp_path / "loop.txt"
     script.write_text(
@@ -858,10 +996,71 @@ def test_loop_activate_creates_runtime_phases_with_protocol(tmp_path: Path) -> N
     snapshot = json.loads(goal_file.read_text())
     phase = snapshot["phases"][0]
 
-    assert phase["acceptance_criteria"] == ["Plan is clear"]
+    assert "Plan is clear" in phase["acceptance_criteria"]
+    assert any("user-visible review" in item for item in phase["acceptance_criteria"])
     assert phase["protocol"]["termination_conditions"] == ["Plan accepted"]
     assert phase["protocol"]["skills"] == ["goals-problem-solving"]
     assert phase["protocol"]["validation_profiles"] == ["product-ux-review"]
+
+
+def test_loop_activate_resolves_profiles_from_loop_repo_when_cwd_differs(tmp_path: Path) -> None:
+    loop_repo = tmp_path / "loop-repo"
+    loop_repo.mkdir()
+    init_repo(loop_repo)
+    (loop_repo / "registries" / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "kind: profiles",
+                "profiles:",
+                "  local-profile:",
+                "    label: Local profile",
+                "    acceptance_criteria:",
+                "      - Loop repo proof is recorded.",
+                "    termination_conditions:",
+                "      - Loop repo stop condition is met.",
+            ]
+        )
+    )
+    loop_dir = loop_repo / ".goals"
+    loop_dir.mkdir()
+    design = LoopDesign(
+        objective="Activate external loop",
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="Plan",
+                acceptance_criteria=["Plan has evidence from a test."],
+                validation_profiles=["local-profile"],
+            )
+        ],
+    )
+    (loop_dir / "loop-design.json").write_text(design.model_dump_json(indent=2))
+
+    target_repo = tmp_path / "target-repo"
+    target_repo.mkdir()
+    init_repo(target_repo)
+    run(["git", "checkout", "-b", "feature"], target_repo)
+    activated = run(
+        [
+            "python",
+            "-m",
+            "goals.cli",
+            "loop",
+            "activate",
+            "--out",
+            str(loop_dir),
+            "--in-place",
+        ],
+        target_repo,
+    )
+
+    assert "# Goal Started" in activated.stdout
+    goal_file = next((target_repo / ".agent-workflow" / "goals").glob("*/goal.json"))
+    snapshot = json.loads(goal_file.read_text())
+    phase = snapshot["phases"][0]
+    assert "Loop repo proof is recorded." in phase["acceptance_criteria"]
+    assert phase["protocol"]["termination_conditions"] == ["Loop repo stop condition is met."]
 
 
 def test_loop_activate_refuses_empty_design_before_creating_goal_state(tmp_path: Path) -> None:

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from goals.loop_builder import (
     build_portable_state,
     load_design,
     new_session,
+    profile_root_for_loop_path,
     render_loop_html,
     run_script,
     save_design,
@@ -211,6 +213,72 @@ def test_save_writes_all_four_artifacts_and_round_trips(tmp_path: Path) -> None:
 
     reloaded = load_design(Path(result.design_path))
     assert reloaded == session.design  # JSON round-trip is lossless.
+
+
+def test_profile_root_for_custom_loop_dir_walks_to_registry(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    registry = repo / "registries"
+    registry.mkdir(parents=True)
+    registry.joinpath("profiles.yml").write_text("version: 1\nkind: profiles\nprofiles: {}\n")
+    loop_dir = repo / "loops" / "catalog" / "quality"
+
+    assert profile_root_for_loop_path(loop_dir, cwd=tmp_path) == repo
+
+
+def test_save_uses_one_profile_root_for_state_and_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile_root = tmp_path / "profile-root"
+    profile_registry = profile_root / "registries"
+    profile_registry.mkdir(parents=True)
+    profile_registry.joinpath("profiles.yml").write_text(
+        "\n".join(
+            [
+                "kind: profiles",
+                "profiles:",
+                "  local-profile:",
+                "    label: Local profile",
+                "    acceptance_criteria:",
+                "      - Project-specific proof is recorded.",
+            ]
+        )
+    )
+    cwd = tmp_path / "cwd"
+    cwd_registry = cwd / "registries"
+    cwd_registry.mkdir(parents=True)
+    cwd_registry.joinpath("profiles.yml").write_text(
+        "\n".join(
+            [
+                "kind: profiles",
+                "profiles:",
+                "  local-profile:",
+                "    label: Wrong profile",
+                "    acceptance_criteria:",
+                "      - Wrong cwd proof is recorded.",
+            ]
+        )
+    )
+    monkeypatch.chdir(cwd)
+    design = LoopDesign(
+        objective="Profile root",
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="Plan",
+                validation_profiles=["local-profile"],
+            )
+        ],
+    )
+
+    save_design(design, tmp_path / "out", skills=_skills(), profile_root=profile_root)
+
+    state = json.loads((tmp_path / "out" / "goal-state.json").read_text())
+    criteria = [item["text"] for item in state["phases"][0]["acceptance_criteria"]]
+    html = (tmp_path / "out" / "loop.html").read_text()
+    assert "Project-specific proof is recorded." in criteria
+    assert "Project-specific proof is recorded." in html
+    assert "Wrong cwd proof is recorded." not in criteria
+    assert "Wrong cwd proof is recorded." not in html
 
 
 def test_exported_html_is_standalone_and_escapes(tmp_path: Path) -> None:

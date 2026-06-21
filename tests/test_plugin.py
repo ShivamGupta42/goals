@@ -127,10 +127,19 @@ def test_hooks_json_wires_session_start_and_stop() -> None:
 
 
 def test_commands_exist_with_frontmatter() -> None:
-    for name in ("create", "next", "check", "diagram", "improve"):
+    for name in ("create", "next", "check", "diagram", "improve", "import"):
         text = (REPO / "commands" / f"{name}.md").read_text()
         assert text.startswith("---")  # frontmatter
         assert "description:" in text
+
+
+def test_import_command_drives_loop_import_and_validation() -> None:
+    text = (REPO / "commands" / "import.md").read_text()
+    assert "goals loop import" in text
+    assert "--no-prompt" in text
+    assert "goals loop check" in text
+    assert 'goals loop check --out "$OUT_DIR"' in text
+    assert "--target-agent claude" in text
 
 
 # --- self-bootstrapping plugin wrapper ------------------------------------- #

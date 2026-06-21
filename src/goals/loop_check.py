@@ -11,12 +11,18 @@ fixture is flagged the same way every run and a healthy loop passes clean.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from goals.loop_builder import LoopDesign, LoopPhase
 from goals.skill_discovery import DiscoveredSkill, discover_skills
+from goals.validation_profiles import (
+    ValidationProfile,
+    apply_validation_profiles,
+    load_validation_profiles,
+)
 
 Severity = Literal["p0", "p1", "p2"]
 AgentName = Literal["claude", "codex"]
@@ -102,17 +108,22 @@ def check_loop(
     *,
     skills: list[DiscoveredSkill] | None = None,
     target_agent: AgentName | None = None,
+    profiles: dict[str, ValidationProfile] | None = None,
+    profile_root: Path | None = None,
 ) -> LoopCheckReport:
     """Run every detector and return a severity-sorted report."""
     discovered = skills if skills is not None else discover_skills()
     by_name = {skill.name: skill for skill in discovered}
+    profile_defs = profiles if profiles is not None else load_validation_profiles(profile_root)
+    projected = apply_validation_profiles(design, profiles=profile_defs).design
     findings: list[LoopCheckFinding] = []
-    findings += _check_no_progress(design)
+    findings += _check_no_progress(projected)
     findings += _check_termination(design)
-    findings += _check_duplicate_and_empty_phases(design)
-    findings += _check_vague_acceptance(design)
-    findings += _check_skill_refs(design, by_name, target_agent=target_agent)
-    findings += _check_evidence_requirement(design)
+    findings += _check_duplicate_and_empty_phases(projected)
+    findings += _check_vague_acceptance(projected)
+    findings += _check_skill_refs(projected, by_name, target_agent=target_agent)
+    findings += _check_profile_refs(design, profile_defs)
+    findings += _check_evidence_requirement(projected)
     findings.sort(key=lambda f: _SEVERITY_ORDER[f.severity])
     passed = not findings
     if passed:
@@ -305,6 +316,32 @@ def _skill_install_fix(skill: DiscoveredSkill, target_agent: AgentName | None) -
     return "Install or copy the skill into an agent skill dir, or remove it from the phase."
 
 
+def _check_profile_refs(
+    design: LoopDesign,
+    profiles: dict[str, ValidationProfile],
+) -> list[LoopCheckFinding]:
+    findings: list[LoopCheckFinding] = []
+    for phase in design.phases:
+        for name in phase.validation_profiles:
+            if name not in profiles:
+                findings.append(
+                    LoopCheckFinding(
+                        severity="p1",
+                        code="unknown-validation-profile",
+                        summary=(
+                            f"Phase {phase.phase_id} references validation profile {name!r}, "
+                            "which is not in the built-ins or registries/profiles.yml."
+                        ),
+                        suggested_fix=(
+                            "Add the profile to registries/profiles.yml, rename the reference, "
+                            "or remove it from the phase."
+                        ),
+                        phase_id=phase.phase_id,
+                    )
+                )
+    return findings
+
+
 def _check_evidence_requirement(design: LoopDesign) -> list[LoopCheckFinding]:
     findings: list[LoopCheckFinding] = []
     for phase in design.phases:
@@ -332,6 +369,7 @@ def apply_fixes(
     *,
     skills: list[DiscoveredSkill] | None = None,
     target_agent: AgentName | None = None,
+    profile_root: Path | None = None,
 ) -> tuple[LoopDesign, list[str]]:
     """Return a fixed copy of the design plus a list of changes applied.
 
@@ -341,7 +379,12 @@ def apply_fixes(
     """
     fixed = design.model_copy(deep=True)
     changes: list[str] = []
-    report = check_loop(fixed, skills=skills, target_agent=target_agent)
+    report = check_loop(
+        fixed,
+        skills=skills,
+        target_agent=target_agent,
+        profile_root=profile_root,
+    )
     codes = {finding.code for finding in report.findings if finding.auto_fixable}
 
     if "duplicate-phase-id" in codes:
@@ -353,7 +396,12 @@ def apply_fixes(
         )
     if "no-evidence-requirement" in codes:
         # Re-check after structural fixes so phase ids in the report are current.
-        for finding in check_loop(fixed, skills=skills, target_agent=target_agent).findings:
+        for finding in check_loop(
+            fixed,
+            skills=skills,
+            target_agent=target_agent,
+            profile_root=profile_root,
+        ).findings:
             if finding.code == "no-evidence-requirement" and finding.phase_id:
                 phase = _phase(fixed, finding.phase_id)
                 if phase is not None:

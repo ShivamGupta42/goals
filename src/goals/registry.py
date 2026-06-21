@@ -28,6 +28,13 @@ ENTRY_KEYS = {
         "user_question",
         "agent_action",
     },
+    "profiles": {
+        "label",
+        "description",
+        "acceptance_criteria",
+        "termination_conditions",
+        "skills",
+    },
 }
 
 

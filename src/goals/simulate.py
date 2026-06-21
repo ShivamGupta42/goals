@@ -76,7 +76,7 @@ def _simulate_loop_script_reset_shape() -> SimulationScenarioResult:
             "save",
         ]
         run_script(session, script, write=lambda _line: None)
-        save_design(session.design, out, skills=session.skills)
+        save_design(session.design, out, skills=session.skills, profile_root=Path(tmp))
         state = (out / "goal-state.json").read_text(encoding="utf-8")
         passed = "Terminate when:" not in state and "Use skill:" not in state and "protocol" in state
         return SimulationScenarioResult(

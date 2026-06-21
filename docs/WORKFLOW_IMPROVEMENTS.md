@@ -11,6 +11,8 @@ chosen acceptance criteria are too shallow.
 - `goals phase verify` runs the declared automated checks in the goal worktree.
 - `goals loop check` catches structural loop design gaps such as missing
   evidence requirements.
+- `goals loop import` can bring external loop definitions into the same design,
+  check, activate, and improve path instead of creating a parallel workflow.
 - Bundled skills can be installed into a disposable agent home and referenced
   from loop phases.
 
@@ -30,11 +32,12 @@ chosen acceptance criteria are too shallow.
    A phase should pass only when each acceptance criterion is covered by a named
    verification, not merely because one automated command passed.
 
-4. Add skill-provided validation profiles.
-   Skill-first workflows should contribute done criteria and checks. For
-   frontend landing pages, a skill profile should require browser screenshots,
-   desktop and mobile smoke tests, overflow checks, CTA behavior, accessibility
-   checks, reduced-motion handling, and proof/claim review.
+4. Keep validation profiles extensible.
+   Profile-backed workflows now contribute reusable proof requirements through
+   `registries/profiles.yml` and imported loops can reference them by name. Keep
+   the contract narrow: profiles may add evidence requirements, skills, and
+   termination text for projection, but they must not hide missing authored loop
+   structure such as a real stop condition.
 
 5. Improve evidence projection.
    Evidence files may start with `ran: false` before verification; after

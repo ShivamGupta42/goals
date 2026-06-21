@@ -13,6 +13,8 @@ This directory holds deeper design notes and long-lived project context.
 - `NATIVE_INTEGRATION_PLAN.md` - design notes for Claude/Codex native surfaces.
 - `WORKFLOW_IMPROVEMENTS.md` - improvement list from real-world goal loop
   simulations.
+- `LOOP_IMPORT.md` - importing external loops/catalogs and validating them with
+  profile-backed proof requirements.
 - `goals-repo-guide.html` - generated visual guide to the repository.
 
 ## Maintenance
