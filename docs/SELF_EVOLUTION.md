@@ -144,9 +144,10 @@ underneath the native inner loop. Goals provides:
   `~/.agents/skills`, legacy `~/.codex/skills`, and goals' own bundled skills
   with no registry to maintain,
   plus optional install into an agent's dir (`goals skills install`),
-- a visual loop builder (`goals loop build|check|improve`) that composes goal
-  loops in a text TUI, lints them, exports standalone HTML, and feeds per-phase
-  regressions back into the memory loop above,
+- loop engineering commands (`goals loop import|build|check|activate|improve`)
+  that import external catalogs, compose custom loops, validate profile-backed
+  proof requirements, export standalone HTML, start goals from saved designs,
+  and feed per-phase regressions back into the memory loop above,
 - a permission policy (`goals permission check`) that keeps routine tool choices
   with the agent while surfacing external, costly, or destructive actions,
 - source evidence (`goals source add|freshness|list`) so research and business

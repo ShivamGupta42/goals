@@ -173,6 +173,8 @@ Package the in-agent experience. Plugin name `goals` ⇒ `/goals:<cmd>`.
   in the worktree:
   - `create.md` → `/goals:create "<objective>"` (start → work phase 1 **in the
     worktree**).
+  - `import.md` → `/goals:import <source>` (import an external loop/catalog,
+    ask for missing details, and validate it for Claude Code).
   - `next.md`, `check.md`, `status.md`, `phase.md`, `improve.md`, `diagram.md`,
     `dashboard.md`.
   - Bodies are explicit ("read goal.json, work the current phase **in the

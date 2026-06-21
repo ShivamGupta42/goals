@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from goals.health import GoalHealthReport, build_goal_health
-from goals.loop_builder import load_design, to_snapshot
+from goals.loop_builder import load_design, profile_root_for_loop_path, to_snapshot
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.projections import emit_dashboard, export_goal, refresh_goal_outputs
 from goals.storage import GoalsError
@@ -87,6 +87,7 @@ def start_workflow(
     new_project: Path | None = None,
     workspace: str = "auto",
     loop: Path | None = None,
+    profile_root: Path | None = None,
 ) -> WorkflowStart:
     phases = None
     definition_of_done = None
@@ -94,7 +95,8 @@ def start_workflow(
         design = load_design(loop)
         if not design.phases:
             raise GoalsError("Loop design must include at least one phase before activation.")
-        loop_snapshot = to_snapshot(design)
+        root = profile_root or profile_root_for_loop_path(loop, cwd=cwd)
+        loop_snapshot = to_snapshot(design, profile_root=root)
         phases = loop_snapshot.phases
         definition_of_done = loop_snapshot.definition_of_done
         objective = objective or loop_snapshot.objective

@@ -67,6 +67,20 @@ def test_detects_no_termination() -> None:
     assert "no-termination" in _codes(design, skills=_skills())
 
 
+def test_profile_termination_does_not_hide_missing_authored_stop() -> None:
+    design = LoopDesign(
+        phases=[
+            LoopPhase(
+                phase_id="P1",
+                title="P",
+                validation_profiles=["imported-loop"],
+            )
+        ]
+    )
+
+    assert "no-termination" in _codes(design, skills=_skills())
+
+
 def test_detects_no_acceptance_anywhere() -> None:
     design = LoopDesign(
         phases=[LoopPhase(phase_id="P1", title="P", termination_conditions=["User approves."])]

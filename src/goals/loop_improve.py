@@ -241,7 +241,7 @@ def plan_loop_improvements(
     still surface loop-design fixes.
     """
     improvements = _memory_improvements(cwd, snapshot)
-    improvements += _loop_design_improvements(design_dir)
+    improvements += _loop_design_improvements(design_dir, profile_root=cwd)
     auto = sum(1 for imp in improvements if imp.auto_applicable)
     if not improvements:
         summary = "No accumulated suggestions; nothing to improve."
@@ -266,9 +266,9 @@ def apply_loop_improvements(
     applied: list[str] = []
     if design_dir is not None and (design_dir / "loop-design.json").exists():
         design = load_design(design_dir)
-        fixed, changes = apply_fixes(design)
+        fixed, changes = apply_fixes(design, profile_root=cwd)
         if changes:
-            save_design(fixed, design_dir)
+            save_design(fixed, design_dir, profile_root=cwd)
             applied = changes
     summary = (
         f"Applied {len(applied)} safe loop-design fix(es)."
@@ -296,7 +296,11 @@ def _memory_improvements(cwd: Path, snapshot: GoalSnapshot | None) -> list[LoopI
     return improvements
 
 
-def _loop_design_improvements(design_dir: Path | None) -> list[LoopImprovement]:
+def _loop_design_improvements(
+    design_dir: Path | None,
+    *,
+    profile_root: Path,
+) -> list[LoopImprovement]:
     if design_dir is None or not (design_dir / "loop-design.json").exists():
         return []
     design = load_design(design_dir)
@@ -309,7 +313,7 @@ def _loop_design_improvements(design_dir: Path | None) -> list[LoopImprovement]:
             auto_applicable=True,
             evidence_refs=[finding.phase_id] if finding.phase_id else [],
         )
-        for finding in check_loop(design).findings
+        for finding in check_loop(design, profile_root=profile_root).findings
         if finding.auto_fixable
     ]
 

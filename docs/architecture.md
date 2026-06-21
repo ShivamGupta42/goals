@@ -24,7 +24,7 @@ flowchart TB
     agent([Your AI agent<br/>Claude Code / Codex])
 
     subgraph plugin["Plugin surface (.claude-plugin/, commands/, hooks/, skills/)"]
-        cmds["/goals:create · /goals:next<br>/goals:check · /goals:diagram"]
+        cmds["/goals:create · /goals:import<br>/goals:next · /goals:check · /goals:diagram"]
         sk["bundled skills/<br>SKILL.md files"]
     end
 
@@ -33,6 +33,7 @@ flowchart TB
         gates["gates.py + rubric.py<br/>executed-proof gate"]
         skill["skill_discovery.py<br/>skill_capabilities.py"]
         cap["capabilities.py<br/>capability-gap (Trust V1)"]
+        loopimport["loop_catalog.py<br/>loop import adapters"]
         journey["journey.py + decisions.py<br/>building journey (PACERS)"]
         port["portability.py<br/>cross-agent spec"]
         merge["merge_readiness.py<br/>git_ops.py"]
@@ -54,7 +55,7 @@ flowchart TB
     cli --> reg
     skill --> sk
     dash --> goalstate
-    runtime --> gates & skill & cap & journey & port & merge & dash
+    runtime --> gates & skill & cap & loopimport & journey & port & merge & dash
 ```
 
 **Why it's shaped this way:** state lives in *your* repo as plain files, so a goal

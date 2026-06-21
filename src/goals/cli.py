@@ -54,6 +54,7 @@ from goals.memory import (
 from goals.loop_builder import (
     load_design,
     new_session,
+    profile_root_for_loop_path,
     render_loop_html,
     run_builder,
     run_script,
@@ -66,6 +67,7 @@ from goals.loop_check import (
     render_fix_summary,
     render_loop_check_report,
 )
+from goals.loop_catalog import import_loop_design, render_import_result
 from goals.diagram import render_architecture as render_architecture_diagram
 from goals.diagram import render_loop as render_loop_diagram
 from goals.loop_improve import (
@@ -1907,6 +1909,21 @@ def _default_loop_out(out: Optional[Path]) -> Path:
     return out.expanduser() if out is not None else Path.cwd() / ".goals"
 
 
+def _parse_loop_answers(items: list[str] | None) -> dict[str, str]:
+    answers: dict[str, str] = {}
+    for item in items or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            raise GoalsError("--answer must be KEY=value, for example --answer N=5.")
+        answers[key.strip()] = value.strip()
+    return answers
+
+
+def _loop_artifacts(out_dir: Path) -> list[Path]:
+    names = ("loop-design.json", "goal-state.json", "GOAL.md", "loop.html")
+    return [out_dir / name for name in names if (out_dir / name).exists()]
+
+
 @loop_app.command("build")
 def loop_build(
     out: Optional[Path] = typer.Option(
@@ -1943,6 +1960,80 @@ def loop_build(
     _handle(run)
 
 
+@loop_app.command("import")
+def loop_import(
+    source: str = typer.Argument(
+        ...,
+        help="Loop source: URL, local file, directory, builder script, catalog JSON/YAML, or '-'.",
+    ),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="Directory to save the loop into (default: ./.goals)."
+    ),
+    select: str = typer.Option(
+        "",
+        "--select",
+        help="Loop id/slug/title when the source contains more than one loop.",
+    ),
+    answer: Optional[list[str]] = typer.Option(
+        None,
+        "--answer",
+        help="Answer an import placeholder as KEY=value. Repeat for multiple answers.",
+    ),
+    no_prompt: bool = typer.Option(
+        False,
+        "--no-prompt",
+        help="Do not ask questions; fail if --select or --answer is required.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite existing loop artifacts in --out.",
+    ),
+) -> None:
+    """Import an external loop definition into Goals loop-design artifacts."""
+
+    def run():
+        out_dir = _default_loop_out(out)
+        profile_root = profile_root_for_loop_path(out_dir, cwd=Path.cwd())
+        existing = _loop_artifacts(out_dir)
+        if existing and not force:
+            found = ", ".join(str(path) for path in existing)
+            raise GoalsError(
+                "Refusing to overwrite existing loop artifacts. "
+                f"Use --force to replace: {found}"
+            )
+        interactive = sys.stdin.isatty() and not no_prompt
+
+        def ask_selection(candidates):
+            typer.echo("Source contains multiple loops:")
+            for index, candidate in enumerate(candidates, start=1):
+                typer.echo(f"{index}. {candidate.candidate_id} — {candidate.title}")
+            choice = typer.prompt("Import which loop? Enter number, slug, or title")
+            if choice.isdigit():
+                index = int(choice)
+                if 1 <= index <= len(candidates):
+                    return candidates[index - 1].candidate_id
+            return choice
+
+        def ask_question(question):
+            if question.default:
+                return typer.prompt(question.prompt, default=question.default)
+            return typer.prompt(question.prompt)
+
+        result = import_loop_design(
+            source,
+            select=select,
+            answers=_parse_loop_answers(answer),
+            ask_selection=ask_selection if interactive else None,
+            ask_question=ask_question if interactive else None,
+            root=Path.cwd(),
+        )
+        saved = save_design(result.design, out_dir, profile_root=profile_root)
+        typer.echo(render_import_result(result, design_path=saved.design_path))
+
+    _handle(run)
+
+
 @loop_app.command("activate")
 def loop_activate(
     out: Optional[Path] = typer.Option(
@@ -1965,6 +2056,7 @@ def loop_activate(
             raise GoalsError("Choose either --worktree or --in-place, not both.")
         requested = "worktree" if worktree else "in_place" if in_place else "auto"
         loop_dir = _default_loop_out(out)
+        profile_root = profile_root_for_loop_path(loop_dir, cwd=Path.cwd())
         report = start_workflow(
             "",
             Path.cwd(),
@@ -1972,6 +2064,7 @@ def loop_activate(
             autonomy=autonomy,
             workspace=requested,
             loop=loop_dir,
+            profile_root=profile_root,
         )
         typer.echo(render_start_workflow(report))
 
@@ -1991,13 +2084,14 @@ def loop_export(
 
     def run():
         out_dir = _default_loop_out(out)
+        profile_root = profile_root_for_loop_path(out_dir, cwd=Path.cwd())
         design = load_design(out_dir)
         if html_only:
             html_path = out_dir / "loop.html"
-            atomic_write_text(html_path, render_loop_html(design))
+            atomic_write_text(html_path, render_loop_html(design, profile_root=profile_root))
             typer.echo(f"Wrote {html_path}")
         else:
-            result = save_design(design, out_dir)
+            result = save_design(design, out_dir, profile_root=profile_root)
             typer.echo(f"Wrote {result.html_path}, {result.state_path}, {result.markdown_path}")
 
     _handle(run)
@@ -2021,6 +2115,7 @@ def loop_check(
 
     def run():
         out_dir = _default_loop_out(out)
+        profile_root = profile_root_for_loop_path(out_dir, cwd=Path.cwd())
         design = load_design(out_dir)
         target = (
             cast(AgentName, _validate_choice(target_agent, {"claude", "codex"}, "target-agent"))
@@ -2028,12 +2123,12 @@ def loop_check(
             else None
         )
         if fix:
-            fixed, changes = apply_fixes(design, target_agent=target)
+            fixed, changes = apply_fixes(design, target_agent=target, profile_root=profile_root)
             if changes:
-                save_design(fixed, out_dir)
+                save_design(fixed, out_dir, profile_root=profile_root)
             typer.echo(render_fix_summary(changes))
             design = fixed
-        report = check_loop(design, target_agent=target)
+        report = check_loop(design, target_agent=target, profile_root=profile_root)
         typer.echo(render_loop_check_report(report))
         if report.has_blocking:
             raise typer.Exit(1)
