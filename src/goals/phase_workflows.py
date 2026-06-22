@@ -27,6 +27,14 @@ class PhaseAcceptReport:
     snapshot: GoalSnapshot
     interview: str = ""
     warning: str = ""
+    completion_note: str = ""
+
+
+COMPLETION_CRITIQUE_NUDGE = (
+    "Goal complete. Optional: run `/goals:critique` (the goals-critique skill) to "
+    "capture lessons into memory and surface cross-goal patterns — worth it if this "
+    "goal was painful, stalled, or complex."
+)
 
 
 def start_phase(cwd: Path, phase_id: str) -> GoalSnapshot:
@@ -59,6 +67,12 @@ def accept_phase(cwd: Path, phase_id: str) -> PhaseAcceptReport:
         return PhaseAcceptReport(snapshot=snapshot)
     try:
         interview = render_post_goal_interview(snapshot.goal_id) if mark_interview_prompted(snapshot.goal_id) else ""
-        return PhaseAcceptReport(snapshot=snapshot, interview=interview)
+        return PhaseAcceptReport(
+            snapshot=snapshot, interview=interview, completion_note=COMPLETION_CRITIQUE_NUDGE
+        )
     except GoalsError as exc:
-        return PhaseAcceptReport(snapshot=snapshot, warning=f"User memory warning: {exc}")
+        return PhaseAcceptReport(
+            snapshot=snapshot,
+            warning=f"User memory warning: {exc}",
+            completion_note=COMPLETION_CRITIQUE_NUDGE,
+        )
