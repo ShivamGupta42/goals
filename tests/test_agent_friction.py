@@ -50,7 +50,7 @@ def test_unknown_evidence_field_is_named_with_allowed_fields() -> None:
         _load_json_model(bad, None, Evidence)
     message = str(exc.value)
     assert "summary" in message  # names the offending key
-    assert "Allowed fields" in message
+    assert "Allowed top-level fields" in message
     assert "verifications" in message  # lists a real field
     assert "validation error" not in message.lower()  # not a raw pydantic dump
 
@@ -59,6 +59,26 @@ def test_valid_evidence_still_loads() -> None:
     ok = json.dumps({"confidence": 0.5, "notes": "fine"})
     model = _load_json_model(ok, None, Evidence)
     assert model.confidence == 0.5
+
+
+def test_nested_unknown_field_is_reported_with_full_path() -> None:
+    # A stray key inside verifications[0] must name the full path, not just the leaf.
+    bad = json.dumps(
+        {"verifications": [{"covers": "P1.C1", "kind": "auto", "command": "true", "bogus": 1}]}
+    )
+    with pytest.raises(GoalsError) as exc:
+        _load_json_model(bad, None, Evidence)
+    assert "verifications.0.bogus" in str(exc.value)
+
+
+def test_mixed_extra_and_type_errors_are_both_surfaced() -> None:
+    # An extra key AND a bad-type value: neither may be silently dropped.
+    bad = json.dumps({"summary": "x", "confidence": "not-a-number"})
+    with pytest.raises(GoalsError) as exc:
+        _load_json_model(bad, None, Evidence)
+    message = str(exc.value)
+    assert "summary" in message  # the extra key
+    assert "confidence" in message  # the type error, not dropped
 
 
 # --- E1a: `goals next --json` exposes the evidence schema before authoring --- #
@@ -73,6 +93,22 @@ def test_next_json_emits_evidence_schema(tmp_path: Path, monkeypatch) -> None:
     assert "summary" not in data["evidence_fields"]
     assert "passed" in data["verification_fields"]
     assert "engine-owned" in data["note"]
+
+
+def test_next_json_returns_structured_error_when_no_phase(tmp_path: Path, monkeypatch) -> None:
+    # --json is a machine API: with no active goal it must emit JSON, not a text error.
+    _run(["git", "init", "-b", "feature"], tmp_path)
+    _run(["git", "config", "user.email", "t@example.com"], tmp_path)
+    _run(["git", "config", "user.name", "T"], tmp_path)
+    (tmp_path / "README.md").write_text("# demo\n")
+    _run(["git", "add", "-A"], tmp_path)
+    _run(["git", "commit", "-m", "init"], tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["next", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["current_phase"] is None
+    assert "error" in data
 
 
 # --- E2: recording evidence with agent-set passed/ran prints a notice -------- #

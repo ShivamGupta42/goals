@@ -221,22 +221,34 @@ def _format_validation_error(model, exc: ValidationError) -> str:
     """Turn a raw pydantic error into an actionable, agent-friendly message.
 
     The common authoring mistake is an extra key the model forbids (e.g. a
-    ``summary`` field on ``Evidence``). Name the offending keys and list what is
-    allowed, instead of leaving the agent to decode a pydantic traceback.
+    ``summary`` field on ``Evidence``, or a stray key inside a nested
+    ``verifications[i]``). Name the offending keys by their full path and list
+    what is allowed, instead of leaving the agent to decode a pydantic
+    traceback. Non-"extra" problems (missing/type errors) are summarised too —
+    never silently dropped — so a mixed payload surfaces all of its issues.
     """
-    extra_keys = [
-        str(err["loc"][-1])
-        for err in exc.errors()
-        if err.get("type") == "extra_forbidden" and err.get("loc")
-    ]
+    extra_paths: list[str] = []
+    other: list[str] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        path = ".".join(str(part) for part in loc) or "(root)"
+        if err.get("type") == "extra_forbidden":
+            extra_paths.append(path)
+        else:
+            other.append(f"{path}: {err.get('msg', 'invalid')}")
+    if not extra_paths and not other:
+        return f"Invalid {model.__name__}: {exc}"
     allowed = ", ".join(sorted(model.model_fields)) or "(none)"
-    if extra_keys:
-        keys = ", ".join(sorted(set(extra_keys)))
-        return (
-            f"Invalid {model.__name__}: unknown field(s): {keys}. "
-            f"Allowed fields: {allowed}."
-        )
-    return f"Invalid {model.__name__}: {exc}"
+    parts: list[str] = []
+    if extra_paths:
+        parts.append("unknown field(s): " + ", ".join(sorted(set(extra_paths))))
+    if other:
+        parts.append("other problem(s): " + "; ".join(other))
+    return (
+        f"Invalid {model.__name__}: "
+        + ". ".join(parts)
+        + f". Allowed top-level fields: {allowed}."
+    )
 
 
 def _parse_subproblem(spec: str) -> Subproblem:
@@ -344,8 +356,14 @@ def next_command(
     """
 
     def run():
-        report = next_workflow(Path.cwd(), agent=agent, full=full)
         if json_output:
+            # --json is a machine API: a complete goal (no current phase) must
+            # return a structured payload, not a plain-text GoalsError.
+            try:
+                report = next_workflow(Path.cwd(), agent=agent, full=full)
+            except GoalsError as exc:
+                typer.echo(json.dumps({"current_phase": None, "error": str(exc)}, indent=2))
+                return
             payload = {
                 "current_phase": report.plan.current_phase,
                 "evidence_file": report.plan.evidence_file,
@@ -360,6 +378,7 @@ def next_command(
             }
             typer.echo(json.dumps(payload, indent=2))
             return
+        report = next_workflow(Path.cwd(), agent=agent, full=full)
         typer.echo(report.plan.prompt)
 
     _handle(run)
@@ -1804,12 +1823,21 @@ def phase_evidence(
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
         evidence = _load_json_model(evidence_json, file, Evidence)
+        # storage.py strips all of these engine-owned result fields on record.
         preset = sum(
-            1 for v in evidence.verifications if v.ran or v.passed or v.exit_code is not None
+            1
+            for v in evidence.verifications
+            if v.ran
+            or v.passed
+            or v.exit_code is not None
+            or v.output_excerpt
+            or v.ran_at
+            or v.output_sha256
         )
         if preset:
             typer.echo(
-                f"Note: ignored agent-set ran/passed on {preset} verification(s) — "
+                f"Note: ignored agent-set verification result fields "
+                f"(ran/passed/exit_code/output_*) on {preset} verification(s) — "
                 "run `goals phase verify` to record real results.",
                 err=True,
             )
