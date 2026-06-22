@@ -1,9 +1,15 @@
 # Critique — goal "keep refining this gym…" (thinking-gym)
 
+> **Historical worked example (pre-PR #26).** This critique is what *surfaced*
+> the E1–E5 engine friction; those fixes have since shipped, so the `file:line`
+> citations and "engine friction" items below describe the code **as it was when
+> the critique ran**, not current `main`. It's preserved as a model of what the
+> `goals-critique` skill produces, not as a live bug list.
+
 Worked example of the `goals-critique` skill. Subject: a 4-phase goal that
 shipped a new-user onboarding layer for the `thinking-gym` repo. Outcome:
 complete, 4/4 phases accepted, but with **three avoidable friction stalls**.
-Citations are into `~/Desktop/p_code/goals/src/goals/`.
+Citations are into `~/Desktop/p_code/goals/src/goals/` (as of the critique).
 
 ## What went well
 

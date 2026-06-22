@@ -1,5 +1,9 @@
 # Fix Plan — Agent-experience friction (E1–E5)
 
+> **Status: IMPLEMENTED.** E1–E5 shipped in **PR #26** (merged to `main`). This
+> document is kept as a historical record of the analysis — it is **not** an open
+> TODO. See `tests/test_agent_friction.py` for the verifying tests.
+
 Surfaced by driving a real 4-phase goal end-to-end and critiquing the experience
 (see `skills/goals-critique/references/example-critique-thinking-gym.md`). Theme:
 **rules are enforced in code but surfaced only in code** — an agent discovers them

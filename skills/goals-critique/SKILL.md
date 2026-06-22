@@ -61,8 +61,8 @@ should be repeated, `--area` ∈ {phase, skill, gate, decision, docs, test}.
 
 **5. Surface cross-goal patterns** (the "learn from all goals" payoff):
 ```bash
-goals memory suggest --json     # this project: repeated friction → suggestions
-goals memory sync               # pull sanitized lessons from another goal project
+goals memory suggest --json              # this project: repeated friction → suggestions
+goals memory sync <other-goal-root>      # dry-run import of sanitized lessons from another project (add --apply to enact)
 ```
 Anything that recurs across ≥2 goal runs is no longer a one-off — promote it: either a
 new/updated skill (durable behavior change) or an upstream engine issue.

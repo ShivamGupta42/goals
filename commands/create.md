@@ -11,15 +11,18 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    a worktree, run commands and edit files there; the user never has to `cd`.
 2. **Pause + Assess the goal first** (PACERS — see `/goals-problem-solving`).
    Rephrase "$ARGUMENTS" into a specific, testable problem; ask *why* until it
-   simplifies to the root; let the sub-problems become the phases. Record the
-   goal-level breakdown so the user can trace the framing:
-   `goals assess breakdown --file breakdown.json` (problem, whys, sub-problems).
-   Skip only if the goal is trivial and unambiguous.
+   simplifies to the root. (Phases follow a fixed arc — Confirm → Inspect →
+   Execute → Review; your breakdown is the plan *inside* those phases, not the
+   phases themselves.) Record the goal-level breakdown so the user can trace the
+   framing: `goals assess breakdown --file breakdown.json` (problem, whys,
+   sub-problems). Skip only if the goal is trivial and unambiguous.
 3. Run `goals next --agent claude` (from that path) and follow the phase loop it
    prints: work only the current phase, then record evidence with
    `goals phase evidence <PHASE> --file <evidence.json>`, run
-   `goals phase review <PHASE>`, and once it passes, `goals phase accept <PHASE>`.
-3. Before interrupting the user, run `goals check` (or `goals brief`) and ask in
+   `goals phase verify <PHASE>` (the engine runs your checks and records the real
+   results — you can't pass a check yourself), then `goals phase review <PHASE>`,
+   and once it passes, `goals phase accept <PHASE>`.
+4. Before interrupting the user, run `goals check` (or `goals brief`) and ask in
    its plain wording only if it says you're waiting on the user.
 
 Keep going phase by phase until `goals check` reports the goal complete. Use
