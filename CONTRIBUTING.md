@@ -8,6 +8,8 @@ its decisions, and its evidence as plain files you own. The same discipline the
 tool enforces on agents applies here: a change is done when its checks actually
 run and pass.
 
+By taking part, you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Ways to contribute
 
 - **Report a bug or rough edge.** Open an issue with what you ran, what you
