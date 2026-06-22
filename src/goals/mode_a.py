@@ -135,6 +135,8 @@ Phase goal: {plan.phase_goal}
 Acceptance criteria:
 {criteria}
 
+(Phases follow a fixed arc — Confirm → Inspect → Execute → Review. Your `goals assess breakdown` is the plan *inside* these phases, not the phases themselves; to drive phases from a custom design use `goals loop build` then `goals loop activate`.)
+
 Required loop:
 1. Read `goal.json` before each turn and work only on the current phase.
 2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
@@ -227,6 +229,8 @@ Current phase: {phase} - {plan.phase_title}
 Phase goal: {plan.phase_goal}
 Acceptance:
 {criteria}
+
+(Phases follow a fixed arc — Confirm → Inspect → Execute → Review. Your `goals assess breakdown` is the plan *inside* these phases, not the phases themselves; to drive phases from a custom design use `goals loop build` then `goals loop activate`.)
 
 Do this:
 1. Assess (PACERS): break this phase into sub-problems and hunt the assumptions \
