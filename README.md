@@ -213,7 +213,8 @@ Running a project with Goals? Add the badge to your README:
 
 ## Contributing
 
-Issues and PRs welcome.
+Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the
+checks to run, and the project conventions.
 
 ## License
 
