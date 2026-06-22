@@ -172,8 +172,12 @@ def _evidence_findings(
                 GateFinding(
                     fact_type=GateFactType.MISSING_FALSIFIER,
                     message=(
-                        f"Load-bearing assumption has no passing falsifier "
-                        f"({assumption_id}): {statement}"
+                        f"Load-bearing assumption needs an auto falsifier that ran and passed "
+                        f"({assumption_id}): {statement}. Add a verification whose `covers` is "
+                        f"this id with kind=auto and let `goals phase verify` run it — a manual "
+                        f"or waived check does not count for a load-bearing assumption. If it "
+                        f"isn't load-bearing, drop --depends; if it can only be tested in a later "
+                        f"phase, move it there with --phase."
                     ),
                     ref=assumption_id,
                 )

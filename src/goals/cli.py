@@ -99,6 +99,7 @@ from goals.models import (
     SourceRecord,
     Subproblem,
     UserMemoryEvent,
+    Verification,
 )
 from goals.permission_policy import decide_permission, render_permission_report
 from goals.phase_workflows import (
@@ -213,7 +214,41 @@ def _load_json_model(inline: str | None, file: Optional[Path], model):
     try:
         return model.model_validate(data)
     except ValidationError as exc:
-        raise GoalsError(f"Invalid {model.__name__}: {exc}") from exc
+        raise GoalsError(_format_validation_error(model, exc)) from exc
+
+
+def _format_validation_error(model, exc: ValidationError) -> str:
+    """Turn a raw pydantic error into an actionable, agent-friendly message.
+
+    The common authoring mistake is an extra key the model forbids (e.g. a
+    ``summary`` field on ``Evidence``, or a stray key inside a nested
+    ``verifications[i]``). Name the offending keys by their full path and list
+    what is allowed, instead of leaving the agent to decode a pydantic
+    traceback. Non-"extra" problems (missing/type errors) are summarised too —
+    never silently dropped — so a mixed payload surfaces all of its issues.
+    """
+    extra_paths: list[str] = []
+    other: list[str] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        path = ".".join(str(part) for part in loc) or "(root)"
+        if err.get("type") == "extra_forbidden":
+            extra_paths.append(path)
+        else:
+            other.append(f"{path}: {err.get('msg', 'invalid')}")
+    if not extra_paths and not other:
+        return f"Invalid {model.__name__}: {exc}"
+    allowed = ", ".join(sorted(model.model_fields)) or "(none)"
+    parts: list[str] = []
+    if extra_paths:
+        parts.append("unknown field(s): " + ", ".join(sorted(set(extra_paths))))
+    if other:
+        parts.append("other problem(s): " + "; ".join(other))
+    return (
+        f"Invalid {model.__name__}: "
+        + ". ".join(parts)
+        + f". Allowed top-level fields: {allowed}."
+    )
 
 
 def _parse_subproblem(spec: str) -> Subproblem:
@@ -308,14 +343,41 @@ def next_command(
     full: bool = typer.Option(
         False, "--full", help="Print the complete protocol (gates, permissions, sources, memory)."
     ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Print machine-readable JSON (evidence template + allowed fields)."
+    ),
 ) -> None:
     """Refresh goal files and print the next paste-ready agent handoff.
 
     Prints a short, act-now handoff by default; add ``--full`` for the complete
-    protocol with every gate, permission, source, and memory step.
+    protocol with every gate, permission, source, and memory step. Use ``--json``
+    to get the exact evidence schema (field names + which keys are allowed)
+    before authoring an evidence file.
     """
 
     def run():
+        if json_output:
+            # --json is a machine API: a complete goal (no current phase) must
+            # return a structured payload, not a plain-text GoalsError.
+            try:
+                report = next_workflow(Path.cwd(), agent=agent, full=full)
+            except GoalsError as exc:
+                typer.echo(json.dumps({"current_phase": None, "error": str(exc)}, indent=2))
+                return
+            payload = {
+                "current_phase": report.plan.current_phase,
+                "evidence_file": report.plan.evidence_file,
+                "evidence_template": report.plan.evidence_template.model_dump(mode="json"),
+                "evidence_fields": sorted(Evidence.model_fields),
+                "verification_fields": sorted(Verification.model_fields),
+                "note": (
+                    "Author evidence to these fields only (extra keys are rejected). "
+                    "'ran'/'passed' on verifications are engine-owned and set by "
+                    "`goals phase verify`."
+                ),
+            }
+            typer.echo(json.dumps(payload, indent=2))
+            return
         report = next_workflow(Path.cwd(), agent=agent, full=full)
         typer.echo(report.plan.prompt)
 
@@ -1748,7 +1810,12 @@ def phase_evidence(
         None, "--file", "-f", help="Read evidence JSON from a file."
     ),
 ) -> None:
-    """Record phase evidence from a JSON object."""
+    """Record phase evidence from a JSON object.
+
+    Verifications only *declare* what will be checked. `ran`/`passed`/`exit_code`
+    are engine-owned — they are set by `goals phase verify` (which runs the
+    commands), so any values you put there are ignored.
+    """
 
     def run():
         if file is not None and evidence_json is not None:
@@ -1756,6 +1823,24 @@ def phase_evidence(
         if file is None and evidence_json is None:
             raise GoalsError("Provide evidence as inline JSON or --file.")
         evidence = _load_json_model(evidence_json, file, Evidence)
+        # storage.py strips all of these engine-owned result fields on record.
+        preset = sum(
+            1
+            for v in evidence.verifications
+            if v.ran
+            or v.passed
+            or v.exit_code is not None
+            or v.output_excerpt
+            or v.ran_at
+            or v.output_sha256
+        )
+        if preset:
+            typer.echo(
+                f"Note: ignored agent-set verification result fields "
+                f"(ran/passed/exit_code/output_*) on {preset} verification(s) — "
+                "run `goals phase verify` to record real results.",
+                err=True,
+            )
         record_phase_evidence(Path.cwd(), phase_id, evidence)
         typer.echo(f"Recorded evidence for {phase_id}")
 
@@ -1813,6 +1898,8 @@ def phase_accept(phase_id: str) -> None:
         typer.echo(f"Accepted phase {phase_id}")
         if report.warning:
             typer.echo(report.warning, err=True)
+        if report.completion_note:
+            typer.echo(report.completion_note)
         if report.interview:
             typer.echo(report.interview)
 
