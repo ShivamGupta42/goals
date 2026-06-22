@@ -25,6 +25,11 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
 Keep going phase by phase until `goals check` reports the goal complete. Use
 `/goals:check` anytime for status and `/goals:diagram` to visualize it.
 
+**When the goal completes** (optional, recommended if it was painful, stalled, or
+complex): offer to run `/goals:critique` — a retrospective that records durable
+lessons to memory and surfaces cross-goal patterns. Skip it for a trivial,
+first-try-clean goal.
+
 **Keep the goal pinned.** End every turn while this goal is active with a short
 pin block, so the dashboard link and status are always the last thing on screen.
 Pull the values from the latest `goals check` output (re-run it if unsure — it's

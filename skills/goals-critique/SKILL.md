@@ -72,9 +72,25 @@ well** · **Engine/UX friction** (each → upstream action) · **Agent-execution
 friction** (each → memory id) · **Root causes** · **Next-time changes**. Keep it
 scannable; link memory ids and issue links.
 
-**7. File engine friction upstream.** For each Engine/UX finding, open (or note in
-`CRITIQUE.md` for the user to open) a Goals issue with the file:line and a
-concrete fix (e.g. "`goals next --json` should emit the Evidence schema template").
+**7. File engine friction upstream — opt-in only.** Engine/UX findings are about
+the Goals *product*, so they're valuable to every user. But this skill runs on
+other people's machines: **never file silently.** The flow:
+
+- **Default = local only.** `CRITIQUE.md` is always written; nothing leaves the
+  machine without an explicit yes.
+- **Find the repo.** Read the plugin's `homepage` from `.claude-plugin/plugin.json`
+  (currently `https://github.com/ShivamGupta42/goals`). If you can't resolve a repo
+  or `gh` isn't authenticated, stop at local and tell the user.
+- **Sanitize.** Only the *engine/UX* findings go upstream — file:line + the symptom
+  + a concrete fix. **Strip all goal content** (objective text, your notes, paths
+  outside the Goals source). A maintainer must learn nothing private from the issue.
+- **Dedupe.** Before filing, `gh issue list --repo <repo> --search "<symptom>" --state all`
+  — if it already exists, link it in `CRITIQUE.md` instead of opening a duplicate.
+- **Issue by default; PR only for mechanical fixes.** Open a `gh issue create`
+  (label `agent-friction`) per novel finding. Open a PR only when the fix is a
+  one-or-two-line mechanical change AND the user explicitly opts into a PR.
+- **Show, then ask.** Print the sanitized issue body and ask "file this upstream?"
+  per finding (or batch). Record what was filed (with links) back into `CRITIQUE.md`.
 
 ## Quality bar
 
