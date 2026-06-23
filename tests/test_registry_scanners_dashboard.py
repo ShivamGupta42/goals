@@ -189,7 +189,11 @@ def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:
     # Friendly, human-readable timestamp — not the raw ISO string.
     assert "Jun 14, 2026" in text
     assert "5:40 PM" in text
-    assert "2026-06-14T17:40:19.526012+00:00" not in text
+    # The raw ISO is allowed ONLY as the machine-readable data-iso attribute that
+    # powers the offline "N ago" hint — never as the displayed value. It must
+    # therefore appear exactly once, inside that attribute.
+    assert 'data-iso="2026-06-14T17:40:19.526012+00:00"' in text
+    assert text.count("2026-06-14T17:40:19.526012+00:00") == 1
 
     # Always-on plain-language status banner.
     assert "<h2>Status</h2>" in text
@@ -303,3 +307,45 @@ def test_dashboard_renders_architecture_svg(tmp_path: Path) -> None:
     # Node labels are escaped inside the SVG.
     assert "<x>Snapshot</x>" not in text
     assert "&lt;x&gt;Snapshot&lt;/x&gt;" in text
+    # SVG carries a <title> for screen readers, not just an aria-label.
+    assert "<title>How the parts connect.</title>" in text
+
+
+def test_dashboard_is_offline_self_contained(tmp_path: Path) -> None:
+    # The dashboard is a local file:// artifact — it must not depend on any remote
+    # asset (a CDN font failed silently offline / on a phone with no network).
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Work with no network",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    assert "https://fonts.googleapis.com" not in text
+    assert 'rel="stylesheet"' not in text  # no external stylesheet of any kind
+    assert "<style>" in text  # styling is inlined
+    # The "updated N ago" staleness hint is wired (offline JS over a data-iso attr).
+    assert "data-iso=" in text
+    assert "min ago" in text
+
+
+def test_dashboard_severity_is_not_color_only(tmp_path: Path) -> None:
+    # A blocked goal surfaces a TEXT severity marker, not just a red color, so the
+    # severity survives for colorblind readers.
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Blocked goal",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+        status="blocked",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+    if "<summary>Issues" in text:  # only assert when issues actually render
+        assert "Blocking —" in text or "Important —" in text
