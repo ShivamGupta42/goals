@@ -94,9 +94,16 @@ def decision_brief_workflow(
 def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
     if record.decided_by != "user":
         return ""
-    summary = f"For '{record.question}', the user chose '{record.choice}'."
-    if record.rationale:
-        summary += f" Rationale: {record.rationale}"
+    # A judgement is "in this goal, the user chose X because Y". The reason is
+    # load-bearing: without it the choice is context-bound and must NOT be
+    # generalized into a standing preference, or Goals will misapply it elsewhere.
+    reason = record.rationale.strip()
+    if reason:
+        summary = f"Chose '{record.choice}' for '{record.question}' because {reason}"
+        confidence = record.confidence or 0.5
+    else:
+        summary = f"Chose '{record.choice}' for '{record.question}' (no reason recorded)"
+        confidence = min(record.confidence, 0.3) if record.confidence else 0.25
     try:
         append_user_event(
             UserMemoryEvent(
@@ -105,9 +112,17 @@ def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
                 summary=summary,
                 source="judgement",
                 goal_id=goal_id,
-                confidence=record.confidence or 0.5,
+                confidence=confidence,
+                # Keep the parts structured so the reason/context are never lost.
+                details=[record.question, record.choice, reason],
             )
         )
     except GoalsError as exc:
         return f"User memory warning: {exc}"
+    if not reason:
+        return (
+            "Recorded without a reason. Pass --why next time so Goals remembers "
+            "*why* you chose this, not just *what* — context-free choices aren't "
+            "generalized into preferences."
+        )
     return ""

@@ -156,19 +156,64 @@ def test_goal_memory_digest_empty_when_nothing_learned(monkeypatch, tmp_path) ->
     assert build_goal_memory_digest("demo") == ""
 
 
-def test_goal_memory_digest_surfaces_this_goal_and_steering(monkeypatch, tmp_path) -> None:
+def test_judgement_capture_preserves_reason_and_goal(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    from goals.decision_workflows import _record_user_judgement_signal
+    from goals.models import JudgementRecord
+    from goals.user_memory import read_user_events
+
+    warning = _record_user_judgement_signal(
+        "G1",
+        JudgementRecord(
+            question="Pick storage",
+            choice="local file",
+            rationale="the data is throwaway",
+            decided_by="user",
+        ),
+    )
+
+    assert warning == ""  # reason present -> no nudge
+    events = read_user_events()
+    assert len(events) == 1
+    event = events[0]
+    assert event.goal_id == "G1"  # tied to the particular goal
+    assert "because the data is throwaway" in event.summary  # X because Y kept
+    assert event.details == ["Pick storage", "local file", "the data is throwaway"]
+
+
+def test_reasonless_judgement_is_nudged_and_weak(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    from goals.decision_workflows import _record_user_judgement_signal
+    from goals.models import JudgementRecord
+
+    warning = _record_user_judgement_signal(
+        "G1",
+        JudgementRecord(question="Pick storage", choice="local file", decided_by="user"),
+    )
+
+    assert "Pass --why" in warning  # nudge to capture the reason
+    memory = load_user_memory()
+    assert memory.claims and memory.claims[0].confidence <= 0.3  # never a confident rule
+    assert all(claim.status != "active" for claim in memory.claims)
+
+
+def test_goal_memory_digest_keeps_reason_and_separates_standing_prefs(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
+    # A goal-scoped judgement that carries its reason ("because Y").
     append_user_event(
         UserMemoryEvent(
             kind="judgement",
             area="decision",
-            summary="For 'Pick storage', the user chose 'local file'.",
+            summary="Chose 'local file' for 'Pick storage' because the data is throwaway",
             source="judgement",
             goal_id="demo",
             confidence=0.6,
         )
     )
+    # A standing preference the user explicitly stated.
     append_user_event(
         UserMemoryEvent(
             kind="manual",
@@ -182,11 +227,35 @@ def test_goal_memory_digest_surfaces_this_goal_and_steering(monkeypatch, tmp_pat
     digest = build_goal_memory_digest("demo")
 
     assert "Goal-execution memory" in digest
-    # A judgement tied to this goal is reflected back.
-    assert "For 'Pick storage', the user chose 'local file'." in digest
-    # An active claim is surfaced as future auto-execution steering.
+    # The judgement is reflected back WITH its reason, scoped to this goal.
+    assert "because the data is throwaway" in digest
+    assert "scoped to this goal" in digest
+    # The confirmed preference is surfaced separately as a standing rule.
     assert "Prefer concise explanations" in digest
-    assert "How I'll auto-execute future goals to fit you:" in digest
+    assert "Standing preferences I'll apply to future goals" in digest
+
+
+def test_goal_memory_digest_does_not_generalize_lone_judgements(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    # Two judgements, no explicit preference: they must NOT become standing rules.
+    append_user_event(
+        UserMemoryEvent(
+            kind="judgement",
+            area="decision",
+            summary="Chose 'local file' for 'storage' because it is reversible",
+            source="judgement",
+            goal_id="demo",
+            confidence=0.6,
+        )
+    )
+
+    memory = load_user_memory()
+    assert all(claim.status != "active" for claim in memory.claims)
+
+    digest = build_goal_memory_digest("demo")
+    assert "Standing preferences I'll apply to future goals" not in digest
+    assert "won't turn the choices above into standing rules" in digest
 
 
 def test_goal_memory_digest_scopes_judgements_to_goal(monkeypatch, tmp_path) -> None:
@@ -196,17 +265,15 @@ def test_goal_memory_digest_scopes_judgements_to_goal(monkeypatch, tmp_path) -> 
         UserMemoryEvent(
             kind="judgement",
             area="decision",
-            summary="For 'Other goal', the user chose 'database'.",
+            summary="Chose 'database' for 'Other goal' because of scale",
             source="judgement",
             goal_id="other",
             confidence=0.6,
         )
     )
 
-    digest = build_goal_memory_digest("demo")
-
-    # No active claims and no judgements for this goal -> nothing to surface.
-    assert "From this goal:" not in digest
+    # No active claims and no judgements for THIS goal -> nothing to surface.
+    assert build_goal_memory_digest("demo") == ""
 
 
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:

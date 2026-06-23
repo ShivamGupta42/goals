@@ -123,7 +123,16 @@ def derive_user_memory(events: list[UserMemoryEvent]) -> UserMemory:
             if event.source in _ACTIVE_SOURCES:
                 existing.status = "active"
                 _deactivate_conflicts(claims, existing)
-            elif existing.status != "active" and len(existing.evidence_event_ids) >= 2:
+            elif (
+                # A single goal's judgement is a context-bound observation, not a
+                # standing preference: "chose X because Y here" need not hold on the
+                # next goal. Only the user's explicitly stated preferences
+                # (manual / post-goal interview) generalize, plus /insights the user
+                # curated and that recur. Judgements stay candidates until confirmed.
+                event.kind == "insights"
+                and existing.status != "active"
+                and len(existing.evidence_event_ids) >= 2
+            ):
                 existing.status = "active"
 
     memory = UserMemory(
@@ -274,18 +283,37 @@ def build_goal_memory_digest(goal_id: str, *, limit: int = 5) -> str:
         return ""
     lines = ["", "Goal-execution memory — what I learned:"]
     if learned_here:
-        lines.extend(["", "From this goal:"])
+        lines.extend(
+            [
+                "",
+                "In this goal you decided (kept with its reason, scoped to this goal):",
+            ]
+        )
         lines.extend(f"- {statement}" for statement in learned_here[-limit:])
     if active:
-        lines.extend(["", "How I'll auto-execute future goals to fit you:"])
+        lines.extend(
+            [
+                "",
+                "Standing preferences I'll apply to future goals (you confirmed these):",
+            ]
+        )
         lines.extend(
             f"- {claim.area}: {claim.statement} ({claim.confidence:.0%})"
             for claim in active[:limit]
         )
+    elif learned_here:
+        lines.extend(
+            [
+                "",
+                "I won't turn the choices above into standing rules on my own — a choice "
+                "made for one goal's reasons can be wrong for the next. Confirm any that "
+                "should always hold with `goals user record \"...\"` or the post-goal interview.",
+            ]
+        )
     lines.extend(
         [
             "",
-            f"Stored in `{user_memory_path()}`. Review or correct it with "
+            f"Stored privately in `{user_memory_path()}`. Review or correct it with "
             "`goals user show` / `goals user forget <claim-id>`.",
         ]
     )
