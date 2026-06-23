@@ -88,6 +88,12 @@ def render_dashboard(
     proof = len([p for p in snapshot.phases if p.evidence is not None])
     pct = round(accepted / total * 100) if total else 0
     open_questions = _open_questions(snapshot, issue_report)
+    now_on = (
+        f'<span class="fact"><span class="k">Now on</span> '
+        f'<span class="v">{escape(checkpoint.phase_title)}</span></span>'
+        if str(snapshot.status) == "active" and checkpoint and checkpoint.phase_title
+        else ""
+    )
 
     full_goal = _full_goal_html(snapshot.objective)
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
@@ -114,9 +120,6 @@ def render_dashboard(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Goal — {escape(snapshot.goal_id)}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {{
       --paper:#faf7f1; --ink:#2c2722; --soft:#736b60; --line:#e6dfd3; --hair:#efe9de;
@@ -124,7 +127,7 @@ def render_dashboard(
     }}
     * {{ box-sizing:border-box; }}
     body {{ margin:0; background:var(--paper); color:var(--ink);
-      font-family:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
       font-size:17px; line-height:1.6; -webkit-font-smoothing:antialiased; overflow-wrap:break-word; }}
     .wrap {{ max-width:700px; margin:0 auto; padding:3.5rem 1.5rem 6rem; }}
     a {{ color:var(--clay); }}
@@ -160,6 +163,10 @@ def render_dashboard(
     .note h2 {{ font-size:1.08rem; font-weight:700; margin:0 0 .45rem; }}
     .note p {{ margin:.3rem 0; }} .note .ask {{ color:var(--clay); font-size:.92rem; }}
     .note.ok {{ border-left-color:var(--sage); }} .note.ok h2 {{ color:var(--ink); }}
+    .note.act {{ border-left-width:5px; background:#fbf0ea; }}
+    .note.act h2 {{ color:var(--clay); display:flex; align-items:center; gap:.45rem; }}
+    .note.act h2::before {{ content:"\\26A0"; font-size:1.05em; }}
+    .facts .rel {{ color:var(--soft); font-weight:600; font-size:.82em; }}
     .produced {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.95rem 1.2rem; margin:0 0 1rem; font-size:1rem; }}
     .produced b {{ color:var(--sage); }}
     h2.sec {{ font-size:.74rem; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); font-weight:700; margin:2.6rem 0 1.1rem; }}
@@ -195,7 +202,7 @@ def render_dashboard(
     .diagram-wrap svg {{ width:100%; height:auto; display:block; }}
     .cap {{ color:var(--soft); font-size:.82rem; margin:.3rem 0 1rem; text-align:center; }}
     code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--chip); padding:.06rem .35rem; border-radius:5px; font-size:.85em; overflow-wrap:anywhere; }}
-    svg text {{ font-family:"Hanken Grotesk",-apple-system,system-ui,sans-serif; }}
+    svg text {{ font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif; }}
     .bjourney {{ margin:.4rem 0 .6rem; }}
     .aud {{ border:0; padding:0; margin:.4rem 0 0; display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; }}
     .aud-legend {{ font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); font-weight:700; margin-right:.55rem; }}
@@ -218,6 +225,13 @@ def render_dashboard(
     .asm .toward {{ color:var(--soft); font-size:.85rem; display:block; margin-top:.2rem; }}
     .oq {{ margin:.2rem 0 1rem 1.1rem; color:var(--soft); font-size:.9rem; }}
     footer {{ margin-top:2.8rem; color:var(--soft); font-size:.8rem; letter-spacing:.03em; }}
+    @media (max-width:600px) {{
+      body {{ font-size:16px; }}
+      .wrap {{ padding:2rem 1.1rem 4rem; }}
+      .facts {{ gap:.6rem 1.1rem; }}
+      .steps li {{ grid-template-columns:auto 1fr; }}
+      .steps .st {{ grid-column:2; }}
+    }}
   </style>
 </head>
 <body>
@@ -233,8 +247,9 @@ def render_dashboard(
     <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
     <p class="facts">
       <span class="fact"><span class="k">Waiting on</span> <span class="v">{escape(_waiting_label(brief.waiting_on))}</span></span>
+      {now_on}
       <span class="fact"><span class="k">Proof</span> <span class="v">{proof}/{total} steps</span></span>
-      <span class="fact"><span class="k">Updated</span> <span class="v time">{escape(_friendly_timestamp(snapshot.last_updated))}</span></span>
+      <span class="fact"><span class="k">Updated</span> <span class="v time" data-iso="{escape(snapshot.last_updated)}">{escape(_friendly_timestamp(snapshot.last_updated))} <span class="rel"></span></span></span>
     </p>
 
     <main id="main" tabindex="-1">
@@ -266,6 +281,19 @@ def render_dashboard(
     </main>
     <footer>Powered by <a href="https://github.com/ShivamGupta42/goals" target="_blank" rel="noopener">Goals</a> · read-only</footer>
   </div>
+  <script>
+  (function(){{
+    var el=document.querySelector('.v.time[data-iso]'); if(!el) return;
+    var rel=el.querySelector('.rel'); var t=Date.parse(el.getAttribute('data-iso'));
+    if(!rel||isNaN(t)) return;
+    var s=Math.max(0,(Date.now()-t)/1000), out;
+    if(s<90) out='just now';
+    else if(s<5400) out=Math.round(s/60)+' min ago';
+    else if(s<172800) out=Math.round(s/3600)+' h ago';
+    else out=Math.round(s/86400)+' d ago';
+    rel.textContent='('+out+')';
+  }})();
+  </script>
 </body>
 </html>
 """
@@ -287,7 +315,7 @@ def _needs_you_html(brief, open_questions: list[str]) -> str:
     else:
         body = "<p>The agent is paused until you weigh in.</p>"
     return (
-        '<div class="note"><h2>Waiting on you</h2>'
+        '<div class="note act"><h2>Waiting on you</h2>'
         f'<p class="ask">Open question(s) — answer in the conversation; the agent records the call here.</p>'
         f"{body}</div>"
     )
@@ -488,7 +516,12 @@ def _assumptions_html(snapshot: GoalSnapshot) -> str:
     items = []
     for assumption in sort_assumptions(snapshot.assumptions):
         status = assumption.status
-        lb = '<span class="lb">load-bearing</span>' if assumption.depends_on else ""
+        lb = (
+            '<span class="lb" title="If this assumption is wrong, the goal&#39;s '
+            'approach fails — it needs a passing falsifier">load-bearing</span>'
+            if assumption.depends_on
+            else ""
+        )
         college = assumption.audience_notes.get("college", "")
         hobbyist = assumption.audience_notes.get("hobbyist", "")
         college_html = (
@@ -520,7 +553,10 @@ def _decisions_teaser_html(snapshot: GoalSnapshot) -> str:
         return ""
     latest = snapshot.judgements[-1]
     count = len(snapshot.judgements)
-    reversible = "reversible" if latest.reversible else "irreversible"
+    if latest.reversible:
+        reversible = '<span title="Cheap to revisit — safe to revise later">reversible</span>'
+    else:
+        reversible = '<span title="Hard to undo — weigh carefully">irreversible</span>'
     return (
         '<div class="teaser">'
         f'<h3 class="subsec">Decisions <span class="meta muted">{count} recorded</span></h3>'
@@ -546,9 +582,11 @@ def _issues_section_html(report) -> str:
     has_important = any(issue.severity == "p1" for issue in report.issues)
     tone = "red" if has_blocking else ("amber" if has_important else "muted")
     open_attr = " open" if has_blocking else ""
+    # Don't lean on color alone (a11y): a text marker carries the severity too.
+    marker = "⚠ Blocking — " if has_blocking else ("Important — " if has_important else "")
     return (
         f"<details{open_attr}><summary>Issues"
-        f'<span class="meta {tone}">{_issues_meta(report)}</span></summary>'
+        f'<span class="meta {tone}">{marker}{_issues_meta(report)}</span></summary>'
         f'<div class="body">{_issues_html(report)}</div></details>'
     )
 
@@ -821,6 +859,7 @@ def _architecture_svg(architecture: GoalArchitectureMap) -> str:
     return (
         f'<div class="diagram-wrap"><svg viewBox="0 0 {width:.0f} {height:.0f}" role="img" '
         f'aria-label="{escape(architecture.overview or "Architecture diagram")}">'
+        f'<title>{escape(architecture.overview or "Architecture diagram")}</title>'
         '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
         'markerHeight="7" orient="auto-start-reverse">'
         f'<path d="M0,0 L10,5 L0,10 z" fill="{_EDGE}"/></marker></defs>'
