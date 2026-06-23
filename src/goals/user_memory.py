@@ -253,6 +253,45 @@ def render_post_goal_interview(goal_id: str) -> str:
     )
 
 
+def build_goal_memory_digest(goal_id: str, *, limit: int = 5) -> str:
+    """Plain-language reflection of goal-execution memory, surfaced at goal end.
+
+    Shows what *this* goal taught Goals and how the accumulated memory will steer
+    auto-execution on future goals, so silent learning becomes visible and the
+    user can correct it. Returns an empty string when there is nothing to show.
+    """
+    memory = load_user_memory()
+    active = [claim for claim in memory.claims if claim.status == "active"]
+    active.sort(key=lambda claim: (claim.confidence, len(claim.evidence_event_ids)), reverse=True)
+    learned_here = _unique_statements(
+        statement
+        for event in read_user_events()
+        if event.goal_id == goal_id
+        and event.kind in {"judgement", "interview", "insights", "manual"}
+        for statement in _claim_statements(event)
+    )
+    if not active and not learned_here:
+        return ""
+    lines = ["", "Goal-execution memory — what I learned:"]
+    if learned_here:
+        lines.extend(["", "From this goal:"])
+        lines.extend(f"- {statement}" for statement in learned_here[-limit:])
+    if active:
+        lines.extend(["", "How I'll auto-execute future goals to fit you:"])
+        lines.extend(
+            f"- {claim.area}: {claim.statement} ({claim.confidence:.0%})"
+            for claim in active[:limit]
+        )
+    lines.extend(
+        [
+            "",
+            f"Stored in `{user_memory_path()}`. Review or correct it with "
+            "`goals user show` / `goals user forget <claim-id>`.",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def forget_claim(target: str, *, purge: bool = False) -> UserMemory:
     if purge and target == "--all":
         for path in (user_events_path(), user_memory_path()):
@@ -290,6 +329,18 @@ def _extract_statements(text: str) -> list[str]:
 
 def _clean_statement(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _unique_statements(statements) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for statement in statements:
+        key = statement.lower()
+        if not statement or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(statement)
+    return ordered
 
 
 def _claim_id(area: str, statement: str) -> str:

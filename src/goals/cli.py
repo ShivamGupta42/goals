@@ -152,6 +152,7 @@ from goals.tool_workflows import tool_doctor
 from goals.user_memory import (
     INTERVIEW_QUESTIONS,
     append_user_event,
+    build_goal_memory_digest,
     build_personalization_context,
     events_from_insights,
     forget_claim,
@@ -1175,6 +1176,20 @@ def user_show(
     _handle(run)
 
 
+@user_app.command("digest")
+def user_digest(
+    goal: str = typer.Option("current", "--goal", help="'current' or a goal id."),
+) -> None:
+    """Surface what Goals learned for goal execution, the way it does at goal end."""
+
+    def run():
+        goal_id = _resolve_user_goal_id(goal)
+        digest = build_goal_memory_digest(goal_id)
+        typer.echo(digest.rstrip() if digest else "No goal-execution memory recorded yet.")
+
+    _handle(run)
+
+
 @user_app.command("record")
 def user_record(
     preference: str,
@@ -1900,6 +1915,8 @@ def phase_accept(phase_id: str) -> None:
             typer.echo(report.warning, err=True)
         if report.completion_note:
             typer.echo(report.completion_note)
+        if report.memory_digest:
+            typer.echo(report.memory_digest)
         if report.interview:
             typer.echo(report.interview)
 

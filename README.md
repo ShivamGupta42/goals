@@ -184,6 +184,23 @@ Most people only need these:
 | `goals loop import <source>` | Import a loop/catalog from a URL, file, directory, or builder script |
 | `goals loop build/check/activate/improve` | Design, validate, start from, and improve the workflow itself |
 
+## It learns how you like goals executed
+
+Goals keeps a tiny, private memory of your **execution judgements** — the calls you
+make as a goal runs (what you chose, when you'd rather decide than be asked, how you
+like things explained). It's captured automatically as you work, stored in plain files
+under `~/.goals/user/`, and it never leaves your machine.
+
+That memory does two things. During a goal it quietly **aligns auto-execution** to you —
+biasing how decisions get surfaced and explained. At the **end of every goal** Goals
+**reflects it back** in plain language: what this goal taught it, and how it'll execute
+future goals to fit you. So the longer you use Goals, the better it auto-executes.
+
+```bash
+goals user digest    # what Goals learned and how it'll steer next time
+goals user show      # the full memory; goals user forget <id> to correct it
+```
+
 ## For developers
 
 Under the hood, Goals is a small CLI + Claude Code / Codex plugin. It keeps goal state,

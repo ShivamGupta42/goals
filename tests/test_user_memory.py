@@ -9,6 +9,7 @@ from goals.models import (
 from goals.runtime import default_phases
 from goals.user_memory import (
     append_user_event,
+    build_goal_memory_digest,
     build_personalization_context,
     events_from_insights,
     forget_claim,
@@ -147,6 +148,65 @@ def test_user_memory_forget_deactivates_claim(monkeypatch, tmp_path) -> None:
 
     assert memory.claims[0].status == "forgotten"
     assert build_personalization_context().summary == "No user preference memory recorded yet."
+
+
+def test_goal_memory_digest_empty_when_nothing_learned(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    assert build_goal_memory_digest("demo") == ""
+
+
+def test_goal_memory_digest_surfaces_this_goal_and_steering(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    append_user_event(
+        UserMemoryEvent(
+            kind="judgement",
+            area="decision",
+            summary="For 'Pick storage', the user chose 'local file'.",
+            source="judgement",
+            goal_id="demo",
+            confidence=0.6,
+        )
+    )
+    append_user_event(
+        UserMemoryEvent(
+            kind="manual",
+            area="communication",
+            summary="Prefer concise explanations with direct tradeoffs.",
+            source="manual",
+            confidence=0.9,
+        )
+    )
+
+    digest = build_goal_memory_digest("demo")
+
+    assert "Goal-execution memory" in digest
+    # A judgement tied to this goal is reflected back.
+    assert "For 'Pick storage', the user chose 'local file'." in digest
+    # An active claim is surfaced as future auto-execution steering.
+    assert "Prefer concise explanations" in digest
+    assert "How I'll auto-execute future goals to fit you:" in digest
+
+
+def test_goal_memory_digest_scopes_judgements_to_goal(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    append_user_event(
+        UserMemoryEvent(
+            kind="judgement",
+            area="decision",
+            summary="For 'Other goal', the user chose 'database'.",
+            source="judgement",
+            goal_id="other",
+            confidence=0.6,
+        )
+    )
+
+    digest = build_goal_memory_digest("demo")
+
+    # No active claims and no judgements for this goal -> nothing to surface.
+    assert "From this goal:" not in digest
 
 
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:
