@@ -20,9 +20,17 @@ from goals.brief import build_goal_brief
 from goals.models import GateVerdict, GoalStatus, Phase
 from goals.portability import render_context_block
 from goals.runtime import load_active_snapshot
+from goals.token_budget import transcript_token_usage
 
 #: Env var that turns the Stop gate on. Off by default so it never nags.
 ENFORCE_ENV = "GOALS_ENFORCE"
+
+#: Token ceiling for the enforced Stop gate. Opt-in (no default): when set, the
+#: gate stops trapping the agent once the session transcript's billed tokens
+#: reach this many — a deterministic budget guard in tokens, not USD. Unlike the
+#: attempt cap it has no default, since any fixed number would arbitrarily cut
+#: off legitimately long sessions.
+MAX_TOKENS_ENV = "GOALS_MAX_TOKENS"
 
 #: Circuit breaker: how many phase-review attempts the Stop gate tolerates before
 #: it stops trapping the agent and hands control back to the user. Without a cap,
@@ -65,14 +73,19 @@ def session_start_payload(cwd: Path) -> str:
         return ""
 
 
-def stop_payload(cwd: Path, *, enforce: bool | None = None) -> str:
+def stop_payload(
+    cwd: Path, *, enforce: bool | None = None, transcript_path: str | None = None
+) -> str:
     """JSON that blocks Stop while the current phase needs the agent, or "".
 
     Opt-in: returns "" (allow stop) unless ``enforce`` is true (defaults to the
     ``GOALS_ENFORCE`` env var). Never blocks a finished/failed/paused/blocked
-    goal, nor one waiting on the user. Fail-open: any unexpected error allows the
-    stop rather than trapping the agent (a Stop hook that errors out would
-    otherwise be treated as a block).
+    goal, nor one waiting on the user. Two circuit breakers also force a stop even
+    when agent work remains: the review-attempt cap, and — when ``transcript_path``
+    is supplied and ``GOALS_MAX_TOKENS`` is set — a token budget ceiling. Both
+    read durable signals only, never the transcript's prose. Fail-open: any
+    unexpected error allows the stop rather than trapping the agent (a Stop hook
+    that errors out would otherwise be treated as a block).
     """
     if enforce is None:
         enforce = bool(os.environ.get(ENFORCE_ENV))
@@ -85,6 +98,10 @@ def stop_payload(cwd: Path, *, enforce: bool | None = None) -> str:
         brief = build_goal_brief(snapshot)
         if brief.waiting_on != "agent":
             return ""  # waiting on the user (or no one) — don't block
+        if _token_budget_exceeded(transcript_path):
+            # The session has burned through its token budget. Re-blocking would
+            # keep spending; hand control back to the user instead.
+            return ""
         phase = next(
             (p for p in snapshot.phases if p.phase_id == snapshot.current_phase), None
         )
@@ -130,6 +147,41 @@ def _circuit_breaker_tripped(phase: Phase, *, max_attempts: int | None = None) -
     if any(r.verdict == GateVerdict.BLOCKED for r in reviews):
         return True
     return len(reviews) >= max_attempts
+
+
+def _token_budget_exceeded(transcript_path: str | None) -> bool:
+    """True when the session transcript's billed tokens reach the ceiling.
+
+    Deterministic — sums per-call ``usage`` from the transcript file. Returns
+    False (no ceiling) when the cap is unset, no transcript was supplied, or the
+    transcript can't be read, so a missing signal can never force a stop.
+    """
+    cap = _max_tokens()
+    if cap is None or not transcript_path:
+        return False
+    try:
+        usage = transcript_token_usage(transcript_path)
+    except Exception:  # noqa: BLE001 - never let token accounting break the hook
+        return False
+    return usage.total >= cap
+
+
+def _max_tokens() -> int | None:
+    """Read the token ceiling from the environment, or None when not enforced.
+
+    Unset means no ceiling. A non-integer or non-positive value also disables it
+    rather than guessing a number — a token budget is too session-specific to
+    invent a fallback for, and silently capping at a wrong value is worse than
+    not capping.
+    """
+    raw = os.environ.get(MAX_TOKENS_ENV)
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 1 else None
 
 
 def _max_phase_attempts() -> int:

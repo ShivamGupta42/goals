@@ -2276,7 +2276,34 @@ def hooks_session_start() -> None:
 @hooks_app.command("stop")
 def hooks_stop() -> None:
     """Emit the Stop payload (opt-in phase gate via GOALS_ENFORCE)."""
-    typer.echo(stop_payload(Path.cwd()), nl=False)
+    transcript_path = _hook_stdin_value("transcript_path")
+    typer.echo(stop_payload(Path.cwd(), transcript_path=transcript_path), nl=False)
+
+
+def _hook_stdin_value(key: str) -> str | None:
+    """Pull one string field from the hook's JSON stdin payload, fail-open.
+
+    Claude Code pipes the Stop hook a JSON object (with ``transcript_path`` and
+    friends). Anything unexpected — no stdin, a tty, blank input, malformed JSON,
+    a non-string value — degrades to ``None`` so the hook never crashes the
+    session over its own input.
+    """
+    try:
+        if sys.stdin.isatty():
+            return None
+        raw = sys.stdin.read()
+    except Exception:  # noqa: BLE001 - a hook must not crash on stdin
+        return None
+    if not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = data.get(key)
+    return value if isinstance(value, str) else None
 
 
 @app.command(rich_help_panel="Portability")

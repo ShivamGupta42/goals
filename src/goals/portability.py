@@ -386,9 +386,10 @@ def build_native_goal_emission(
             "The native `/goal` check reads only the transcript — keep the durable "
             "proof in `.goals/goal-state.json` via `goals phase evidence`.",
             "For deterministic enforcement, set GOALS_ENFORCE=1: the Goals Stop "
-            "hook reads durable gate state (not the transcript) and a circuit "
-            "breaker (GOALS_MAX_PHASE_ATTEMPTS, default 3) hands control back to "
-            "you instead of looping a failing phase forever.",
+            "hook reads durable gate state (not the transcript) and circuit "
+            "breakers hand control back to you instead of looping forever — a "
+            "review-attempt cap (GOALS_MAX_PHASE_ATTEMPTS, default 3) and an "
+            "opt-in token budget (GOALS_MAX_TOKENS).",
         ]
     else:
         # Pasted into Codex as the task's definition of done — NOT a shell

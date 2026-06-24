@@ -141,6 +141,56 @@ def test_stop_breaker_cap_ignores_garbage_env(tmp_path: Path, monkeypatch) -> No
     assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
 
 
+def _transcript(tmp_path: Path, output_tokens: int) -> str:
+    path = tmp_path / "transcript.jsonl"
+    path.write_text(
+        '{"type":"assistant","message":{"usage":{"output_tokens":%d}}}\n' % output_tokens,
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+def test_stop_token_budget_trips_when_exceeded(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)  # fresh goal: waiting on the agent, would block
+    transcript = _transcript(tmp_path, output_tokens=500)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    assert stop_payload(tmp_path, enforce=True, transcript_path=transcript) == ""
+
+
+def test_stop_token_budget_blocks_when_under(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=50)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
+def test_stop_token_budget_is_off_without_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=10**9)
+    monkeypatch.delenv(MAX_TOKENS_ENV, raising=False)
+    # No cap set: a huge transcript must not trip the gate.
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
+def test_stop_token_budget_ignores_garbage_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=10**9)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "lots")
+    # A non-integer cap disables the ceiling rather than capping at a wrong value.
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
 def test_stop_fails_open_on_unexpected_error(tmp_path: Path, monkeypatch) -> None:
     from goals import agent_hooks
 
@@ -168,6 +218,32 @@ def test_hooks_session_start_empty_without_goal(tmp_path: Path, monkeypatch) -> 
     result = runner.invoke(app, ["hooks", "session-start"])
     assert result.exit_code == 0
     assert result.stdout == ""
+
+
+def test_hooks_stop_command_reads_transcript_from_stdin(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=500)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GOALS_ENFORCE", "1")
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    # The hook input arrives as JSON on stdin; the token ceiling trips, so the
+    # command allows the stop (empty output) rather than blocking.
+    stdin = json.dumps({"transcript_path": transcript, "hook_event_name": "Stop"})
+    result = runner.invoke(app, ["hooks", "stop"], input=stdin)
+    assert result.exit_code == 0
+    assert result.stdout == ""
+
+
+def test_hooks_stop_command_blocks_without_transcript(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GOALS_ENFORCE", "1")
+    # No stdin payload: the gate still works off durable state and blocks.
+    result = runner.invoke(app, ["hooks", "stop"], input="")
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["decision"] == "block"
 
 
 # --- plugin manifests ------------------------------------------------------ #
