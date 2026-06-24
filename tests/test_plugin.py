@@ -66,6 +66,81 @@ def test_stop_does_not_trap_a_paused_goal(tmp_path: Path, monkeypatch) -> None:
     assert stop_payload(tmp_path, enforce=True) == ""
 
 
+def _snapshot_with_reviews(tmp_path: Path, monkeypatch, reviews):
+    """Return the active goal with ``reviews`` recorded on its current phase."""
+    from goals import agent_hooks
+    from goals.models import GateResult
+
+    real = agent_hooks.load_active_snapshot(tmp_path)
+    built = [
+        GateResult(gate_id="phase-review", verdict=verdict, summary="x")
+        for verdict in reviews
+    ]
+    phases = [
+        phase.model_copy(update={"reviews": built})
+        if phase.phase_id == real.current_phase
+        else phase
+        for phase in real.phases
+    ]
+    patched = real.model_copy(update={"phases": phases})
+    monkeypatch.setattr(agent_hooks, "load_active_snapshot", lambda _cwd: patched)
+    return patched
+
+
+def test_stop_breaker_trips_on_blocked_verdict(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # The gate already gave up on this phase (BLOCKED). The Stop hook must not
+    # re-trap the agent in a loop it has already declared dead.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.BLOCKED])
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_breaker_trips_after_attempt_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Three failed reviews reach the default cap even without a BLOCKED verdict.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 3)
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_still_blocks_below_attempt_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Two failed reviews are below the cap: there is still room to converge, so
+    # the Stop hook keeps the loop working.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 2)
+    payload = json.loads(stop_payload(tmp_path, enforce=True))
+    assert payload["decision"] == "block"
+
+
+def test_stop_breaker_cap_is_configurable(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL])
+    # A single attempt is below the default cap (3) but at a cap of 1.
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "1")
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_breaker_cap_ignores_garbage_env(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 2)
+    # A typo or non-positive value must fall back to the default, never disable
+    # the breaker by raising the cap to infinity.
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "not-a-number")
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+
+
 def test_stop_fails_open_on_unexpected_error(tmp_path: Path, monkeypatch) -> None:
     from goals import agent_hooks
 

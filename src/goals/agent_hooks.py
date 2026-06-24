@@ -17,12 +17,21 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.models import GoalStatus
+from goals.models import GateVerdict, GoalStatus, Phase
 from goals.portability import render_context_block
 from goals.runtime import load_active_snapshot
 
 #: Env var that turns the Stop gate on. Off by default so it never nags.
 ENFORCE_ENV = "GOALS_ENFORCE"
+
+#: Circuit breaker: how many phase-review attempts the Stop gate tolerates before
+#: it stops trapping the agent and hands control back to the user. Without a cap,
+#: an enforced Stop hook would re-block a failing review→fix→review loop forever —
+#: the runaway "huge AI bill" failure mode. The default mirrors the gate's own
+#: review-fix cap (``goals.gates.review_phase`` ``max_attempts``) so the two
+#: circuit breakers agree. Override with ``GOALS_MAX_PHASE_ATTEMPTS``.
+MAX_ATTEMPTS_ENV = "GOALS_MAX_PHASE_ATTEMPTS"
+DEFAULT_MAX_PHASE_ATTEMPTS = 3
 
 
 # A goal in one of these states is not the agent's to push on: finished, failed,
@@ -79,6 +88,13 @@ def stop_payload(cwd: Path, *, enforce: bool | None = None) -> str:
         phase = next(
             (p for p in snapshot.phases if p.phase_id == snapshot.current_phase), None
         )
+        if phase is not None and _circuit_breaker_tripped(phase):
+            # The phase has burned through its review-fix attempts (or the gate
+            # already returned BLOCKED). Re-blocking would just loop the same
+            # failing attempt and spend without converging — hand it back to the
+            # user instead. The reason for the stop is recorded on the phase's
+            # gate results and surfaces via `goals check`/`goals issues`.
+            return ""
         where = f"{phase.phase_id} ({phase.title})" if phase else "the current phase"
         return json.dumps(
             {
@@ -92,3 +108,41 @@ def stop_payload(cwd: Path, *, enforce: bool | None = None) -> str:
         )
     except Exception:  # noqa: BLE001 - fail open: allow stop rather than trap the agent
         return ""
+
+
+def _circuit_breaker_tripped(phase: Phase, *, max_attempts: int | None = None) -> bool:
+    """True when the Stop gate should stop trapping the agent on ``phase``.
+
+    Deterministic — reads only durable gate history, never the transcript. The
+    breaker trips when either signal fires:
+
+    1. A recorded phase-review verdict is ``BLOCKED`` — the gate's own circuit
+       breaker (``goals.gates._blocked_after_cap``) already gave up on this phase.
+    2. The number of phase-review attempts reaches the cap, as a fallback for the
+       case where reviews accumulated as ``FAIL`` without ever flipping to
+       ``BLOCKED``.
+
+    The two share a cap so the runtime loop control and the gate agree.
+    """
+    if max_attempts is None:
+        max_attempts = _max_phase_attempts()
+    reviews = [r for r in phase.reviews if r.gate_id == "phase-review"]
+    if any(r.verdict == GateVerdict.BLOCKED for r in reviews):
+        return True
+    return len(reviews) >= max_attempts
+
+
+def _max_phase_attempts() -> int:
+    """Read the circuit-breaker cap from the environment, clamped to >= 1.
+
+    A missing, non-integer, or non-positive value falls back to the default so a
+    typo can never disable the breaker (which would re-open the runaway loop).
+    """
+    raw = os.environ.get(MAX_ATTEMPTS_ENV)
+    if raw is None:
+        return DEFAULT_MAX_PHASE_ATTEMPTS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_PHASE_ATTEMPTS
+    return value if value >= 1 else DEFAULT_MAX_PHASE_ATTEMPTS
