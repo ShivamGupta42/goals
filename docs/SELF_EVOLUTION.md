@@ -56,7 +56,39 @@ current goal without overwriting human-authored content.
 current phase's acceptance criteria, ready to paste into Claude `/goal` or Codex.
 The native loop runs fast and owns execution; the emitted condition makes its
 stop point answerable from recorded acceptance criteria instead of a vague
-transcript judgment.
+transcript judgment. For enforcement that does not depend on the transcript at
+all, opt into the **Enforced Stop Gate** below.
+
+## Enforced Stop Gate
+
+The native `/goal` checker reads only the transcript, so "done" — and "keep
+going" — are asserted, not proven. Goals ships an opt-in Stop hook that decides
+deterministically from durable gate state instead. It is **off by default** (it
+never nags); set `GOALS_ENFORCE=1` to turn it on.
+
+When enforced, the Stop hook blocks the agent from stopping while the current
+phase still has agent work, and never traps it otherwise — a finished, failed,
+paused, or blocked goal, or one waiting on the user, is always free to stop. Two
+deterministic circuit breakers also hand control back to you instead of looping
+forever (the "huge AI bill" failure mode):
+
+- **Review-attempt cap** — once the current phase's latest review is `BLOCKED`,
+  or it has failed review `GOALS_MAX_PHASE_ATTEMPTS` times (default 3, matching
+  the gate's own review-fix cap), the gate stops re-blocking. The decision keys
+  off the *latest* review, so a stale failure from an earlier cycle can't trip it
+  after a later pass.
+- **Token budget** — set `GOALS_MAX_TOKENS` to a positive integer and the gate
+  stops re-blocking once the session transcript's billed tokens reach it. This is
+  a deterministic budget guard in *tokens, not USD*: Goals does not run the model
+  loop, but the Stop hook is handed the session `transcript_path` and sums the
+  per-call `usage` the transcript records. It is opt-in with no default — any
+  fixed number would arbitrarily cut off a legitimately long session.
+
+Every signal the gate reads is durable and inspectable (gate verdicts in the
+event log, token usage in the transcript file); none of it is a transcript
+*judgment*. The hook is fail-open: any unexpected error allows the stop rather
+than trapping the agent. Implementation lives in `src/goals/agent_hooks.py` and
+`src/goals/token_budget.py`.
 
 ## Memory Loop
 

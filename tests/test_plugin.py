@@ -66,6 +66,170 @@ def test_stop_does_not_trap_a_paused_goal(tmp_path: Path, monkeypatch) -> None:
     assert stop_payload(tmp_path, enforce=True) == ""
 
 
+def _snapshot_with_reviews(tmp_path: Path, monkeypatch, reviews):
+    """Return the active goal with ``reviews`` recorded on its current phase."""
+    from goals import agent_hooks
+    from goals.models import GateResult
+
+    real = agent_hooks.load_active_snapshot(tmp_path)
+    built = [
+        GateResult(gate_id="phase-review", verdict=verdict, summary="x")
+        for verdict in reviews
+    ]
+    phases = [
+        phase.model_copy(update={"reviews": built})
+        if phase.phase_id == real.current_phase
+        else phase
+        for phase in real.phases
+    ]
+    patched = real.model_copy(update={"phases": phases})
+    monkeypatch.setattr(agent_hooks, "load_active_snapshot", lambda _cwd: patched)
+    return patched
+
+
+def test_stop_breaker_trips_on_blocked_verdict(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # The gate already gave up on this phase (BLOCKED). The Stop hook must not
+    # re-trap the agent in a loop it has already declared dead.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.BLOCKED])
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_breaker_trips_after_attempt_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Three failed reviews reach the default cap even without a BLOCKED verdict.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 3)
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_still_blocks_below_attempt_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Two failed reviews are below the cap: there is still room to converge, so
+    # the Stop hook keeps the loop working.
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 2)
+    payload = json.loads(stop_payload(tmp_path, enforce=True))
+    assert payload["decision"] == "block"
+
+
+def test_stop_breaker_cap_is_configurable(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL])
+    # A single attempt is below the default cap (3) but at a cap of 1.
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "1")
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_breaker_cap_can_be_raised(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Raising the cap loosens the breaker: four failures still block at a cap of
+    # five, and the fifth trips it.
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "5")
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 4)
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 5)
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
+def test_stop_breaker_cap_ignores_garbage_env(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 2)
+    # A typo or non-positive value must fall back to the default, never disable
+    # the breaker by raising the cap to infinity.
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "not-a-number")
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+
+
+def test_stop_breaker_keys_off_latest_review_not_history(tmp_path: Path, monkeypatch) -> None:
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # A later PASS means the phase converged: stale BLOCKED/FAIL from earlier
+    # cycles must not trip the breaker and let the agent stop short.
+    _snapshot_with_reviews(
+        tmp_path,
+        monkeypatch,
+        [GateVerdict.BLOCKED, GateVerdict.FAIL, GateVerdict.PASS],
+    )
+    payload = json.loads(stop_payload(tmp_path, enforce=True))
+    assert payload["decision"] == "block"
+
+
+def _transcript(tmp_path: Path, output_tokens: int) -> str:
+    path = tmp_path / "transcript.jsonl"
+    path.write_text(
+        '{"type":"assistant","message":{"usage":{"output_tokens":%d}}}\n' % output_tokens,
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+def test_stop_token_budget_trips_when_exceeded(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)  # fresh goal: waiting on the agent, would block
+    transcript = _transcript(tmp_path, output_tokens=500)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    assert stop_payload(tmp_path, enforce=True, transcript_path=transcript) == ""
+
+
+def test_stop_token_budget_blocks_when_under(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=50)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
+def test_stop_token_budget_trips_exactly_at_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    # The ceiling is inclusive: hitting it exactly must stop, not block.
+    transcript = _transcript(tmp_path, output_tokens=100)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    assert stop_payload(tmp_path, enforce=True, transcript_path=transcript) == ""
+
+
+def test_stop_token_budget_is_off_without_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=10**9)
+    monkeypatch.delenv(MAX_TOKENS_ENV, raising=False)
+    # No cap set: a huge transcript must not trip the gate.
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
+def test_stop_token_budget_ignores_garbage_cap(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=10**9)
+    monkeypatch.setenv(MAX_TOKENS_ENV, "lots")
+    # A non-integer cap disables the ceiling rather than capping at a wrong value.
+    payload = json.loads(stop_payload(tmp_path, enforce=True, transcript_path=transcript))
+    assert payload["decision"] == "block"
+
+
 def test_stop_fails_open_on_unexpected_error(tmp_path: Path, monkeypatch) -> None:
     from goals import agent_hooks
 
@@ -93,6 +257,45 @@ def test_hooks_session_start_empty_without_goal(tmp_path: Path, monkeypatch) -> 
     result = runner.invoke(app, ["hooks", "session-start"])
     assert result.exit_code == 0
     assert result.stdout == ""
+
+
+def test_hooks_stop_command_reads_transcript_from_stdin(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_TOKENS_ENV
+
+    _repo_with_goal(tmp_path)
+    transcript = _transcript(tmp_path, output_tokens=500)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GOALS_ENFORCE", "1")
+    monkeypatch.setenv(MAX_TOKENS_ENV, "100")
+    # The hook input arrives as JSON on stdin; the token ceiling trips, so the
+    # command allows the stop (empty output) rather than blocking.
+    stdin = json.dumps({"transcript_path": transcript, "hook_event_name": "Stop"})
+    result = runner.invoke(app, ["hooks", "stop"], input=stdin)
+    assert result.exit_code == 0
+    assert result.stdout == ""
+
+
+def test_hooks_stop_command_blocks_without_transcript(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GOALS_ENFORCE", "1")
+    # No stdin payload: the gate still works off durable state and blocks.
+    result = runner.invoke(app, ["hooks", "stop"], input="")
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["decision"] == "block"
+
+
+def test_hooks_stop_command_tolerates_malformed_stdin(tmp_path: Path, monkeypatch) -> None:
+    _repo_with_goal(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GOALS_ENFORCE", "1")
+    # A JSON array (not an object) and a non-string transcript_path are both
+    # ignored — the path degrades to None — so the gate falls back to durable
+    # state and blocks rather than crashing.
+    for stdin in ("[1, 2, 3]", json.dumps({"transcript_path": 123})):
+        result = runner.invoke(app, ["hooks", "stop"], input=stdin)
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["decision"] == "block"
 
 
 # --- plugin manifests ------------------------------------------------------ #
