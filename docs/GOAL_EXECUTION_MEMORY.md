@@ -82,8 +82,8 @@ instructions, `AGENTS.md` — stores human-edited memory as Markdown.)
 
 To keep your edits safe while the agent also writes, ownership is split:
 
-- The agent **only appends** to `observations.md` (one line per decision — clean diffs,
-  trivially `git revert`-able).
+- The agent **only appends** to `observations.md` (one small block per decision — clean
+  diffs, trivially `git revert`-able).
 - The agent **never rewrites `preferences.md`**; it only inserts a bullet when you record
   or confirm one. Everything else in that file is yours and is preserved untouched.
 

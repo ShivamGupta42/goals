@@ -191,8 +191,9 @@ plain-Markdown files under `~/.goals/user/`, yours to read and edit, that never 
 your machine:
 
 - **`observations.md`** — an append-only log of the decisions Goals sees you make as a
-  goal runs: *what* you chose and the *context*. It records a reason only when you
-  actually give one, in your own words — it never invents a "because."
+  goal runs: *what* you chose and the *context*. It **never invents a "because"**; any
+  reason it stores is kept verbatim, and labelled as your own words (`you said:`) only
+  when you actually said it.
 - **`preferences.md`** — the durable preferences that steer how Goals auto-executes.
   You own this file; Goals only adds to it when you state or confirm a preference, and
   never rewrites your edits.
@@ -210,6 +211,10 @@ goals user digest                 # what Goals noticed this goal + what it'll ap
 goals user record "Keep explanations concise" --area communication
 goals user show                   # everything; or just open ~/.goals/user/*.md and edit
 ```
+
+Full design — the situated-observation model, why no fabricated "because," the
+human/agent file split, deliberate tradeoffs, and how an older JSON store is migrated —
+is in [**docs/GOAL_EXECUTION_MEMORY.md**](docs/GOAL_EXECUTION_MEMORY.md).
 
 ## For developers
 
