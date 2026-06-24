@@ -35,6 +35,8 @@ flowchart TB
         cap["capabilities.py<br/>capability-gap (Trust V1)"]
         loopimport["loop_catalog.py<br/>loop import adapters"]
         journey["journey.py + decisions.py<br/>building journey (PACERS)"]
+        mem["user_memory.py<br/>goal-execution memory"]
+        stop["agent_hooks.py + token_budget.py<br/>enforced stop gate"]
         port["portability.py<br/>cross-agent spec"]
         merge["merge_readiness.py<br/>git_ops.py"]
         dash["dashboard.py<br/>human-readable HTML"]
@@ -43,6 +45,7 @@ flowchart TB
     subgraph state["File-backed state (in your repo, you own it)"]
         goalstate[".goals/GOAL.md<br/>.goals/goal-state.json"]
         wf[".agent-workflow/goals/&lt;slug&gt;/<br/>evidence-*.json · events.jsonl<br/>dashboard.html · architecture.md"]
+        usermem["~/.goals/user/<br/>preferences.md · observations.md<br/>(private, hand-editable)"]
     end
 
     subgraph reg["registries/ (declarative config)"]
@@ -55,7 +58,8 @@ flowchart TB
     cli --> reg
     skill --> sk
     dash --> goalstate
-    runtime --> gates & skill & cap & loopimport & journey & port & merge & dash
+    mem --> usermem
+    runtime --> gates & skill & cap & loopimport & journey & mem & stop & port & merge & dash
 ```
 
 **Why it's shaped this way:** state lives in *your* repo as plain files, so a goal
@@ -167,10 +171,12 @@ flowchart TB
         spec[".goals/ portable spec<br/>goals export"]
         emit["goals emit → native /goal stop-condition"]
         ctx["goals context sync<br/>AGENTS.md / CLAUDE.md blocks"]
+        stopgate["agent_hooks.py<br/>enforced Stop hook (GOALS_ENFORCE)"]
         adapt["adapters.py + registries/adapters.yml<br/>claude · codex"]
     end
     loopN <-->|"goals next handoff"| adapt
     spec --> emit --> loopN
+    stopgate -.->|"halts on token budget or failed-review cap"| loopN
     ctx --> native
     spec -.survives /clear, new session, agent switch.-> spec
 ```
