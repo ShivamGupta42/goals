@@ -1,8 +1,13 @@
 # Goals
 
-**A no-nonsense workflow engine for long-running agent loops.** Goals keeps the
-plan, decisions, and proof in files you own so you can trust, verify, fix, and
-resume the work.
+**Goals is an open-source plugin for Claude Code and Codex that helps an AI agent
+run long enough to actually finish your goal.**
+
+It builds on the native `/goal` loop instead of replacing it: the agent still does
+the work, while Goals adds the durable plan, the proof each step ran, the
+decisions, and a memory of how you like things done — the things a long run needs
+to be something you can trust, check, and pick back up. Everything it does lives
+in plain files you own.
 
 ![Goals keeps your AI's plan and proof alive across /clear](docs/assets/goals-hero-opt.gif)
 
@@ -15,16 +20,21 @@ resume the work.
 
 ## What Goals does
 
-- **Trust the loop.** State, decisions, evidence, and history stay readable while
-  the work keeps moving.
-- **Verify before done.** Checks actually run before a step is accepted, so "done"
-  is earned instead of asserted.
-- **Fix what breaks.** Failed verification points to the next repair instead of
-  vague retrying.
-- **Reuse proven loops.** Import an external loop or catalog, answer only the
-  missing details, and let Goals validate it before it becomes your workflow.
-- **Resume without losing the thread.** Portable files survive `/clear`, new
-  sessions, and agent switches.
+- **Thinks before it builds.** It breaks your goal into smaller problems, writes
+  down the assumptions it's relying on, weighs a few options (including doing
+  nothing), and tries to break its own work to catch mistakes — and you can read
+  that reasoning in plain English.
+- **Proves "done" instead of claiming it.** A step is accepted only after its
+  check actually runs and passes. A failed check points to the next fix instead
+  of a vague retry.
+- **Explains every decision.** "Which database should we use" comes with what it
+  picked, whether it's easy to undo, and why it fits your goal.
+- **Learns how you decide.** For simple, reversible choices it stops asking and
+  decides the way you have before. The risky or hard-to-undo ones still come to you.
+- **Stops on your terms.** Set a token budget and a finish condition, so a long
+  run can't go forever or quietly run up a bill.
+- **Stays yours.** The plan, decisions, proof, and history are plain files you can
+  read, edit, and resume in a new session — or hand to a different agent.
 
 ## Who it's for
 
