@@ -65,11 +65,10 @@ your own project** — so the goal, the decisions, and the proof are yours and
 survive a `/clear` or a brand-new session. The **assess** step follows PACERS, a
 method for [solving problems without rushing](https://medium.com/@shivam.gupta42/how-to-solve-problems-without-rushing-6a329be5e6ae).
 
-Here's the whole loop — each step in plain English, with the command behind it
-(click to enlarge):
+Here's the whole loop, each step in plain English (click to enlarge):
 
 <p align="center">
-  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 your goal in plain English (goals start), 2 the problem is broken into smaller steps with its assumptions written out, 3 the AI agent starts executing one step at a time (goals next), 4 each step must show undeniable proof it is done and that proof is run for real (goals phase verify), 5 step done and proof saved (goals phase accept), 6 finished with a full readable record (goals finish) — plus a dashboard you can read anytime (goals view) and a private memory that remembers your decisions" width="520"></a>
+  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 your goal in plain English, 2 the problem is broken into smaller steps with its assumptions written out, 3 the AI agent starts executing one step at a time, 4 each step must show undeniable proof it is done and that proof is run for real, not the agent's word, 5 step done and proof saved, 6 finished with a full readable record — plus a dashboard anyone can read anytime and a private memory that remembers your decisions so the simple safe ones get made the way you would" width="520"></a>
 </p>
 
 And you never lose the thread: a **dashboard anyone can read** shows status,

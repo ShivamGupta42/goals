@@ -11,14 +11,14 @@ config:
     fontSize: "15px"
 ---
 flowchart TD
-    A["<b>1 · Your goal, in plain English</b><br/>you: goals start  ·  or /goals:create"]
+    A["<b>1 · Your goal, in plain English</b>"]
     B["<b>2 · The problem, broken down</b><br/>split into smaller steps, with the<br/>assumptions it depends on written out"]
-    C["<b>3 · The AI agent starts executing</b><br/>one step at a time<br/>agent: goals next"]
-    D{"<b>4 · Proof it actually works</b><br/>each step must show undeniable proof it is done —<br/>and that proof is run for real, not the agent's word.<br/>Did it pass?  ·  goals phase verify"}
-    E["<b>5 · Step done, proof saved</b><br/>goals phase accept"]
-    F["<b>6 · Finished — with a full, readable record</b><br/>goals finish"]
-    DASH(["<b>Anytime: status, decisions &amp; proof</b><br/>on a page anyone can read<br/>goals check  ·  goals view (dashboard)"])
-    MEM(["<b>Your decisions are remembered</b><br/>saved to a private memory that is yours.<br/>next time, the simple, safe ones get handled<br/>the way you would — without asking"])
+    C["<b>3 · The AI agent starts executing</b><br/>one step at a time"]
+    D{"<b>4 · Proof it actually works</b><br/>each step must show undeniable proof it is done —<br/>and that proof is run for real, not the agent's word.<br/>Did it pass?"}
+    E["<b>5 · Step done, proof saved</b>"]
+    F["<b>6 · Finished — a full, readable record</b>"]
+    DASH(["<b>Anytime: a dashboard anyone can read</b><br/>status, decisions &amp; proof, in plain language"])
+    MEM(["<b>Your decisions are remembered</b><br/>saved to a private memory that is yours.<br/>next time, the simple, safe decisions get<br/>made the way you would — without asking"])
 
     A --> B --> C --> D
     D -- "not yet: fix &amp; retry" --> C
@@ -29,7 +29,7 @@ flowchart TD
     C -. "your choices" .-> MEM
 
     classDef youstep fill:#DDD2FF,stroke:#6B50FF,stroke-width:3px,color:#1F2937;
-    classDef look fill:#F3F0FF,stroke:#8A7BD8,stroke-width:2px,color:#1F2937;
+    classDef look fill:#DCEBFF,stroke:#3B82C4,stroke-width:3px,color:#1F2937;
     classDef mem fill:#FFF1C9,stroke:#C99A2E,stroke-width:3px,color:#1F2937;
     class A,F youstep;
     class DASH look;
