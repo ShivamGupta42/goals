@@ -85,7 +85,7 @@ def test_observation_records_context_not_cause(monkeypatch, tmp_path) -> None:
     assert "when: sessions must be shared across instances" in line
     # No fabricated reason when none was given.
     assert "because" not in line.lower()
-    assert "you said" not in line
+    assert "- you said:" not in line  # the rendered field, not the header legend
 
     obs = load_observations()
     assert len(obs) == 1
@@ -102,14 +102,50 @@ def test_observation_keeps_user_words_as_stated_note(monkeypatch, tmp_path) -> N
         choice="a local file over a database",
         context="throwaway prototype",
         note="I don't want to manage a server",
+        stated=True,  # explicitly the user's own words
     )
 
     obs = load_observations()[0]
     assert obs.note == "I don't want to manage a server"
     assert obs.provenance == "stated"
-    assert 'you said: "I don\'t want to manage a server"' in observations_path().read_text(
+    assert "you said: I don't want to manage a server" in observations_path().read_text(
         encoding="utf-8"
     )
+
+
+def test_recorded_rationale_is_not_attributed_to_user(monkeypatch, tmp_path) -> None:
+    # A note WITHOUT stated=True (e.g. agent-recorded --why) must not be rendered
+    # as the user's words — that would fabricate attribution.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_observation(goal_id="g1", choice="Redis", note="needs to survive restarts")
+
+    obs = load_observations()[0]
+    assert obs.provenance == "observed"
+    text = observations_path().read_text(encoding="utf-8")
+    assert "- note: needs to survive restarts" in text
+    assert "- you said:" not in text  # the rendered field, not the header legend
+
+
+def test_observation_round_trips_adversarial_text(monkeypatch, tmp_path) -> None:
+    # Free-form fields contain the field delimiters themselves; must round-trip.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_observation(
+        goal_id="g1",
+        area="decision",
+        choice="use A — when: never · really",
+        context="migrate DB? (you said: maybe)",
+        note='I said "x") and · stuff — when: now',
+        stated=True,
+    )
+
+    obs = load_observations()
+    assert len(obs) == 1
+    assert obs[0].choice == "use A — when: never · really"
+    assert obs[0].context == "migrate DB? (you said: maybe)"
+    assert obs[0].note == 'I said "x") and · stuff — when: now'
+    assert obs[0].provenance == "stated"
 
 
 def test_observations_do_not_steer_other_goals(monkeypatch, tmp_path) -> None:
@@ -207,7 +243,7 @@ def test_forget_preference_removes_matching_bullet(monkeypatch, tmp_path) -> Non
     add_preference("communication", "Be concise.")
 
     removed = forget_preference("tests before")
-    assert removed == 1
+    assert removed == ["Run tests before summaries."]  # returns what it dropped
     remaining = [p.text for p in load_preferences()]
     assert remaining == ["Be concise."]
 
@@ -244,8 +280,10 @@ def test_judgement_capture_writes_observation(monkeypatch, tmp_path) -> None:
     assert obs[0].goal_id == "G1"
     assert obs[0].choice == "Redis"
     assert obs[0].context == "Where should sessions live?"
-    assert obs[0].note == "they must survive a restart"  # user's words, not inferred
-    assert obs[0].provenance == "stated"
+    assert obs[0].note == "they must survive a restart"
+    # --why is recorded rationale, not a verified user quote: stays "observed".
+    assert obs[0].provenance == "observed"
+    assert "- you said:" not in observations_path().read_text(encoding="utf-8")
 
 
 def test_agent_decisions_are_not_recorded_as_user_memory(monkeypatch, tmp_path) -> None:
@@ -258,6 +296,39 @@ def test_agent_decisions_are_not_recorded_as_user_memory(monkeypatch, tmp_path) 
     )
 
     assert load_observations() == []
+
+
+def test_legacy_json_store_is_migrated_not_lost(monkeypatch, tmp_path) -> None:
+    import json
+
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    user_dir = goals_home() / "user"
+    user_dir.mkdir(parents=True, exist_ok=True)
+    # Simulate a pre-Markdown install: active claim + an episodic event log.
+    (user_dir / "memory.json").write_text(
+        json.dumps(
+            {
+                "claims": [
+                    {"area": "communication", "statement": "Be concise.", "status": "active"},
+                    {"area": "risk", "statement": "An old candidate.", "status": "candidate"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (user_dir / "events.jsonl").write_text("{}\n", encoding="utf-8")
+
+    prefs = load_preferences()
+
+    # Active claim is preserved as a preference; candidate is not promoted.
+    assert [(p.area, p.text) for p in prefs] == [("communication", "Be concise.")]
+    # Legacy files are kept as .bak (no silent data loss), originals gone.
+    assert (user_dir / "memory.json.bak").exists()
+    assert (user_dir / "events.jsonl.bak").exists()
+    assert not (user_dir / "memory.json").exists()
+    # Migration is idempotent and leaves a discoverable note.
+    assert "Imported 1 preference" in preferences_path().read_text(encoding="utf-8")
+    assert len(load_preferences()) == 1
 
 
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:

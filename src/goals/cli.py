@@ -1273,12 +1273,17 @@ def user_forget(
             if purge:
                 typer.echo("Purged user memory files.")
             else:
-                typer.echo(f"Forgot {removed} preference(s).")
+                typer.echo(f"Forgot {len(removed)} preference(s).")
             return
         if not text:
             raise GoalsError("Provide preference text to forget, or use --all.")
         removed = forget_preference(text)
-        typer.echo(f"Forgot {removed} preference(s) matching: {text}")
+        if not removed:
+            typer.echo(f"No preference matched: {text}")
+            return
+        typer.echo(f"Forgot {len(removed)} preference(s) matching '{text}':")
+        for item in removed:
+            typer.echo(f"  - {item}")
 
     _handle(run)
 

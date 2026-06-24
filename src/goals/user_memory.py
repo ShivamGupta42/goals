@@ -7,7 +7,7 @@ Two plain-Markdown files under ``~/.goals/user/`` — both yours to read and edi
   it never rewrites your edits.
 - ``observations.md`` — an append-only log of situated decisions Goals saw you
   make while a goal ran: *what* you chose and the *context*, never an invented
-  reason. A quoted note is only ever your own words.
+  reason. ``you said:`` is your own words; ``note:`` is recorded rationale.
 
 Design choices (see docs/GOAL_EXECUTION_MEMORY.md):
 - No causal attribution. We record context + choice, not "chose X *because* Y".
@@ -30,6 +30,7 @@ from goals.models import (
     Preference,
     UserMemory,
     UserPreferenceArea,
+    utc_now,
 )
 from goals.storage import GoalsError, atomic_write_text, lock_file
 
@@ -51,10 +52,10 @@ _PREFERENCES_HEADER = (
 )
 _OBSERVATIONS_HEADER = (
     "# Goals observations (append-only)\n"
-    "<!-- Goals appends one decision per line as you work — the choice and its "
-    "context, never an invented reason. -->\n"
-    "<!-- A note in quotes is only ever your own words. Edit a line only to "
-    "correct it. -->\n"
+    "<!-- Goals appends one decision as you work: a `chose:` line, plus optional "
+    "`when:` (context) and a note. Never an invented reason. -->\n"
+    "<!-- `you said:` is your own words; `note:` is recorded rationale. Edit a "
+    "line only to correct it. -->\n"
 )
 
 
@@ -84,6 +85,7 @@ def observations_path() -> Path:
 # Preferences (durable, user-owned)
 # --------------------------------------------------------------------------- #
 def load_preferences() -> list[Preference]:
+    _maybe_migrate_legacy()
     path = preferences_path()
     if not path.exists():
         return []
@@ -122,35 +124,36 @@ def add_preference(area: str, text: str) -> Preference:
     return preference
 
 
-def forget_preference(target: str, *, purge: bool = False) -> int:
+def forget_preference(target: str, *, purge: bool = False) -> list[str]:
     """Remove preference bullets matching ``target`` (substring, case-insensitive).
 
     ``target == '--all'`` clears every preference; with ``purge`` it deletes the
-    files outright. Returns the number of preferences removed.
+    files outright. Returns the text of every preference removed, so the caller
+    can show exactly what was dropped (a substring can match more than one).
     """
     if target == "--all":
-        before = len(load_preferences())
+        removed_all = [pref.text for pref in load_preferences()]
         if purge:
             for path in (preferences_path(), observations_path()):
                 path.unlink(missing_ok=True)
-            return before
+            return removed_all
         path = preferences_path()
         with lock_file(path):
             atomic_write_text(path, _PREFERENCES_HEADER)
-        return before
+        return removed_all
     needle = _clean(target).lower()
     if not needle:
         raise GoalsError("Provide preference text to forget, or use --all.")
     path = preferences_path()
     with lock_file(path):
         if not path.exists():
-            return 0
+            return []
         kept: list[str] = []
-        removed = 0
+        removed: list[str] = []
         for raw in path.read_text(encoding="utf-8").splitlines():
             bullet = re.match(r"^[-*]\s+(.*)$", raw.strip())
             if bullet and needle in bullet.group(1).lower():
-                removed += 1
+                removed.append(_clean(bullet.group(1)))
                 continue
             kept.append(raw)
         if removed:
@@ -168,7 +171,15 @@ def record_observation(
     context: str = "",
     note: str = "",
     area: str = "decision",
+    stated: bool = False,
 ) -> JudgementObservation:
+    """Append one situated observation to the log.
+
+    ``note`` is a free-form annotation. ``stated=True`` means the note is the
+    user's *own words* (rendered as ``you said: …``). By default a note is
+    treated as recorded rationale, not a user quote — we never claim the user
+    said something they may not have.
+    """
     clean_note = _clean(note)
     observation = JudgementObservation(
         goal_id=_slug(goal_id),
@@ -176,28 +187,41 @@ def record_observation(
         choice=_clean(choice),
         context=_clean(context),
         note=clean_note,
-        # A reason is "stated" only when the user gave one; we never infer it.
-        provenance="stated" if clean_note else "observed",
+        provenance="stated" if (clean_note and stated) else "observed",
+        created_at=utc_now()[:10],
     )
     if not observation.choice:
         raise GoalsError("An observation needs a choice.")
     path = observations_path()
     with lock_file(path):
         lines = _read_lines(path, _OBSERVATIONS_HEADER)
-        lines.append(_format_observation_line(observation))
+        lines.extend(_format_observation_block(observation))
         atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
     return observation
 
 
 def load_observations() -> list[JudgementObservation]:
+    _maybe_migrate_legacy()
     path = observations_path()
     if not path.exists():
         return []
     observations: list[JudgementObservation] = []
+    current: JudgementObservation | None = None
     for raw in path.read_text(encoding="utf-8").splitlines():
-        observation = _parse_observation_line(raw)
-        if observation is not None:
-            observations.append(observation)
+        parent = _OBS_PARENT_RE.match(raw)
+        if parent:
+            current = _observation_from_parent(parent)
+            observations.append(current)
+            continue
+        field = _OBS_FIELD_RE.match(raw)
+        if field and current is not None:
+            value = _clean(field.group("value"))
+            if field.group("key") == "when":
+                current.context = value
+            else:  # "note" or "you said"
+                current.note = value
+                current.provenance = "stated" if field.group("key") == "you said" else "observed"
+        # Anything else (markers, blanks, header, stray human text) is ignored.
     return observations
 
 
@@ -378,51 +402,44 @@ def _insert_preference_line(lines: list[str], preference: Preference) -> None:
     lines.append(bullet)
 
 
-def _format_observation_line(observation: JudgementObservation) -> str:
+# A self-delimiting Markdown block. Each free-form value (choice / context /
+# note) is the entire rest of its own line, so it can contain ANY character —
+# the field separators (·, —, quotes, the literal "you said:") can appear in
+# user text without corrupting the parse. The structured prefix fields (date,
+# goal slug, area) cannot contain their own terminators by construction.
+#
+#   - 2026-06-24 · goal:add-auth · [risk] · chose: a local file over a database
+#     - when: throwaway prototype
+#     - you said: no server to manage
+def _format_observation_block(observation: JudgementObservation) -> list[str]:
     date = observation.created_at[:10]
-    parts = [
-        f"- {date}",
-        f"goal:{observation.goal_id or 'none'}",
-        f"[{observation.area}] chose: {observation.choice}",
+    goal = observation.goal_id or "none"
+    lines = [
+        f"- {date} {_MIDDOT} goal:{goal} {_MIDDOT} "
+        f"[{observation.area}] {_MIDDOT} chose: {observation.choice}"
     ]
-    line = f" {_MIDDOT} ".join(parts)
     if observation.context:
-        line += f" — when: {observation.context}"
+        lines.append(f"  - when: {observation.context}")
     if observation.note:
-        line += f' (you said: "{observation.note}")'
-    return line
+        key = "you said" if observation.provenance == "stated" else "note"
+        lines.append(f"  - {key}: {observation.note}")
+    return lines
 
 
-_OBS_RE = re.compile(
+_OBS_PARENT_RE = re.compile(
     r"^-\s+(?P<date>\d{4}-\d{2}-\d{2})\s+·\s+goal:(?P<goal>\S*)\s+·\s+"
-    r"\[(?P<area>[^\]]+)\]\s+chose:\s+(?P<rest>.*)$"
+    r"\[(?P<area>[^\]]+)\]\s+·\s+chose:\s+(?P<choice>.*)$"
 )
+_OBS_FIELD_RE = re.compile(r"^\s+-\s+(?P<key>when|note|you said):\s*(?P<value>.*)$")
 
 
-def _parse_observation_line(raw: str) -> JudgementObservation | None:
-    match = _OBS_RE.match(raw.strip())
-    if not match:
-        return None
-    rest = match.group("rest")
-    note = ""
-    note_match = re.search(r'\s*\(you said:\s*"(?P<note>.*)"\)\s*$', rest)
-    if note_match:
-        note = note_match.group("note")
-        rest = rest[: note_match.start()]
-    context = ""
-    if " — when: " in rest:
-        choice, context = rest.split(" — when: ", 1)
-    else:
-        choice = rest
+def _observation_from_parent(match: re.Match[str]) -> JudgementObservation:
     area = match.group("area").strip().lower()
     goal = match.group("goal")
     return JudgementObservation(
         goal_id="" if goal == "none" else goal,
         area=area if area in _AREAS else "other",  # type: ignore[arg-type]
-        choice=_clean(choice),
-        context=_clean(context),
-        note=_clean(note),
-        provenance="stated" if note else "observed",
+        choice=_clean(match.group("choice")),
         created_at=match.group("date"),
     )
 
@@ -432,10 +449,21 @@ def _describe_observation(observation: JudgementObservation) -> str:
     if observation.context:
         text += f" — when {observation.context}"
     if observation.note:
-        text += f' (you said: "{observation.note}")'
+        label = "you said" if observation.provenance == "stated" else "note"
+        text += f' ({label}: "{observation.note}")'
     if observation.goal_id:
         text += f" [goal:{observation.goal_id}]"
     return text
+
+
+def _normalize_choice(text: str) -> str:
+    """Loose key so near-identical free-text choices group together.
+
+    Lowercase, drop punctuation, collapse whitespace. This is best-effort: it
+    catches "use SQLite" vs "Use SQLite." but not paraphrases. The reliable path
+    to a standing preference remains the interview / `goals user record`.
+    """
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
 def _recurring_candidates(
@@ -444,18 +472,96 @@ def _recurring_candidates(
 ) -> list[tuple[str, str, int]]:
     """Choices made in >= 2 distinct goals that aren't already a preference."""
     seen: dict[tuple[str, str], set[str]] = {}
+    display: dict[tuple[str, str], str] = {}
     for obs in observations:
         if not obs.choice or not obs.goal_id:
             continue
-        seen.setdefault((obs.area, obs.choice), set()).add(obs.goal_id)
-    covered = {(pref.area, pref.text.lower()) for pref in preferences}
+        key = (obs.area, _normalize_choice(obs.choice))
+        if not key[1]:
+            continue
+        seen.setdefault(key, set()).add(obs.goal_id)
+        display.setdefault(key, obs.choice)  # keep the first original wording
+    covered = {(pref.area, _normalize_choice(pref.text)) for pref in preferences}
     candidates = [
-        (choice, area, len(goals))
-        for (area, choice), goals in seen.items()
-        if len(goals) >= 2 and (area, choice.lower()) not in covered
+        (display[key], key[0], len(goals))
+        for key, goals in seen.items()
+        if len(goals) >= 2 and key not in covered
     ]
     candidates.sort(key=lambda item: item[2], reverse=True)
     return candidates
+
+
+# --------------------------------------------------------------------------- #
+# One-time migration from the legacy JSON store (pre-Markdown).
+# --------------------------------------------------------------------------- #
+_MIGRATING = False
+
+
+def _legacy_paths() -> tuple[Path, Path]:
+    directory = user_memory_dir()
+    return directory / "memory.json", directory / "events.jsonl"
+
+
+def _maybe_migrate_legacy() -> None:
+    """Best-effort import of a pre-Markdown store so users don't lose memory.
+
+    Durable *active* preference claims from the old ``memory.json`` become
+    standing preferences. The old episodic events are intentionally NOT migrated
+    (they carried the deprecated "chose X because Y" framing). Legacy files are
+    renamed ``*.bak`` so this runs once. Guarded against re-entry because
+    ``add_preference`` itself reads preferences.
+    """
+    global _MIGRATING
+    if _MIGRATING:
+        return
+    memory_json, events_jsonl = _legacy_paths()
+    if not memory_json.exists() and not events_jsonl.exists():
+        return
+    _MIGRATING = True
+    try:
+        import json
+
+        imported = 0
+        if memory_json.exists():
+            try:
+                data = json.loads(memory_json.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                data = {}
+            for claim in data.get("claims", []):
+                if not isinstance(claim, dict) or claim.get("status") != "active":
+                    continue
+                statement = _clean(claim.get("statement", ""))
+                area = claim.get("area", "other")
+                if not statement:
+                    continue
+                try:
+                    add_preference(area if area in _AREAS else "other", statement)
+                    imported += 1
+                except GoalsError:
+                    continue
+        for path in (memory_json, events_jsonl):
+            if path.exists():
+                path.replace(path.with_name(path.name + ".bak"))
+        if imported:
+            _note_migration(imported)
+    finally:
+        _MIGRATING = False
+
+
+def _note_migration(count: int) -> None:
+    path = preferences_path()
+    note = (
+        f"<!-- Imported {count} preference(s) from your previous Goals memory; "
+        "the old files were kept alongside as *.bak. -->"
+    )
+    with lock_file(path):
+        lines = _read_lines(path, _PREFERENCES_HEADER)
+        if note not in lines:
+            header_end = 1
+            while header_end < len(lines) and lines[header_end].lstrip().startswith("<!--"):
+                header_end += 1
+            lines.insert(header_end, note)
+            atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
 # Interview bookkeeping lives in the observations log as HTML-comment markers —

@@ -653,14 +653,18 @@ class JudgementObservation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    observation_id: str = Field(default_factory=lambda: f"OBS-{uuid4().hex[:8]}")
     goal_id: str = ""
     area: UserPreferenceArea = "decision"
     choice: str = ""
     context: str = ""
     note: str = ""
+    # "stated" only when the note is the user's own words. Agent-recorded
+    # rationale (e.g. a `--why` flag) stays "observed" — we never attribute a
+    # reason to the user that they did not actually say.
     provenance: Literal["observed", "stated"] = "observed"
-    created_at: str = Field(default_factory=utc_now)
+    # Date the decision was observed (YYYY-MM-DD). File order preserves
+    # intra-day ordering; the log is append-only.
+    created_at: str = Field(default_factory=lambda: utc_now()[:10])
 
 
 class Preference(BaseModel):

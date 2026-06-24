@@ -9,7 +9,7 @@ It lives in two plain-Markdown files under `~/.goals/user/` (override the root w
 ```
 ~/.goals/user/
 ├── preferences.md    # YOU own it. Durable preferences that steer auto-execution.
-└── observations.md   # Agent-owned, append-only. Situated decisions, one per line.
+└── observations.md   # Agent-owned, append-only. Situated decisions.
 ```
 
 Nothing under here is JSON — it is all editable Markdown. The only bookkeeping (which
@@ -20,19 +20,26 @@ rendered, and ignored when the log is parsed.
 ## The model: situated observations, not causal rules
 
 A decision is recorded as **what** you chose plus the observable **context** — never an
-inferred cause.
+inferred cause. Each observation is a small self-delimiting Markdown block: the choice is
+the rest of the `chose:` line, and `when:`/`you said:`/`note:` each take the rest of their
+own line, so the values can contain **any** character (`·`, `—`, quotes, even the literal
+`you said:`) without corrupting the parse.
 
 ```
-- 2026-06-24 · goal:add-auth · [risk] chose: a local file over a database — when: throwaway prototype (you said: "no server to manage")
+- 2026-06-24 · goal:add-auth · [risk] · chose: a local file over a database
+  - when: throwaway prototype
+  - you said: no server to manage
 ```
 
 - **`chose`** — what was decided.
 - **`when`** — the observable context the decision was made in.
-- **`you said`** — present only when *you* gave a reason, in your own words.
+- **`you said`** — present only when the note is *your own words* (`provenance: stated`).
+- **`note`** — recorded rationale that is *not* a verified user quote (e.g. an agent's
+  `--why`). It is shown as a `note:`, never attributed to you, because a `--why` flag is
+  often the agent's wording, not yours.
 
-There is deliberately **no "because" the agent makes up.** A reason appears only when you
-state one (`provenance: stated`); otherwise the observation is just choice + context
-(`provenance: observed`).
+There is deliberately **no "because" the agent makes up.** If no reason genuinely comes
+from you, the observation is just choice + context (`provenance: observed`).
 
 ### Why no fabricated "because"
 
@@ -103,6 +110,32 @@ Areas: `risk`, `communication`, `workflow`, `technical`, `decision`, `other`.
   appends a situated observation — context, not cause.
 - **At goal end** (`goals phase accept` on completion, and `goals finish`), the digest is
   shown and the post-goal interview is offered.
+
+## Deliberate tradeoffs (and their limits)
+
+These are conscious calls, kept small on purpose:
+
+- **Cross-goal promotion is best-effort.** A choice is offered for promotion when the same
+  decision is seen in ≥2 distinct goals, matched on a *normalized* form (lowercased,
+  punctuation-stripped). This catches "use SQLite" vs "Use SQLite." but **not** paraphrases.
+  The reliable path to a standing preference is always the interview / `goals user record`,
+  not automatic detection.
+- **Preferences are global; observations are scoped.** Preferences describe *your* style and
+  apply across projects by design. Observations carry a `goal:` tag and never steer another
+  goal. There is no per-project preference file yet — if you want project-specific rules,
+  keep them in that project's `CLAUDE.md`/`AGENTS.md`.
+- **The log only grows.** `observations.md` is append-only with no automatic decay or
+  eviction — simple and fully auditable, at the cost of unbounded growth. Prune it by hand,
+  or reset with `goals user forget --all --purge`. Personalization only ever reads
+  `preferences.md`, so a large log never slows or skews auto-execution.
+
+## Upgrading from the old store
+
+Earlier versions kept memory in `~/.goals/user/{memory.json,events.jsonl}`. On first run the
+new version **imports your durable active preferences** from `memory.json` into
+`preferences.md` and renames the old files to `*.bak` (nothing is deleted). The old episodic
+events are intentionally not imported — they used the deprecated "chose X because Y" framing.
+A one-line comment in `preferences.md` notes what was imported.
 
 ## Design sources
 
