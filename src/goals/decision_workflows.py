@@ -20,7 +20,7 @@ from goals.models import (
 )
 from goals.runtime import append_event, load_active_snapshot
 from goals.storage import GoalsError
-from goals.user_memory import record_observation
+from goals.user_memory import infer_area, record_observation
 
 
 @dataclass(frozen=True)
@@ -103,10 +103,15 @@ def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
     try:
         record_observation(
             goal_id=goal_id,
-            area="decision",
+            # Infer the area from the question instead of a meaningless constant,
+            # and carry reversibility/phase so memory can learn how this user
+            # decides about risky/irreversible things (not just what they picked).
+            area=infer_area(record.question),
             choice=record.choice,
             context=record.question,
             note=record.rationale,
+            reversible=record.reversible,
+            phase_id=record.phase_id or "",
         )
     except GoalsError as exc:
         return f"User memory warning: {exc}"

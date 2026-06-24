@@ -172,13 +172,16 @@ def record_observation(
     note: str = "",
     area: str = "decision",
     stated: bool = False,
+    reversible: bool | None = None,
+    phase_id: str = "",
 ) -> JudgementObservation:
     """Append one situated observation to the log.
 
     ``note`` is a free-form annotation. ``stated=True`` means the note is the
     user's *own words* (rendered as ``you said: …``). By default a note is
     treated as recorded rationale, not a user quote — we never claim the user
-    said something they may not have.
+    said something they may not have. ``reversible``/``phase_id`` are conditioning
+    metadata used by autonomy and cross-goal learning.
     """
     clean_note = _clean(note)
     observation = JudgementObservation(
@@ -188,6 +191,8 @@ def record_observation(
         context=_clean(context),
         note=clean_note,
         provenance="stated" if (clean_note and stated) else "observed",
+        reversible=reversible,
+        phase_id=_clean(phase_id),
         created_at=utc_now()[:10],
     )
     if not observation.choice:
@@ -215,12 +220,17 @@ def load_observations() -> list[JudgementObservation]:
             continue
         field = _OBS_FIELD_RE.match(raw)
         if field and current is not None:
+            key = field.group("key")
             value = _clean(field.group("value"))
-            if field.group("key") == "when":
+            if key == "when":
                 current.context = value
+            elif key == "reversible":
+                current.reversible = value.lower() in {"yes", "true", "y"}
+            elif key == "phase":
+                current.phase_id = value
             else:  # "note" or "you said"
                 current.note = value
-                current.provenance = "stated" if field.group("key") == "you said" else "observed"
+                current.provenance = "stated" if key == "you said" else "observed"
         # Anything else (markers, blanks, header, stray human text) is ignored.
     return observations
 
@@ -361,7 +371,7 @@ def record_interview_answers(goal_id: str, answers: list[str]) -> list[Preferenc
         raise GoalsError("Interview requires exactly three non-empty answers.")
     # Infer the area from each answer's content rather than its position — the
     # questions don't map cleanly onto areas, so a positional guess mislabels.
-    preferences = [add_preference(_infer_area(text), text) for text in clean]
+    preferences = [add_preference(infer_area(text), text) for text in clean]
     _append_marker("interviewed", _slug(goal_id))
     return preferences
 
@@ -442,6 +452,10 @@ def _format_observation_block(observation: JudgementObservation) -> list[str]:
     ]
     if observation.context:
         lines.append(f"  - when: {observation.context}")
+    if observation.reversible is not None:
+        lines.append(f"  - reversible: {'yes' if observation.reversible else 'no'}")
+    if observation.phase_id:
+        lines.append(f"  - phase: {observation.phase_id}")
     if observation.note:
         key = "you said" if observation.provenance == "stated" else "note"
         lines.append(f"  - {key}: {observation.note}")
@@ -452,7 +466,9 @@ _OBS_PARENT_RE = re.compile(
     r"^-\s+(?P<date>\d{4}-\d{2}-\d{2})\s+[·-]\s+goal:(?P<goal>\S*)\s+[·-]\s+"
     r"\[(?P<area>[^\]]+)\]\s+[·-]\s+chose:\s+(?P<choice>.*)$"
 )
-_OBS_FIELD_RE = re.compile(r"^\s+-\s+(?P<key>when|note|you said):\s*(?P<value>.*)$")
+_OBS_FIELD_RE = re.compile(
+    r"^\s+-\s+(?P<key>when|note|you said|reversible|phase):\s*(?P<value>.*)$"
+)
 
 
 def _observation_from_parent(match: re.Match[str]) -> JudgementObservation:
@@ -468,6 +484,8 @@ def _observation_from_parent(match: re.Match[str]) -> JudgementObservation:
 
 def _describe_observation(observation: JudgementObservation) -> str:
     text = f"chose {observation.choice}"
+    if observation.reversible is False:
+        text += " (irreversible)"
     if observation.context:
         text += f" — when {observation.context}"
     if observation.note:
@@ -503,11 +521,19 @@ def _recurring_candidates(
             continue
         seen.setdefault(key, set()).add(obs.goal_id)
         display.setdefault(key, obs.choice)  # keep the first original wording
-    covered = {(pref.area, _normalize_choice(pref.text)) for pref in preferences}
+    covered_pref_text = [_normalize_choice(pref.text) for pref in preferences]
+
+    def _is_covered(area: str, normalized_choice: str) -> bool:
+        # A candidate is covered if its normalized choice appears in ANY confirmed
+        # preference's text — area-agnostic. This stops the digest from offering to
+        # promote a choice the user already turned into a preference, even when they
+        # reworded it or filed it under a different area than the suggested command.
+        return any(normalized_choice in pref_text for pref_text in covered_pref_text)
+
     candidates = [
         (display[key], key[0], len(goals))
         for key, goals in seen.items()
-        if len(goals) >= 2 and key not in covered
+        if len(goals) >= 2 and not _is_covered(key[0], key[1])
     ]
     candidates.sort(key=lambda item: item[2], reverse=True)
     return candidates
@@ -651,7 +677,7 @@ _AREA_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _infer_area(text: str, fallback: str = "decision") -> str:
+def infer_area(text: str, fallback: str = "decision") -> str:
     low = text.lower()
     scores = {
         area: sum(1 for word in words if word in low)

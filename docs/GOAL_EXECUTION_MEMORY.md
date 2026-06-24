@@ -28,11 +28,18 @@ own line, so the values can contain **any** character (`·`, `—`, quotes, even
 ```
 - 2026-06-24 · goal:add-auth · [risk] · chose: a local file over a database
   - when: throwaway prototype
+  - reversible: yes
+  - phase: P2
   - you said: no server to manage
 ```
 
 - **`chose`** — what was decided.
 - **`when`** — the observable context the decision was made in.
+- **`[area]`** — inferred from the question (risk / communication / workflow / technical /
+  decision / other), not a fixed constant.
+- **`reversible`** / **`phase`** — conditioning metadata: whether the choice could be undone
+  and which phase it was made in. These let memory learn *how you decide about risky /
+  irreversible things*, not just what you picked. Omitted when not recorded.
 - **`you said`** — present only when the note is *your own words* (`provenance: stated`).
 - **`note`** — recorded rationale that is *not* a verified user quote (e.g. an agent's
   `--why`). It is shown as a `note:`, never attributed to you, because a `--why` flag is

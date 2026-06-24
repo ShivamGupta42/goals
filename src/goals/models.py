@@ -662,6 +662,12 @@ class JudgementObservation(BaseModel):
     # rationale (e.g. a `--why` flag) stays "observed" — we never attribute a
     # reason to the user that they did not actually say.
     provenance: Literal["observed", "stated"] = "observed"
+    # Conditioning metadata: whether the choice was reversible and which phase it
+    # was made in. These let memory answer "how does this user decide about
+    # risky/irreversible things" instead of just "what string did they pick".
+    # ``None`` when not recorded (e.g. a hand-written or legacy line).
+    reversible: bool | None = None
+    phase_id: str = ""
     # Date the decision was observed (YYYY-MM-DD). File order preserves
     # intra-day ordering; the log is append-only.
     created_at: str = Field(default_factory=lambda: utc_now()[:10])

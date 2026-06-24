@@ -332,6 +332,70 @@ def test_judgement_capture_writes_observation(monkeypatch, tmp_path) -> None:
     assert "- you said:" not in observations_path().read_text(encoding="utf-8")
 
 
+def test_judgement_capture_carries_structure(monkeypatch, tmp_path) -> None:
+    # Workstream A: area is inferred (not the old constant "decision"), and
+    # reversibility + phase are carried through and round-trip.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    from goals.decision_workflows import _record_user_judgement_signal
+
+    _record_user_judgement_signal(
+        "G1",
+        JudgementRecord(
+            question="Is it safe to reset everything?",
+            choice="drop and recreate",
+            decided_by="user",
+            reversible=False,
+            phase_id="P3",
+        ),
+    )
+
+    obs = load_observations()[0]
+    assert obs.area == "risk"  # inferred from "safe", not the old constant "decision"
+    assert obs.reversible is False
+    assert obs.phase_id == "P3"
+    text = observations_path().read_text(encoding="utf-8")
+    assert "- reversible: no" in text
+    assert "- phase: P3" in text
+
+
+def test_observation_structure_round_trips(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    record_observation(
+        goal_id="g1",
+        area="risk",
+        choice="a local file over a database",
+        context="throwaway prototype",
+        reversible=True,
+        phase_id="P2",
+    )
+    obs = load_observations()[0]
+    assert obs.reversible is True
+    assert obs.phase_id == "P2"
+
+
+def test_reworded_preference_drops_promotion_candidate(monkeypatch, tmp_path) -> None:
+    # Workstream B: confirming a reworded preference under a *different* area than
+    # the digest suggested still silences the candidate (the F1 bug from dogfood).
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    from goals.decision_workflows import _record_user_judgement_signal
+
+    for goal in ("g1", "g2"):
+        _record_user_judgement_signal(
+            goal,
+            JudgementRecord(question="Testing approach?", choice="pytest with fixtures",
+                            decided_by="user"),
+        )
+    # Candidate is offered before confirmation.
+    assert "pytest with fixtures" in build_goal_memory_digest("g2")
+
+    # User confirms it reworded and under a different area than the suggestion.
+    add_preference("workflow", "Use pytest with fixtures for tests")
+
+    digest = build_goal_memory_digest("g2")
+    assert "promote to a standing preference" not in digest
+    assert "Use pytest with fixtures for tests" in digest  # shown as a standing pref
+
+
 def test_agent_decisions_are_not_recorded_as_user_memory(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
     from goals.decision_workflows import _record_user_judgement_signal
