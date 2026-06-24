@@ -20,7 +20,6 @@ Design choices (see docs/GOAL_EXECUTION_MEMORY.md):
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from pathlib import Path
@@ -31,7 +30,6 @@ from goals.models import (
     Preference,
     UserMemory,
     UserPreferenceArea,
-    utc_now,
 )
 from goals.storage import GoalsError, atomic_write_text, lock_file
 
@@ -80,12 +78,6 @@ def preferences_path() -> Path:
 
 def observations_path() -> Path:
     return user_memory_dir() / "observations.md"
-
-
-def _state_path() -> Path:
-    # Machine-only bookkeeping (which goals were prompted/interviewed). Not memory
-    # content, so JSON is fine here — the user never edits this.
-    return user_memory_dir() / "state.json"
 
 
 # --------------------------------------------------------------------------- #
@@ -139,7 +131,7 @@ def forget_preference(target: str, *, purge: bool = False) -> int:
     if target == "--all":
         before = len(load_preferences())
         if purge:
-            for path in (preferences_path(), observations_path(), _state_path()):
+            for path in (preferences_path(), observations_path()):
                 path.unlink(missing_ok=True)
             return before
         path = preferences_path()
@@ -324,7 +316,7 @@ def record_interview_answers(goal_id: str, answers: list[str]) -> list[Preferenc
         raise GoalsError("Interview requires exactly three non-empty answers.")
     areas: tuple[str, str, str] = ("decision", "workflow", "communication")
     preferences = [add_preference(area, text) for area, text in zip(areas, clean)]
-    _mark_state(_slug(goal_id), "interviewed")
+    _append_marker("interviewed", _slug(goal_id))
     return preferences
 
 
@@ -332,10 +324,9 @@ def mark_interview_prompted(goal_id: str) -> bool:
     slug = _slug(goal_id)
     if not slug:
         return False
-    state = _load_state()
-    if slug in state.get("prompted", []) or slug in state.get("interviewed", []):
+    if _has_marker(slug, ("prompted", "interviewed")):
         return False
-    _mark_state(slug, "prompted")
+    _append_marker("prompted", slug)
     return True
 
 
@@ -467,27 +458,33 @@ def _recurring_candidates(
     return candidates
 
 
-def _load_state() -> dict:
-    path = _state_path()
+# Interview bookkeeping lives in the observations log as HTML-comment markers —
+# invisible in rendered Markdown, ignored by the observation parser, and kept out
+# of any JSON so everything under ~/.goals/user/ stays hand-editable Markdown.
+def _marker(kind: str, slug: str) -> str:
+    return f"<!-- goals:{kind} goal:{slug} -->"
+
+
+def _has_marker(slug: str, kinds: tuple[str, ...]) -> bool:
+    if not slug:
+        return False
+    path = observations_path()
     if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+        return False
+    text = path.read_text(encoding="utf-8")
+    return any(_marker(kind, slug) in text for kind in kinds)
 
 
-def _mark_state(goal_id: str, bucket: str) -> None:
-    if not goal_id:
+def _append_marker(kind: str, slug: str) -> None:
+    if not slug:
         return
-    path = _state_path()
+    path = observations_path()
     with lock_file(path):
-        state = _load_state()
-        items = state.setdefault(bucket, [])
-        if goal_id not in items:
-            items.append(goal_id)
-        state["updated_at"] = utc_now()
-        atomic_write_text(path, json.dumps(state, indent=2) + "\n")
+        lines = _read_lines(path, _OBSERVATIONS_HEADER)
+        marker = _marker(kind, slug)
+        if marker not in lines:
+            lines.append(marker)
+            atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
 def _extract_statements(text: str) -> list[str]:

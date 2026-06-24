@@ -20,6 +20,7 @@ from goals.user_memory import (
     record_interview_answers,
     record_observation,
 )
+from goals.user_memory import goals_home, mark_interview_prompted
 
 
 def test_add_preference_writes_editable_markdown(monkeypatch, tmp_path) -> None:
@@ -153,6 +154,33 @@ def test_digest_empty_when_nothing_recorded(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
     assert build_goal_memory_digest("demo") == ""
+
+
+def test_interview_prompt_dedup_uses_markdown_not_json(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    assert mark_interview_prompted("demo") is True  # first time -> show it
+    assert mark_interview_prompted("demo") is False  # already prompted -> skip
+
+    # The bookkeeping lives as an HTML comment in the Markdown log; no JSON file.
+    assert "<!-- goals:prompted goal:demo -->" in observations_path().read_text()
+    assert not (goals_home() / "user" / "state.json").exists()
+    assert not any(goals_home().rglob("*.json"))
+    # And the marker is not parsed as an observation.
+    assert load_observations() == []
+
+
+def test_interview_answers_mark_goal_and_skip_reprompt(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_interview_answers(
+        "demo",
+        ["Prefer small reversible changes.", "Ask earlier.", "Be concise."],
+    )
+
+    # Having answered, the post-goal prompt should not fire again for that goal.
+    assert mark_interview_prompted("demo") is False
+    assert not any(goals_home().rglob("*.json"))
 
 
 def test_interview_answers_become_preferences(monkeypatch, tmp_path) -> None:

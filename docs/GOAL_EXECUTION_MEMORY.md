@@ -9,9 +9,13 @@ It lives in two plain-Markdown files under `~/.goals/user/` (override the root w
 ```
 ~/.goals/user/
 ├── preferences.md    # YOU own it. Durable preferences that steer auto-execution.
-├── observations.md   # Agent-owned, append-only. Situated decisions, one per line.
-└── state.json        # Machine-only bookkeeping (which goals were prompted). Ignore it.
+└── observations.md   # Agent-owned, append-only. Situated decisions, one per line.
 ```
+
+Nothing under here is JSON — it is all editable Markdown. The only bookkeeping (which
+goals already showed the post-goal prompt, so you are not asked twice) is stored as
+inert HTML-comment markers in `observations.md` — invisible when the Markdown is
+rendered, and ignored when the log is parsed.
 
 ## The model: situated observations, not causal rules
 
