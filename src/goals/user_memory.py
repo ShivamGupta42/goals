@@ -225,6 +225,27 @@ def load_observations() -> list[JudgementObservation]:
     return observations
 
 
+def unreadable_observation_lines() -> list[str]:
+    """Non-blank log lines that aren't a recognizable observation, marker, or header.
+
+    The log is structured, so a hand-edit that breaks the shape would otherwise be
+    dropped silently. Surfacing these lets `goals user show` warn instead of losing
+    data quietly.
+    """
+    path = observations_path()
+    if not path.exists():
+        return []
+    bad: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("<!--"):
+            continue
+        if _OBS_PARENT_RE.match(raw) or _OBS_FIELD_RE.match(raw):
+            continue
+        bad.append(stripped)
+    return bad
+
+
 # --------------------------------------------------------------------------- #
 # Aggregate / rendering
 # --------------------------------------------------------------------------- #
@@ -338,8 +359,9 @@ def record_interview_answers(goal_id: str, answers: list[str]) -> list[Preferenc
     clean = [_clean(answer) for answer in answers if _clean(answer)]
     if len(clean) != 3:
         raise GoalsError("Interview requires exactly three non-empty answers.")
-    areas: tuple[str, str, str] = ("decision", "workflow", "communication")
-    preferences = [add_preference(area, text) for area, text in zip(areas, clean)]
+    # Infer the area from each answer's content rather than its position — the
+    # questions don't map cleanly onto areas, so a positional guess mislabels.
+    preferences = [add_preference(_infer_area(text), text) for text in clean]
     _append_marker("interviewed", _slug(goal_id))
     return preferences
 
@@ -427,8 +449,8 @@ def _format_observation_block(observation: JudgementObservation) -> list[str]:
 
 
 _OBS_PARENT_RE = re.compile(
-    r"^-\s+(?P<date>\d{4}-\d{2}-\d{2})\s+·\s+goal:(?P<goal>\S*)\s+·\s+"
-    r"\[(?P<area>[^\]]+)\]\s+·\s+chose:\s+(?P<choice>.*)$"
+    r"^-\s+(?P<date>\d{4}-\d{2}-\d{2})\s+[·-]\s+goal:(?P<goal>\S*)\s+[·-]\s+"
+    r"\[(?P<area>[^\]]+)\]\s+[·-]\s+chose:\s+(?P<choice>.*)$"
 )
 _OBS_FIELD_RE = re.compile(r"^\s+-\s+(?P<key>when|note|you said):\s*(?P<value>.*)$")
 
@@ -611,6 +633,32 @@ def _extract_statements(text: str) -> list[str]:
     if not statements and text.strip():
         statements.append(_clean(text.strip()[:320]))
     return [statement for statement in statements if statement]
+
+
+# Signal words for inferring a preference's area from free text (interview
+# answers, where the user didn't pick an area). Best-effort; ties and misses
+# fall back to ``decision``.
+_AREA_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "risk": ("risk", "reversible", "irreversible", "safe", "cautious", "destructive", "danger"),
+    "communication": (
+        "explain", "concise", "verbose", "detail", "plain", "jargon", "summary", "tone", "brief",
+    ),
+    "workflow": ("test", "commit", "branch", "step", "process", "review", "plan", "order", "first"),
+    "technical": (
+        "language", "framework", "library", "stack", "architecture", "database", "api", "tool",
+    ),
+    "decision": ("decide", "ask", "choose", "autonomy", "confirm", "approval", "permission"),
+}
+
+
+def _infer_area(text: str, fallback: str = "decision") -> str:
+    low = text.lower()
+    scores = {
+        area: sum(1 for word in words if word in low)
+        for area, words in _AREA_KEYWORDS.items()
+    }
+    best = max(scores, key=lambda area: scores[area])
+    return best if scores[best] else fallback
 
 
 def _validate_area(value: str) -> UserPreferenceArea:

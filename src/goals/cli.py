@@ -155,10 +155,12 @@ from goals.user_memory import (
     build_personalization_context,
     forget_preference,
     load_user_memory,
+    observations_path,
     preferences_from_insights,
     preferences_path,
     record_interview_answers,
     render_user_memory,
+    unreadable_observation_lines,
 )
 from goals.workflows import (
     check_workflow,
@@ -1172,6 +1174,16 @@ def user_show(
             typer.echo(memory.model_dump_json(indent=2))
         else:
             typer.echo(render_user_memory(memory))
+            unreadable = unreadable_observation_lines()
+            if unreadable:
+                typer.echo(
+                    f"\nWarning: {len(unreadable)} line(s) in {observations_path()} "
+                    "weren't recognized as observations and are being ignored. "
+                    "Fix or remove them so nothing is lost silently:",
+                    err=True,
+                )
+                for line in unreadable[:10]:
+                    typer.echo(f"  {line}", err=True)
 
     _handle(run)
 

@@ -41,6 +41,10 @@ own line, so the values can contain **any** character (`·`, `—`, quotes, even
 There is deliberately **no "because" the agent makes up.** If no reason genuinely comes
 from you, the observation is just choice + context (`provenance: observed`).
 
+Hand-editing is forgiving: the field separators may be `·` **or** `-`, and if a line
+ever gets mangled past recognition, `goals user show` warns you about it instead of
+dropping it silently.
+
 ### Why no fabricated "because"
 
 People are poor at reporting *why* they chose something. Choice-blindness and
@@ -93,7 +97,7 @@ To keep your edits safe while the agent also writes, ownership is split:
 goals user show                              # combined human-readable view (--json for raw)
 goals user digest [--goal current]           # the goal-end reflection, on demand
 goals user record "<preference>" --area communication   # add a standing preference
-goals user interview --goal <id> -a "..." -a "..." -a "..."   # post-goal interview → preferences
+goals user interview --goal <id> -a "..." -a "..." -a "..."   # post-goal interview → preferences (area inferred from each answer)
 goals user import-insights --file -          # import a Claude /insights summary as preferences
 goals user forget "<text>"                   # remove a matching preference (or just edit the file)
 goals user forget --all [--purge]            # clear all preferences (purge deletes the files)

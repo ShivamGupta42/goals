@@ -19,6 +19,7 @@ from goals.user_memory import (
     preferences_path,
     record_interview_answers,
     record_observation,
+    unreadable_observation_lines,
 )
 from goals.user_memory import goals_home, mark_interview_prompted
 
@@ -225,15 +226,60 @@ def test_interview_answers_become_preferences(monkeypatch, tmp_path) -> None:
     prefs = record_interview_answers(
         "demo",
         [
-            "Prefer small reversible changes.",
-            "Ask earlier when product direction changes.",
-            "Explain tradeoffs without long background.",
+            "Prefer small reversible changes.",  # -> risk (reversible)
+            "Ask earlier when product direction changes.",  # -> decision (ask)
+            "Explain tradeoffs without long background.",  # -> communication (explain)
         ],
     )
 
     assert len(prefs) == 3
-    assert {p.area for p in prefs} == {"decision", "workflow", "communication"}
-    assert any("reversible" in p.text for p in load_preferences())
+    # Area is inferred from the answer's content, not its position.
+    by_text = {p.text: p.area for p in prefs}
+    assert by_text["Prefer small reversible changes."] == "risk"
+    assert by_text["Ask earlier when product direction changes."] == "decision"
+    assert by_text["Explain tradeoffs without long background."] == "communication"
+
+
+def test_interview_area_falls_back_when_no_signal(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    prefs = record_interview_answers("g", ["Mauve is nice", "Whatever works", "No strong view"])
+    assert {p.area for p in prefs} == {"decision"}  # neutral fallback, not a fake spread
+
+
+def test_observations_tolerate_hyphen_handedit(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    path = observations_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # A human edits with hyphens instead of the · separators.
+    path.write_text(
+        "# Goals observations (append-only)\n"
+        "- 2026-06-24 - goal:g1 - [decision] - chose: use Postgres\n"
+        "  - when: needed transactions\n",
+        encoding="utf-8",
+    )
+
+    obs = load_observations()
+    assert len(obs) == 1
+    assert obs[0].choice == "use Postgres"
+    assert obs[0].context == "needed transactions"
+    assert unreadable_observation_lines() == []  # the hyphen edit is understood, not lost
+
+
+def test_unparseable_observation_lines_are_surfaced_not_dropped(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    path = observations_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Goals observations (append-only)\n"
+        "- 2026-06-24 · goal:g1 · [decision] · chose: use Redis\n"
+        "- this line got mangled by a hand edit\n",
+        encoding="utf-8",
+    )
+
+    # The good line still parses; the broken one is reported rather than vanishing.
+    assert [o.choice for o in load_observations()] == ["use Redis"]
+    assert unreadable_observation_lines() == ["- this line got mangled by a hand edit"]
 
 
 def test_forget_preference_removes_matching_bullet(monkeypatch, tmp_path) -> None:
