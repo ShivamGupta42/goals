@@ -55,3 +55,12 @@ def test_booleans_do_not_inflate_count(tmp_path: Path) -> None:
         ['{"message":{"usage":{"output_tokens":true,"input_tokens":5}}}'],
     )
     assert transcript_token_usage(transcript) == TokenUsage(input_tokens=5)
+
+
+def test_negative_values_contribute_zero(tmp_path: Path) -> None:
+    # A negative field must not subtract from the total and hold the ceiling off.
+    transcript = _write(
+        tmp_path / "t.jsonl",
+        ['{"message":{"usage":{"input_tokens":-999999,"output_tokens":7}}}'],
+    )
+    assert transcript_token_usage(transcript) == TokenUsage(output_tokens=7)

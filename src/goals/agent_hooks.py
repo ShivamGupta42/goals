@@ -131,22 +131,33 @@ def _circuit_breaker_tripped(phase: Phase, *, max_attempts: int | None = None) -
     """True when the Stop gate should stop trapping the agent on ``phase``.
 
     Deterministic — reads only durable gate history, never the transcript. The
-    breaker trips when either signal fires:
+    decision keys off the *latest* phase-review, so a stale ``BLOCKED``/``FAIL``
+    from an earlier cycle can't trip the breaker after a later ``PASS``, and a
+    stale ``PASS`` can't mask a newer failure. It trips when either signal fires:
 
-    1. A recorded phase-review verdict is ``BLOCKED`` — the gate's own circuit
+    1. The latest phase-review verdict is ``BLOCKED`` — the gate's own circuit
        breaker (``goals.gates._blocked_after_cap``) already gave up on this phase.
-    2. The number of phase-review attempts reaches the cap, as a fallback for the
-       case where reviews accumulated as ``FAIL`` without ever flipping to
-       ``BLOCKED``.
+    2. The phase has failed review at least ``max_attempts`` times, as a fallback
+       for the case where reviews accumulated as ``FAIL`` without ever flipping to
+       ``BLOCKED``. The gate's recorded ``attempts`` count is trusted when higher,
+       so the two breakers share a cap and agree.
 
-    The two share a cap so the runtime loop control and the gate agree.
+    A latest verdict of ``PASS`` never trips: the phase is converging, not stuck.
     """
     if max_attempts is None:
         max_attempts = _max_phase_attempts()
     reviews = [r for r in phase.reviews if r.gate_id == "phase-review"]
-    if any(r.verdict == GateVerdict.BLOCKED for r in reviews):
+    if not reviews:
+        return False
+    latest = reviews[-1]
+    if latest.verdict == GateVerdict.PASS:
+        return False
+    if latest.verdict == GateVerdict.BLOCKED:
         return True
-    return len(reviews) >= max_attempts
+    if latest.verdict != GateVerdict.FAIL:
+        return False
+    fail_count = sum(1 for r in reviews if r.verdict == GateVerdict.FAIL)
+    return max(latest.attempts, fail_count) >= max_attempts
 
 
 def _token_budget_exceeded(transcript_path: str | None) -> bool:

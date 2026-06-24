@@ -73,8 +73,9 @@ def transcript_token_usage(path: Path | str) -> TokenUsage:
             for key in _USAGE_KEYS:
                 value = usage.get(key)
                 # bool is an int subclass; exclude it so a stray ``true`` can't
-                # inflate the count.
-                if isinstance(value, int) and not isinstance(value, bool):
+                # inflate the count. Require a positive int so a negative field
+                # can't subtract from the running total and hold the ceiling off.
+                if isinstance(value, int) and not isinstance(value, bool) and value > 0:
                     totals[key] += value
     return TokenUsage(**totals)
 
