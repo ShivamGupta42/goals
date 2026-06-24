@@ -202,6 +202,12 @@ The split is deliberate: a choice made for one goal is an *observation*, scoped 
 goal — it only becomes a standing preference when **you** confirm it. So Goals gets
 better at auto-execution over time without silently turning a one-off into a rule.
 
+Confirmed preferences don't just advise the agent — they **change when Goals asks vs acts**.
+Tell it *"ask before anything irreversible"* and it will stop to confirm a decision it would
+otherwise have handled silently; tell it *"decide reversible changes yourself"* and it won't
+interrupt you for safe ones. A safety floor stays fixed: genuinely risky or irreversible
+decisions are always surfaced — a preference can make Goals ask *more*, never less.
+
 At the **end of every goal**, Goals reflects back what it noticed, flags any choice that
 has recurred across goals ("promote to a standing preference?"), and shows the
 preferences currently in effect.

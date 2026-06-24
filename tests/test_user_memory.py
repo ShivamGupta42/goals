@@ -373,6 +373,28 @@ def test_observation_structure_round_trips(monkeypatch, tmp_path) -> None:
     assert obs.phase_id == "P2"
 
 
+def test_autonomy_signals_derived_from_preferences(monkeypatch, tmp_path) -> None:
+    # Workstream C: confirmed preferences become ask-vs-act signals.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    from goals.user_memory import autonomy_signals
+
+    add_preference("risk", "Ask before anything irreversible or destructive")
+    add_preference("risk", "Decide reversible local changes yourself")
+
+    signals = autonomy_signals()
+    assert signals.confirm_irreversible is True
+    assert signals.autonomous_when_reversible is True
+    assert signals.confirm_risky is False  # no risk-confirm preference stated
+    assert any("irreversible" in s for s in signals.sources)
+
+
+def test_personalization_context_carries_autonomy(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    add_preference("risk", "Ask before anything irreversible")
+    ctx = build_personalization_context()
+    assert ctx.autonomy is not None and ctx.autonomy.confirm_irreversible is True
+
+
 def test_reworded_preference_drops_promotion_candidate(monkeypatch, tmp_path) -> None:
     # Workstream B: confirming a reworded preference under a *different* area than
     # the digest suggested still silences the candidate (the F1 bug from dogfood).

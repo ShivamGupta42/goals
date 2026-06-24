@@ -696,6 +696,27 @@ class UserMemory(BaseModel):
     observations: list[JudgementObservation] = Field(default_factory=list)
 
 
+class AutonomySignals(BaseModel):
+    """How the user's confirmed preferences should modulate the ask-vs-act gate.
+
+    Derived from `preferences.md`. These can only ever make Goals ask *more*
+    (tighten) or, within already-safe bounds, relax — they can NEVER hide a
+    high-risk or irreversible decision (that floor lives in
+    ``should_surface_decision`` and is preference-immune).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Tightening signals (always safe): surface even borderline decisions.
+    confirm_irreversible: bool = False
+    confirm_risky: bool = False
+    # Relaxing signal (informational; never lowers the safety floor): the user is
+    # comfortable letting the agent decide reversible / low-risk things itself.
+    autonomous_when_reversible: bool = False
+    # The preference texts that produced these signals, for a plain-language "why".
+    sources: list[str] = Field(default_factory=list)
+
+
 class PersonalizationContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -703,6 +724,7 @@ class PersonalizationContext(BaseModel):
     claim_ids: list[str] = Field(default_factory=list)
     guidance: list[str] = Field(default_factory=list)
     confidence: float = 0.0
+    autonomy: AutonomySignals | None = None
 
 
 class SourceFreshnessFinding(BaseModel):

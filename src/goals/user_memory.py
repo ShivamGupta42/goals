@@ -25,6 +25,7 @@ import re
 from pathlib import Path
 
 from goals.models import (
+    AutonomySignals,
     JudgementObservation,
     PersonalizationContext,
     Preference,
@@ -302,7 +303,51 @@ def build_personalization_context(limit: int = 5) -> PersonalizationContext:
         summary="; ".join(guidance),
         guidance=guidance,
         confidence=0.9,
+        autonomy=autonomy_signals(preferences),
     )
+
+
+# Words that turn a preference into an ask-vs-act signal. A preference tightens
+# the gate only when it pairs an "ask" intent with a risk/irreversibility target.
+_ASK_WORDS = ("ask", "confirm", "check with", "approve", "permission", "run it by", "don't decide")
+_DECIDE_WORDS = ("decide", "go ahead", "proceed", "handle", "yourself", "autonomous", "don't ask", "auto")
+_IRREVERSIBLE_WORDS = (
+    "irreversible", "not reversible", "can't undo", "cannot undo", "permanent",
+    "destructive", "delete", "drop", "production", "prod ",
+)
+_RISK_WORDS = ("risk", "risky", "dangerous", "high-stakes", "high stakes", "sensitive", "unsafe")
+_REVERSIBLE_WORDS = ("reversible", "undo", "safe", "low-risk", "low risk", "routine", "small")
+
+
+def autonomy_signals(preferences: list[Preference] | None = None) -> AutonomySignals:
+    """Derive ask-vs-act modulation from confirmed preferences (tighten/relax only)."""
+    preferences = load_preferences() if preferences is None else preferences
+    confirm_irreversible = confirm_risky = autonomous = False
+    sources: list[str] = []
+    for pref in preferences:
+        low = pref.text.lower()
+        asks = any(word in low for word in _ASK_WORDS)
+        decides = any(word in low for word in _DECIDE_WORDS)
+        if asks and any(word in low for word in _IRREVERSIBLE_WORDS):
+            confirm_irreversible = True
+            _append_unique(sources, pref.text)
+        if asks and any(word in low for word in _RISK_WORDS):
+            confirm_risky = True
+            _append_unique(sources, pref.text)
+        if decides and any(word in low for word in _REVERSIBLE_WORDS):
+            autonomous = True
+            _append_unique(sources, pref.text)
+    return AutonomySignals(
+        confirm_irreversible=confirm_irreversible,
+        confirm_risky=confirm_risky,
+        autonomous_when_reversible=autonomous,
+        sources=sources,
+    )
+
+
+def _append_unique(items: list[str], value: str) -> None:
+    if value and value not in items:
+        items.append(value)
 
 
 def render_personalization_context(context: PersonalizationContext) -> str:

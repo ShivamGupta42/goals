@@ -114,13 +114,32 @@ Areas: `risk`, `communication`, `workflow`, `technical`, `decision`, `other`.
 
 ## How it plugs into a goal
 
-- **During a goal**, only confirmed `preferences.md` entries are injected as
-  personalization (how decisions get surfaced/explained). Observations never leak across
-  goals.
+- **During a goal**, confirmed `preferences.md` entries are injected as personalization
+  *and* steer the **ask-vs-act gate** (below). Observations never leak across goals.
 - **Recording a decision** (`goals decision record …`, or the agent's own judgement log)
   appends a situated observation — context, not cause.
 - **At goal end** (`goals phase accept` on completion, and `goals finish`), the digest is
   shown and the post-goal interview is offered.
+
+## Preferences steer when Goals asks vs acts
+
+Confirmed preferences don't just appear in the agent's prompt — they modulate the gate that
+decides whether a decision is **surfaced to you** or **left to the agent**
+(`should_surface_decision`). Goals reads preference text for ask-vs-act signals
+(`autonomy_signals`):
+
+- *"Ask before anything irreversible / destructive"* → Goals surfaces any decision with an
+  option it can't undo, even a low-risk one it would otherwise have handled silently.
+- *"Ask before anything risky"* → surfaces any non-low-risk decision.
+- *"Decide reversible / low-risk changes yourself"* → recorded, and reinforces the default
+  of letting the agent handle clearly-safe choices.
+
+**The safety floor is preference-immune.** Blocking, high-risk, and not-clearly-reversible
+decisions **always** surface; preferences can only ever make Goals ask *more*, never hide a
+risky or irreversible decision. (This mirrors the autonomy literature: reversibility ×
+consequence is a hard gate; learned preferences modulate only *within* the already-safe
+region.) When a preference causes the ask, Goals says why — e.g. *"Asking because you've told
+me to confirm anything you can't undo."*
 
 ## Deliberate tradeoffs (and their limits)
 

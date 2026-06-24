@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from goals.models import (
+    AutonomySignals,
     Decision,
     DecisionBrief,
     DecisionBriefItem,
@@ -88,7 +89,7 @@ def render_decision_explanation(
     *,
     level: Literal["basic", "detailed", "technical"] = "basic",
 ) -> DecisionExplanation:
-    surfaced, reason = should_surface_decision(decision)
+    surfaced, reason = should_surface_decision(decision, _autonomy(context))
     sections = {
         "basic": _render_basic(decision, context, reason),
         "detailed": _render_detailed(decision, context, reason),
@@ -111,8 +112,9 @@ def build_decision_brief(
     context = build_decision_context(snapshot, personalization)
     user_decisions: list[DecisionBriefItem] = []
     agent_handled_count = 0
+    autonomy = _autonomy(context)
     for decision in snapshot.decisions:
-        surfaced, reason = should_surface_decision(decision)
+        surfaced, reason = should_surface_decision(decision, autonomy)
         if surfaced:
             user_decisions.append(_brief_item(snapshot, decision, context, reason))
         else:
@@ -191,13 +193,38 @@ def render_decision_brief(brief: DecisionBrief) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def should_surface_decision(decision: Decision) -> tuple[bool, str]:
+def _autonomy(context: DecisionContext) -> AutonomySignals | None:
+    if context.personalization is None:
+        return None
+    return context.personalization.autonomy
+
+
+def should_surface_decision(
+    decision: Decision, autonomy: AutonomySignals | None = None
+) -> tuple[bool, str]:
+    """Decide whether a judgement is surfaced to the user or left to the agent.
+
+    The first three rules are a **hard safety floor**: blocking, high-risk, and
+    not-clearly-reversible decisions always surface, and ``autonomy`` (the user's
+    learned preferences) can NEVER turn them off. Preferences only ever *tighten*
+    the gate below the floor — i.e. ask about borderline cases the default would
+    have let the agent handle. With ``autonomy=None`` the behaviour is unchanged.
+    """
     if decision.priority == "blocking":
         return True, "This blocks the goal or changes its direction."
     if any(option.risk == "high" for option in decision.options):
         return True, "At least one option is high risk."
     if any(not option.reversible and option.risk == "medium" for option in decision.options):
         return True, "A meaningful option is not clearly reversible."
+    # Below the floor: the default leaves this with the agent. Confirmed user
+    # preferences may still ask about it (tighten) — never the reverse.
+    if autonomy is not None:
+        if autonomy.confirm_irreversible and any(
+            not option.reversible for option in decision.options
+        ):
+            return True, "Asking because you've told me to confirm anything you can't undo."
+        if autonomy.confirm_risky and any(option.risk != "low" for option in decision.options):
+            return True, "Asking because you've told me to confirm anything risky."
     return False, "The agent can choose a reversible or low-risk option and record the assumption."
 
 
