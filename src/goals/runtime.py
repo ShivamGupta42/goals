@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -37,6 +38,25 @@ from goals.storage import (
     atomic_write_text,
     derive_snapshot as derive_snapshot,
 )
+
+
+#: Review-fix cap shared by the gate (``run_gate``) and the enforced Stop hook
+#: (``goals.agent_hooks``), so the two breakers always agree. Override with
+#: ``GOALS_MAX_PHASE_ATTEMPTS``; a missing, non-integer, or non-positive value
+#: falls back to the default so a typo can never disable the cap.
+MAX_PHASE_ATTEMPTS_ENV = "GOALS_MAX_PHASE_ATTEMPTS"
+DEFAULT_MAX_PHASE_ATTEMPTS = 3
+
+
+def resolve_max_phase_attempts() -> int:
+    raw = os.environ.get(MAX_PHASE_ATTEMPTS_ENV)
+    if raw is None:
+        return DEFAULT_MAX_PHASE_ATTEMPTS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_PHASE_ATTEMPTS
+    return value if value >= 1 else DEFAULT_MAX_PHASE_ATTEMPTS
 
 
 def default_phases(objective: str) -> list[Phase]:
@@ -340,7 +360,9 @@ def claim_worktree(cwd: Path) -> WorktreeLease:
     return lease
 
 
-def run_gate(cwd: Path, phase_id: str, *, max_attempts: int = 3) -> GateResult:
+def run_gate(cwd: Path, phase_id: str, *, max_attempts: int | None = None) -> GateResult:
+    if max_attempts is None:
+        max_attempts = resolve_max_phase_attempts()
     snapshot = load_active_snapshot(cwd)
     phase = _find_phase(snapshot, phase_id)
     attempt = len([review for review in phase.reviews if review.gate_id == "phase-review"]) + 1

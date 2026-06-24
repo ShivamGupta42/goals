@@ -222,6 +222,20 @@ Full design — the situated-observation model, why no fabricated "because," the
 human/agent file split, deliberate tradeoffs, and how an older JSON store is migrated —
 is in [**docs/GOAL_EXECUTION_MEMORY.md**](docs/GOAL_EXECUTION_MEMORY.md).
 
+## Keep long runs safe
+
+A long agent loop can run away — retrying a failing step forever, or quietly
+burning tokens. Goals ships an **opt-in stop gate** that ends the loop on durable
+facts, not a transcript guess. Turn it on with `GOALS_ENFORCE=1`, and it hands
+control back to you when either guard trips:
+
+- a phase fails review too many times — `GOALS_MAX_PHASE_ATTEMPTS` (default 3); or
+- the session crosses a token budget you set — `GOALS_MAX_TOKENS` (off unless set).
+
+It never traps a finished, paused, or waiting-on-you goal, and fails open if
+anything goes wrong (a stuck hook never blocks you). Details:
+[docs/subsystems.md](docs/subsystems.md#enforced-stop-gate).
+
 ## For developers
 
 Under the hood, Goals is a small CLI + Claude Code / Codex plugin. It keeps goal state,
