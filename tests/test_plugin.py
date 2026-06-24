@@ -129,6 +129,20 @@ def test_stop_breaker_cap_is_configurable(tmp_path: Path, monkeypatch) -> None:
     assert stop_payload(tmp_path, enforce=True) == ""
 
 
+def test_stop_breaker_cap_can_be_raised(tmp_path: Path, monkeypatch) -> None:
+    from goals.agent_hooks import MAX_ATTEMPTS_ENV
+    from goals.models import GateVerdict
+
+    _repo_with_goal(tmp_path)
+    # Raising the cap loosens the breaker: four failures still block at a cap of
+    # five, and the fifth trips it.
+    monkeypatch.setenv(MAX_ATTEMPTS_ENV, "5")
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 4)
+    assert json.loads(stop_payload(tmp_path, enforce=True))["decision"] == "block"
+    _snapshot_with_reviews(tmp_path, monkeypatch, [GateVerdict.FAIL] * 5)
+    assert stop_payload(tmp_path, enforce=True) == ""
+
+
 def test_stop_breaker_cap_ignores_garbage_env(tmp_path: Path, monkeypatch) -> None:
     from goals.agent_hooks import MAX_ATTEMPTS_ENV
     from goals.models import GateVerdict

@@ -247,6 +247,29 @@ def test_failing_command_blocks(tmp_path: Path) -> None:
     assert run_gate(repo, "P1").verdict == GateVerdict.FAIL
 
 
+def test_review_cap_blocks_at_default_after_three_attempts(tmp_path: Path) -> None:
+    repo = _repo_with_goal(tmp_path)
+    goal_id = load_active_snapshot(repo).goal_id
+    _record_evidence(repo, goal_id, [{"covers": "done", "kind": "auto", "command": "false"}])
+    verify_phase(repo, "P1")
+    assert run_gate(repo, "P1").verdict == GateVerdict.FAIL  # attempt 1
+    assert run_gate(repo, "P1").verdict == GateVerdict.FAIL  # attempt 2
+    assert run_gate(repo, "P1").verdict == GateVerdict.BLOCKED  # attempt 3 == default cap
+
+
+def test_review_cap_honors_raised_env(tmp_path: Path, monkeypatch) -> None:
+    # GOALS_MAX_PHASE_ATTEMPTS must *raise* the cap too, not only lower it: the
+    # gate and the Stop hook share resolve_max_phase_attempts, so at a cap of 5
+    # the gate keeps returning FAIL past the default 3 and only BLOCKs at 5.
+    monkeypatch.setenv("GOALS_MAX_PHASE_ATTEMPTS", "5")
+    repo = _repo_with_goal(tmp_path)
+    goal_id = load_active_snapshot(repo).goal_id
+    _record_evidence(repo, goal_id, [{"covers": "done", "kind": "auto", "command": "false"}])
+    verify_phase(repo, "P1")
+    verdicts = [run_gate(repo, "P1").verdict for _ in range(5)]
+    assert verdicts == [GateVerdict.FAIL] * 4 + [GateVerdict.BLOCKED]
+
+
 # --- load-bearing assumptions must have an executed falsifier ------------- #
 def test_load_bearing_assumption_needs_a_passing_falsifier(tmp_path: Path) -> None:
     repo = _repo_with_goal(tmp_path)

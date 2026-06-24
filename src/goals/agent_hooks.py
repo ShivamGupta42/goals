@@ -19,8 +19,15 @@ from pathlib import Path
 from goals.brief import build_goal_brief
 from goals.models import GateVerdict, GoalStatus, Phase
 from goals.portability import render_context_block
-from goals.runtime import load_active_snapshot
+from goals.runtime import (
+    MAX_PHASE_ATTEMPTS_ENV,
+    load_active_snapshot,
+    resolve_max_phase_attempts,
+)
 from goals.token_budget import transcript_token_usage
+
+#: Re-exported so callers/tests can reach the cap env var via agent_hooks.
+MAX_ATTEMPTS_ENV = MAX_PHASE_ATTEMPTS_ENV
 
 #: Env var that turns the Stop gate on. Off by default so it never nags.
 ENFORCE_ENV = "GOALS_ENFORCE"
@@ -32,14 +39,12 @@ ENFORCE_ENV = "GOALS_ENFORCE"
 #: off legitimately long sessions.
 MAX_TOKENS_ENV = "GOALS_MAX_TOKENS"
 
-#: Circuit breaker: how many phase-review attempts the Stop gate tolerates before
-#: it stops trapping the agent and hands control back to the user. Without a cap,
-#: an enforced Stop hook would re-block a failing review→fix→review loop forever —
-#: the runaway "huge AI bill" failure mode. The default mirrors the gate's own
-#: review-fix cap (``goals.gates.review_phase`` ``max_attempts``) so the two
-#: circuit breakers agree. Override with ``GOALS_MAX_PHASE_ATTEMPTS``.
-MAX_ATTEMPTS_ENV = "GOALS_MAX_PHASE_ATTEMPTS"
-DEFAULT_MAX_PHASE_ATTEMPTS = 3
+# Circuit breaker: how many phase-review attempts the Stop gate tolerates before
+# it stops trapping the agent and hands control back to the user. Without a cap,
+# an enforced Stop hook would re-block a failing review→fix→review loop forever —
+# the runaway "huge AI bill" failure mode. The cap (GOALS_MAX_PHASE_ATTEMPTS) is
+# resolved by goals.runtime.resolve_max_phase_attempts so the gate and this hook
+# share one value and agree; MAX_ATTEMPTS_ENV is re-exported above for callers.
 
 
 # A goal in one of these states is not the agent's to push on: finished, failed,
@@ -145,7 +150,7 @@ def _circuit_breaker_tripped(phase: Phase, *, max_attempts: int | None = None) -
     A latest verdict of ``PASS`` never trips: the phase is converging, not stuck.
     """
     if max_attempts is None:
-        max_attempts = _max_phase_attempts()
+        max_attempts = resolve_max_phase_attempts()
     reviews = [r for r in phase.reviews if r.gate_id == "phase-review"]
     if not reviews:
         return False
@@ -193,19 +198,3 @@ def _max_tokens() -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value >= 1 else None
-
-
-def _max_phase_attempts() -> int:
-    """Read the circuit-breaker cap from the environment, clamped to >= 1.
-
-    A missing, non-integer, or non-positive value falls back to the default so a
-    typo can never disable the breaker (which would re-open the runaway loop).
-    """
-    raw = os.environ.get(MAX_ATTEMPTS_ENV)
-    if raw is None:
-        return DEFAULT_MAX_PHASE_ATTEMPTS
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_MAX_PHASE_ATTEMPTS
-    return value if value >= 1 else DEFAULT_MAX_PHASE_ATTEMPTS

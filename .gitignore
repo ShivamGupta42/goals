@@ -9,4 +9,8 @@ build/
 # Generated local goal state can contain machine paths and private run history.
 .agent-workflow/goals/
 .goals-worktrees/
+.goals/
+breakdown.json
+outputs/
+.DS_Store
 
