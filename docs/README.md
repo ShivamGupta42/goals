@@ -5,8 +5,8 @@ This directory holds deeper design notes and long-lived project context.
 
 ## Guides
 
-- `SELF_EVOLUTION.md` - how Goals records friction, derives suggestions, and
-  keeps private memory separate from committable project state.
+- `subsystems.md` - behavior reference for the durable subsystems: the memory
+  loop, the decision rule, and the enforced stop gate.
 - `skill-evolution/README.md` - when repeated workflow friction should become a
   skill update.
 - `DOGFOOD_FINDINGS.md` - observations from using Goals on itself.

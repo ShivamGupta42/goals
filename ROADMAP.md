@@ -84,7 +84,7 @@ while preserving human-written content. `goals adapter check` reports adapter
 availability. For enforcement that does not depend on the transcript, an opt-in
 Stop hook (`GOALS_ENFORCE=1`) decides deterministically from durable gate state,
 with circuit breakers on review attempts (`GOALS_MAX_PHASE_ATTEMPTS`) and a token
-budget (`GOALS_MAX_TOKENS`) — see [docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md).
+budget (`GOALS_MAX_TOKENS`) — see [docs/subsystems.md](docs/subsystems.md).
 
 The next frontier is emitting acceptance gates for more native loops so durable
 goal state can drive each tool's own stop condition.

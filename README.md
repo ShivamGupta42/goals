@@ -196,7 +196,7 @@ control back to you when either guard trips:
 
 It never traps a finished, paused, or waiting-on-you goal, and fails open if
 anything goes wrong (a stuck hook never blocks you). Details:
-[docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md#enforced-stop-gate).
+[docs/subsystems.md](docs/subsystems.md#enforced-stop-gate).
 
 ## For developers
 
