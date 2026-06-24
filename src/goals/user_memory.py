@@ -112,6 +112,13 @@ def add_preference(area: str, text: str) -> Preference:
     preference = Preference(area=_validate_area(area), text=_clean(text))
     if not preference.text:
         raise GoalsError("A preference needs some text.")
+    # Migrate the legacy store BEFORE taking the lock. Migration imports old
+    # preferences by calling this function recursively; if we held the lock first
+    # those inner calls would deadlock on the non-reentrant file lock (it would
+    # time out, silently dropping every legacy preference). Running it here means
+    # the inner writes lock cleanly, and the load_preferences() call below sees an
+    # already-migrated store and re-migrates nothing.
+    _maybe_migrate_legacy()
     path = preferences_path()
     with lock_file(path):
         if any(

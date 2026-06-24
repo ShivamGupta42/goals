@@ -463,6 +463,29 @@ def test_legacy_json_store_is_migrated_not_lost(monkeypatch, tmp_path) -> None:
     assert len(load_preferences()) == 1
 
 
+def test_legacy_migration_via_add_preference_does_not_drop_data(monkeypatch, tmp_path) -> None:
+    # Regression: migration runs by calling add_preference recursively. If it ran
+    # while add_preference already held the (non-reentrant) file lock, every
+    # inner write would time out and the legacy claim would be silently dropped.
+    # Adding a preference must migrate the old store, not lose it.
+    import json
+
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    user_dir = goals_home() / "user"
+    user_dir.mkdir(parents=True, exist_ok=True)
+    (user_dir / "memory.json").write_text(
+        json.dumps({"claims": [{"area": "technical", "statement": "Use SQLite.", "status": "active"}]}),
+        encoding="utf-8",
+    )
+
+    add_preference("risk", "Ask before deleting prod data.")
+    texts = [p.text for p in load_preferences()]
+
+    assert "Use SQLite." in texts  # legacy claim imported, not dropped
+    assert "Ask before deleting prod data." in texts  # the new preference saved
+    assert (user_dir / "memory.json.bak").exists()
+
+
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",

@@ -134,12 +134,14 @@ decides whether a decision is **surfaced to you** or **left to the agent**
 - *"Decide reversible / low-risk changes yourself"* → recorded, and reinforces the default
   of letting the agent handle clearly-safe choices.
 
-**The safety floor is preference-immune.** Blocking, high-risk, and not-clearly-reversible
-decisions **always** surface; preferences can only ever make Goals ask *more*, never hide a
-risky or irreversible decision. (This mirrors the autonomy literature: reversibility ×
-consequence is a hard gate; learned preferences modulate only *within* the already-safe
-region.) When a preference causes the ask, Goals says why — e.g. *"Asking because you've told
-me to confirm anything you can't undo."*
+**The safety floor is preference-immune.** Blocking, high-risk, and irreversible decisions
+that also carry at least medium risk **always** surface; preferences can only ever make Goals
+ask *more*, never hide such a decision. (This mirrors the autonomy literature: reversibility ×
+consequence is a hard gate — an irreversible *and* non-trivial choice is gated, while a
+low-risk irreversible one is left to the agent unless you ask otherwise; learned preferences
+modulate only *within* the already-safe region.) A user who says *"confirm anything I can't
+undo"* tightens this so even a low-risk irreversible decision surfaces, and Goals says why —
+*"Asking because you've told me to confirm anything you can't undo."*
 
 ## Deliberate tradeoffs (and their limits)
 

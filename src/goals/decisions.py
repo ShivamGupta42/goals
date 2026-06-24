@@ -205,10 +205,12 @@ def should_surface_decision(
     """Decide whether a judgement is surfaced to the user or left to the agent.
 
     The first three rules are a **hard safety floor**: blocking, high-risk, and
-    not-clearly-reversible decisions always surface, and ``autonomy`` (the user's
-    learned preferences) can NEVER turn them off. Preferences only ever *tighten*
-    the gate below the floor — i.e. ask about borderline cases the default would
-    have let the agent handle. With ``autonomy=None`` the behaviour is unchanged.
+    irreversible-and-not-trivial (irreversible with at least medium risk)
+    decisions always surface, and ``autonomy`` (the user's learned preferences)
+    can NEVER turn them off. Preferences only ever *tighten* the gate below the
+    floor — e.g. a user who asks to "confirm anything I can't undo" surfaces even
+    a low-risk irreversible decision the floor would have left with the agent.
+    With ``autonomy=None`` the behaviour is unchanged.
     """
     if decision.priority == "blocking":
         return True, "This blocks the goal or changes its direction."
