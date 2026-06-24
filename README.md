@@ -69,7 +69,7 @@ Here's the whole loop — each step in plain English, with the command behind it
 (click to enlarge):
 
 <p align="center">
-  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 say your goal (goals start), 2 Goals breaks the problem down into smaller steps and writes down its assumptions, 3 the AI agent does the next step (goals next), 4 Goals runs the step's proof-checks for real (goals phase verify), 5 step checked off with proof (goals phase accept), 6 finished with a full record (goals finish) — plus a dashboard you can read anytime (goals view) and a private memory that remembers how you decide" width="520"></a>
+  <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 your goal in plain English (goals start), 2 the problem is broken into smaller steps with its assumptions written out, 3 the AI agent starts executing one step at a time (goals next), 4 each step must show undeniable proof it is done and that proof is run for real (goals phase verify), 5 step done and proof saved (goals phase accept), 6 finished with a full readable record (goals finish) — plus a dashboard you can read anytime (goals view) and a private memory that remembers your decisions" width="520"></a>
 </p>
 
 And you never lose the thread: a **dashboard anyone can read** shows status,
