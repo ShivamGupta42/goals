@@ -486,6 +486,43 @@ def test_legacy_migration_via_add_preference_does_not_drop_data(monkeypatch, tmp
     assert (user_dir / "memory.json.bak").exists()
 
 
+def test_marker_goal_id_cannot_inject_into_the_comment(monkeypatch, tmp_path) -> None:
+    # A crafted goal id with a comment terminator must not break the HTML-comment
+    # marker, and dedup must still work (the sanitized form is stable).
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    nasty = "evil --> <script>alert(1)</script>"
+    assert mark_interview_prompted(nasty) is True   # first prompt recorded
+    assert mark_interview_prompted(nasty) is False  # deduped on the same safe slug
+    log = observations_path().read_text(encoding="utf-8")
+    assert "<script>" not in log  # the injected angle-bracket content is stripped
+    # Every comment opener is closed on its own line — no early "-->" injected.
+    for line in log.splitlines():
+        if "<!--" in line:
+            assert line.count("-->") == 1 and line.rstrip().endswith("-->")
+
+
+def test_orphan_field_does_not_hijack_previous_observation(monkeypatch, tmp_path) -> None:
+    # A misplaced `- when:` after stray text must NOT overwrite the prior
+    # observation's context, and both lines must be surfaced as unreadable.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    record_observation(
+        goal_id="g1", choice="use SQLite", context="real context", area="technical"
+    )
+    path = observations_path()
+    path.write_text(
+        path.read_text(encoding="utf-8") + "some stray note I typed\n  - when: HIJACKED\n",
+        encoding="utf-8",
+    )
+
+    obs = load_observations()
+    assert len(obs) == 1
+    assert obs[0].context == "real context"  # orphan field did not hijack it
+
+    flagged = unreadable_observation_lines()
+    assert any("HIJACKED" in line for line in flagged)  # orphan field surfaced
+    assert any("stray note" in line for line in flagged)  # stray text surfaced
+
+
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:
     snapshot = GoalSnapshot(
         goal_id="demo",

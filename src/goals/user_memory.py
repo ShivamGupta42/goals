@@ -239,8 +239,28 @@ def load_observations() -> list[JudgementObservation]:
             else:  # "note" or "you said"
                 current.note = value
                 current.provenance = "stated" if key == "you said" else "observed"
-        # Anything else (markers, blanks, header, stray human text) is ignored.
+            continue
+        # Markers, blanks, and the header are ignored without ending a block (the
+        # writer never puts them inside one). Any OTHER non-blank line is stray
+        # human text that breaks the block: drop the current parent so a later
+        # misplaced `- when:`/`- note:` can't silently overwrite the previous
+        # observation's context. Such an orphan field is then ignored here and
+        # surfaced by `unreadable_observation_lines`.
+        if _is_block_breaker(raw):
+            current = None
     return observations
+
+
+def _is_block_breaker(raw: str) -> bool:
+    """A non-blank line that is neither a marker/header nor a child field.
+
+    Encountering one ends the current observation block during parsing. It is the
+    same set of lines `unreadable_observation_lines` warns about.
+    """
+    stripped = raw.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("<!--"):
+        return False
+    return not _OBS_PARENT_RE.match(raw) and not _OBS_FIELD_RE.match(raw)
 
 
 def unreadable_observation_lines() -> list[str]:
@@ -254,12 +274,22 @@ def unreadable_observation_lines() -> list[str]:
     if not path.exists():
         return []
     bad: list[str] = []
+    has_parent = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#") or stripped.startswith("<!--"):
             continue
-        if _OBS_PARENT_RE.match(raw) or _OBS_FIELD_RE.match(raw):
+        if _OBS_PARENT_RE.match(raw):
+            has_parent = True
             continue
+        if _OBS_FIELD_RE.match(raw):
+            if has_parent:
+                continue
+            bad.append(stripped)  # a `- when:`/`- note:` with no observation above it
+            continue
+        # Stray human text: it breaks the current block (so a following field is
+        # an orphan too) and is itself unreadable.
+        has_parent = False
         bad.append(stripped)
     return bad
 
@@ -667,8 +697,17 @@ def _note_migration(count: int) -> None:
 # Interview bookkeeping lives in the observations log as HTML-comment markers —
 # invisible in rendered Markdown, ignored by the observation parser, and kept out
 # of any JSON so everything under ~/.goals/user/ stays hand-editable Markdown.
+_MARKER_SLUG_RE = re.compile(r"[^a-z0-9._-]+")
+
+
 def _marker(kind: str, slug: str) -> str:
-    return f"<!-- goals:{kind} goal:{slug} -->"
+    # Reduce the goal id to a safe charset before embedding it in an HTML comment.
+    # A raw id containing "-->" would close the marker early and leak or mangle
+    # Markdown; stripping to [a-z0-9._-] makes injection impossible. Both the
+    # write (`_append_marker`) and read (`_has_marker`) paths call this, so the
+    # canonical form is identical on both sides and dedup still matches.
+    safe = _MARKER_SLUG_RE.sub("-", slug.lower()).strip("-")
+    return f"<!-- goals:{kind} goal:{safe} -->"
 
 
 def _has_marker(slug: str, kinds: tuple[str, ...]) -> bool:
