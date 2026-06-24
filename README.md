@@ -184,6 +184,20 @@ Most people only need these:
 | `goals loop import <source>` | Import a loop/catalog from a URL, file, directory, or builder script |
 | `goals loop build/check/activate/improve` | Design, validate, start from, and improve the workflow itself |
 
+## Keep long runs safe
+
+A long agent loop can run away — retrying a failing step forever, or quietly
+burning tokens. Goals ships an **opt-in stop gate** that ends the loop on durable
+facts, not a transcript guess. Turn it on with `GOALS_ENFORCE=1`, and it hands
+control back to you when either guard trips:
+
+- a phase fails review too many times — `GOALS_MAX_PHASE_ATTEMPTS` (default 3); or
+- the session crosses a token budget you set — `GOALS_MAX_TOKENS` (off unless set).
+
+It never traps a finished, paused, or waiting-on-you goal, and fails open if
+anything goes wrong (a stuck hook never blocks you). Details:
+[docs/SELF_EVOLUTION.md](docs/SELF_EVOLUTION.md#enforced-stop-gate).
+
 ## For developers
 
 Under the hood, Goals is a small CLI + Claude Code / Codex plugin. It keeps goal state,
