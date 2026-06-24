@@ -640,54 +640,50 @@ UserPreferenceArea = Literal[
 ]
 
 
-class UserMemoryEvent(BaseModel):
+class JudgementObservation(BaseModel):
+    """One situated decision observed while a goal ran — NOT a causal rule.
+
+    Records *what* was decided and the observable *context* it was decided in,
+    plus an optional note in the user's own words. Goals never infers *why* the
+    user chose something (people confabulate reasons; self-reported causes are
+    unreliable). A reason is stored only when the user actually states one, and
+    is then marked ``provenance="stated"``. Scoped to its ``goal_id``: a choice
+    made for one goal is an observation, never a standing rule for the next.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    event_id: str = Field(default_factory=lambda: f"UME-{uuid4().hex[:8]}")
-    kind: Literal[
-        "manual",
-        "interview",
-        "insights",
-        "judgement",
-        "interview_prompted",
-        "forget",
-    ]
-    area: UserPreferenceArea = "other"
-    summary: str = ""
-    source: Literal[
-        "manual",
-        "post_goal_interview",
-        "claude_insights",
-        "judgement",
-        "system",
-    ] = "manual"
+    observation_id: str = Field(default_factory=lambda: f"OBS-{uuid4().hex[:8]}")
     goal_id: str = ""
-    confidence: float = 0.5
-    target_claim_id: str = ""
-    details: list[str] = Field(default_factory=list)
+    area: UserPreferenceArea = "decision"
+    choice: str = ""
+    context: str = ""
+    note: str = ""
+    provenance: Literal["observed", "stated"] = "observed"
     created_at: str = Field(default_factory=utc_now)
 
 
-class UserPreferenceClaim(BaseModel):
+class Preference(BaseModel):
+    """A durable, user-owned preference that steers how Goals auto-executes.
+
+    These live in a plain-Markdown file the user can edit or delete by hand.
+    A preference exists only because the user stated or confirmed it — Goals
+    never promotes an observation to a preference silently.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    claim_id: str
-    area: UserPreferenceArea = "other"
-    statement: str
-    confidence: float = 0.0
-    evidence_event_ids: list[str] = Field(default_factory=list)
-    status: Literal["candidate", "active", "inactive", "forgotten"] = "candidate"
-    updated_at: str = Field(default_factory=utc_now)
+    area: UserPreferenceArea = "decision"
+    text: str
 
 
 class UserMemory(BaseModel):
+    """Aggregate view of the two human-editable memory files."""
+
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
-    claims: list[UserPreferenceClaim] = Field(default_factory=list)
-    prompted_goal_ids: list[str] = Field(default_factory=list)
-    interviewed_goal_ids: list[str] = Field(default_factory=list)
-    updated_at: str = Field(default_factory=utc_now)
+    preferences: list[Preference] = Field(default_factory=list)
+    observations: list[JudgementObservation] = Field(default_factory=list)
 
 
 class PersonalizationContext(BaseModel):

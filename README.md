@@ -186,19 +186,29 @@ Most people only need these:
 
 ## It learns how you like goals executed
 
-Goals keeps a tiny, private memory of your **execution judgements** — the calls you
-make as a goal runs (what you chose, when you'd rather decide than be asked, how you
-like things explained). It's captured automatically as you work, stored in plain files
-under `~/.goals/user/`, and it never leaves your machine.
+Goals keeps a tiny, private, **hand-editable** memory of how you like goals run — two
+plain-Markdown files under `~/.goals/user/`, yours to read and edit, that never leave
+your machine:
 
-That memory does two things. During a goal it quietly **aligns auto-execution** to you —
-biasing how decisions get surfaced and explained. At the **end of every goal** Goals
-**reflects it back** in plain language: what this goal taught it, and how it'll execute
-future goals to fit you. So the longer you use Goals, the better it auto-executes.
+- **`observations.md`** — an append-only log of the decisions Goals sees you make as a
+  goal runs: *what* you chose and the *context*. It records a reason only when you
+  actually give one, in your own words — it never invents a "because."
+- **`preferences.md`** — the durable preferences that steer how Goals auto-executes.
+  You own this file; Goals only adds to it when you state or confirm a preference, and
+  never rewrites your edits.
+
+The split is deliberate: a choice made for one goal is an *observation*, scoped to that
+goal — it only becomes a standing preference when **you** confirm it. So Goals gets
+better at auto-execution over time without silently turning a one-off into a rule.
+
+At the **end of every goal**, Goals reflects back what it noticed, flags any choice that
+has recurred across goals ("promote to a standing preference?"), and shows the
+preferences currently in effect.
 
 ```bash
-goals user digest    # what Goals learned and how it'll steer next time
-goals user show      # the full memory; goals user forget <id> to correct it
+goals user digest                 # what Goals noticed this goal + what it'll apply next
+goals user record "Keep explanations concise" --area communication
+goals user show                   # everything; or just open ~/.goals/user/*.md and edit
 ```
 
 ## For developers

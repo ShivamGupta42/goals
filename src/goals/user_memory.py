@@ -1,29 +1,68 @@
+"""Goal-execution memory: small, private, and human-editable.
+
+Two plain-Markdown files under ``~/.goals/user/`` — both yours to read and edit:
+
+- ``preferences.md`` — durable preferences that steer how Goals auto-executes.
+  You own it. Goals only adds to it when you state or confirm a preference;
+  it never rewrites your edits.
+- ``observations.md`` — an append-only log of situated decisions Goals saw you
+  make while a goal ran: *what* you chose and the *context*, never an invented
+  reason. A quoted note is only ever your own words.
+
+Design choices (see docs/GOAL_EXECUTION_MEMORY.md):
+- No causal attribution. We record context + choice, not "chose X *because* Y".
+  People confabulate reasons, so an inferred cause would be fabricated.
+- No silent generalization. An observation is scoped to its goal. It only
+  becomes a standing preference when you state/confirm it, or after a pattern
+  recurs across goals and you promote it.
+- Markdown, not JSON, because you must be able to edit it by hand.
+"""
+
 from __future__ import annotations
 
-import hashlib
+import json
 import os
 import re
 from pathlib import Path
 
 from goals.models import (
+    JudgementObservation,
     PersonalizationContext,
+    Preference,
     UserMemory,
-    UserMemoryEvent,
     UserPreferenceArea,
-    UserPreferenceClaim,
     utc_now,
 )
 from goals.storage import GoalsError, atomic_write_text, lock_file
 
-USER_MEMORY_SCHEMA_VERSION = 1
 INTERVIEW_QUESTIONS = [
-    "Which decision or tradeoff from this goal matched how you want me to decide next time?",
+    "Which decision from this goal reflects how you'd want me to decide next time?",
     "Where should I have asked sooner, decided myself, or explained differently?",
     "What stable preference should Goals remember for future goals?",
 ]
-_ACTIVE_SOURCES = {"manual", "post_goal_interview"}
+
+_AREAS: tuple[str, ...] = ("risk", "communication", "workflow", "technical", "decision", "other")
+_MIDDOT = "·"
+
+_PREFERENCES_HEADER = (
+    "# Your Goals preferences\n"
+    "<!-- Goals reads this to decide how to execute your goals. It's yours: "
+    "edit, reorder, or delete any line. -->\n"
+    "<!-- One preference per bullet under an area heading "
+    "(risk, communication, workflow, technical, decision, other). -->\n"
+)
+_OBSERVATIONS_HEADER = (
+    "# Goals observations (append-only)\n"
+    "<!-- Goals appends one decision per line as you work — the choice and its "
+    "context, never an invented reason. -->\n"
+    "<!-- A note in quotes is only ever your own words. Edit a line only to "
+    "correct it. -->\n"
+)
 
 
+# --------------------------------------------------------------------------- #
+# Paths
+# --------------------------------------------------------------------------- #
 def goals_home() -> Path:
     configured = os.environ.get("GOALS_HOME")
     if configured:
@@ -35,169 +74,188 @@ def user_memory_dir() -> Path:
     return goals_home() / "user"
 
 
-def user_events_path() -> Path:
-    return user_memory_dir() / "events.jsonl"
+def preferences_path() -> Path:
+    return user_memory_dir() / "preferences.md"
 
 
-def user_memory_path() -> Path:
-    return user_memory_dir() / "memory.json"
+def observations_path() -> Path:
+    return user_memory_dir() / "observations.md"
 
 
-def read_user_events() -> list[UserMemoryEvent]:
-    path = user_events_path()
+def _state_path() -> Path:
+    # Machine-only bookkeeping (which goals were prompted/interviewed). Not memory
+    # content, so JSON is fine here — the user never edits this.
+    return user_memory_dir() / "state.json"
+
+
+# --------------------------------------------------------------------------- #
+# Preferences (durable, user-owned)
+# --------------------------------------------------------------------------- #
+def load_preferences() -> list[Preference]:
+    path = preferences_path()
     if not path.exists():
         return []
-    events: list[UserMemoryEvent] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
+    preferences: list[Preference] = []
+    area: UserPreferenceArea = "other"
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        heading = re.match(r"^##\s+(.*)$", line)
+        if heading:
+            candidate = heading.group(1).strip().lower()
+            area = candidate if candidate in _AREAS else "other"  # type: ignore[assignment]
             continue
-        try:
-            events.append(UserMemoryEvent.model_validate_json(line))
-        except Exception as exc:  # noqa: BLE001
-            raise GoalsError(f"Invalid user memory event at {path}:{line_number}: {exc}") from exc
-    return events
+        bullet = re.match(r"^[-*]\s+(.*)$", line)
+        if bullet:
+            text = _clean(bullet.group(1))
+            if text:
+                preferences.append(Preference(area=area, text=text))
+    return preferences
 
 
-def append_user_event(event: UserMemoryEvent) -> UserMemory:
-    path = user_events_path()
+def add_preference(area: str, text: str) -> Preference:
+    """Append a preference under its area heading, preserving all other content."""
+    preference = Preference(area=_validate_area(area), text=_clean(text))
+    if not preference.text:
+        raise GoalsError("A preference needs some text.")
+    path = preferences_path()
     with lock_file(path):
-        events = read_user_events()
-        if any(existing.event_id == event.event_id for existing in events):
-            return save_user_memory(derive_user_memory(events))
-        events.append(event)
-        atomic_write_text(path, "\n".join(item.model_dump_json() for item in events) + "\n")
-        return save_user_memory(derive_user_memory(events))
+        if any(
+            existing.area == preference.area and existing.text.lower() == preference.text.lower()
+            for existing in load_preferences()
+        ):
+            return preference
+        lines = _read_lines(path, _PREFERENCES_HEADER)
+        _insert_preference_line(lines, preference)
+        atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
+    return preference
 
 
-def load_user_memory() -> UserMemory:
-    path = user_memory_path()
+def forget_preference(target: str, *, purge: bool = False) -> int:
+    """Remove preference bullets matching ``target`` (substring, case-insensitive).
+
+    ``target == '--all'`` clears every preference; with ``purge`` it deletes the
+    files outright. Returns the number of preferences removed.
+    """
+    if target == "--all":
+        before = len(load_preferences())
+        if purge:
+            for path in (preferences_path(), observations_path(), _state_path()):
+                path.unlink(missing_ok=True)
+            return before
+        path = preferences_path()
+        with lock_file(path):
+            atomic_write_text(path, _PREFERENCES_HEADER)
+        return before
+    needle = _clean(target).lower()
+    if not needle:
+        raise GoalsError("Provide preference text to forget, or use --all.")
+    path = preferences_path()
+    with lock_file(path):
+        if not path.exists():
+            return 0
+        kept: list[str] = []
+        removed = 0
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            bullet = re.match(r"^[-*]\s+(.*)$", raw.strip())
+            if bullet and needle in bullet.group(1).lower():
+                removed += 1
+                continue
+            kept.append(raw)
+        if removed:
+            atomic_write_text(path, "\n".join(kept).rstrip() + "\n")
+    return removed
+
+
+# --------------------------------------------------------------------------- #
+# Observations (episodic, append-only, agent-owned)
+# --------------------------------------------------------------------------- #
+def record_observation(
+    *,
+    goal_id: str,
+    choice: str,
+    context: str = "",
+    note: str = "",
+    area: str = "decision",
+) -> JudgementObservation:
+    clean_note = _clean(note)
+    observation = JudgementObservation(
+        goal_id=_slug(goal_id),
+        area=_validate_area(area),
+        choice=_clean(choice),
+        context=_clean(context),
+        note=clean_note,
+        # A reason is "stated" only when the user gave one; we never infer it.
+        provenance="stated" if clean_note else "observed",
+    )
+    if not observation.choice:
+        raise GoalsError("An observation needs a choice.")
+    path = observations_path()
+    with lock_file(path):
+        lines = _read_lines(path, _OBSERVATIONS_HEADER)
+        lines.append(_format_observation_line(observation))
+        atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
+    return observation
+
+
+def load_observations() -> list[JudgementObservation]:
+    path = observations_path()
     if not path.exists():
-        events = read_user_events()
-        memory = derive_user_memory(events)
-        return save_user_memory(memory) if events else memory
-    try:
-        return UserMemory.model_validate_json(path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
-        raise GoalsError(f"Invalid user memory at {path}: {exc}") from exc
+        return []
+    observations: list[JudgementObservation] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        observation = _parse_observation_line(raw)
+        if observation is not None:
+            observations.append(observation)
+    return observations
 
 
-def save_user_memory(memory: UserMemory) -> UserMemory:
-    memory.updated_at = utc_now()
-    atomic_write_text(user_memory_path(), memory.model_dump_json(indent=2) + "\n")
-    return memory
+# --------------------------------------------------------------------------- #
+# Aggregate / rendering
+# --------------------------------------------------------------------------- #
+def load_user_memory() -> UserMemory:
+    return UserMemory(preferences=load_preferences(), observations=load_observations())
 
 
-def derive_user_memory(events: list[UserMemoryEvent]) -> UserMemory:
-    claims: dict[str, UserPreferenceClaim] = {}
-    prompted_goal_ids: list[str] = []
-    interviewed_goal_ids: list[str] = []
-
-    for event in events:
-        if event.kind == "interview_prompted":
-            _append_unique(prompted_goal_ids, event.goal_id)
-            continue
-        if event.kind == "forget":
-            _apply_forget(claims, event.target_claim_id)
-            continue
-        if event.kind not in {"manual", "interview", "insights", "judgement"}:
-            continue
-        if event.kind == "interview":
-            _append_unique(interviewed_goal_ids, event.goal_id)
-        for summary in _claim_statements(event):
-            claim_id = _claim_id(event.area, summary)
-            existing = claims.get(claim_id)
-            if existing is None:
-                existing = UserPreferenceClaim(
-                    claim_id=claim_id,
-                    area=event.area,
-                    statement=summary,
-                    confidence=0.0,
-                    evidence_event_ids=[],
-                    status="candidate",
-                    updated_at=event.created_at,
-                )
-                claims[claim_id] = existing
-            _append_unique(existing.evidence_event_ids, event.event_id)
-            existing.confidence = _claim_confidence(existing, event)
-            existing.updated_at = event.created_at
-            if event.source in _ACTIVE_SOURCES:
-                existing.status = "active"
-                _deactivate_conflicts(claims, existing)
-            elif (
-                # A single goal's judgement is a context-bound observation, not a
-                # standing preference: "chose X because Y here" need not hold on the
-                # next goal. Only the user's explicitly stated preferences
-                # (manual / post-goal interview) generalize, plus /insights the user
-                # curated and that recur. Judgements stay candidates until confirmed.
-                event.kind == "insights"
-                and existing.status != "active"
-                and len(existing.evidence_event_ids) >= 2
-            ):
-                existing.status = "active"
-
-    memory = UserMemory(
-        schema_version=USER_MEMORY_SCHEMA_VERSION,
-        claims=sorted(
-            claims.values(),
-            key=lambda item: (
-                _status_rank(item.status),
-                item.area,
-                -item.confidence,
-                item.statement,
-            ),
-        ),
-        prompted_goal_ids=prompted_goal_ids,
-        interviewed_goal_ids=interviewed_goal_ids,
-    )
-    return memory
-
-
-def _claim_statements(event: UserMemoryEvent) -> list[str]:
-    if event.kind == "interview" and event.details:
-        return [
-            statement
-            for statement in (_clean_statement(detail) for detail in event.details)
-            if statement
-        ]
-    summary = _clean_statement(event.summary)
-    return [summary] if summary else []
-
-
-def build_personalization_context(limit: int = 5) -> PersonalizationContext:
-    memory = load_user_memory()
-    active = [claim for claim in memory.claims if claim.status == "active"]
-    active.sort(key=lambda item: (item.confidence, len(item.evidence_event_ids)), reverse=True)
-    selected = active[:limit]
-    if not selected:
-        return PersonalizationContext(summary="No user preference memory recorded yet.")
-    guidance = [
-        f"{claim.area}: {claim.statement} ({claim.confidence:.0%})" for claim in selected
-    ]
-    average = sum(claim.confidence for claim in selected) / len(selected)
-    return PersonalizationContext(
-        summary="; ".join(guidance),
-        claim_ids=[claim.claim_id for claim in selected],
-        guidance=guidance,
-        confidence=average,
-    )
-
-
-def render_user_memory(memory: UserMemory) -> str:
+def render_user_memory(memory: UserMemory | None = None) -> str:
+    memory = memory or load_user_memory()
     lines = [
         "# User Memory",
         "",
-        f"Memory file: `{user_memory_path()}`",
+        f"Preferences: `{preferences_path()}` (yours to edit)",
+        f"Observations: `{observations_path()}` (append-only log)",
         "",
-        "## Active Claims",
+        "## Standing preferences",
     ]
-    active = [claim for claim in memory.claims if claim.status == "active"]
-    candidates = [claim for claim in memory.claims if claim.status == "candidate"]
-    inactive = [claim for claim in memory.claims if claim.status in {"inactive", "forgotten"}]
-    lines.append(_render_claims(active, "No active user preference claims recorded."))
-    lines.extend(["", "## Candidate Claims", _render_claims(candidates, "No candidate claims.")])
-    if inactive:
-        lines.extend(["", "## Inactive Claims", _render_claims(inactive, "No inactive claims.")])
+    if memory.preferences:
+        for area in _AREAS:
+            in_area = [pref for pref in memory.preferences if pref.area == area]
+            if in_area:
+                lines.append(f"- [{area}] " + "; ".join(pref.text for pref in in_area))
+    else:
+        lines.append("- None yet. Add one with `goals user record \"...\"`.")
+    recent = memory.observations[-5:]
+    lines.extend(["", "## Recent observations"])
+    if recent:
+        lines.extend(f"- {_describe_observation(obs)}" for obs in recent)
+    else:
+        lines.append("- None yet.")
     return "\n".join(lines).rstrip() + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Personalization (only confirmed preferences steer auto-execution)
+# --------------------------------------------------------------------------- #
+def build_personalization_context(limit: int = 5) -> PersonalizationContext:
+    preferences = load_preferences()
+    if not preferences:
+        return PersonalizationContext(summary="No user preference memory recorded yet.")
+    selected = preferences[:limit]
+    guidance = [f"{pref.area}: {pref.text}" for pref in selected]
+    return PersonalizationContext(
+        summary="; ".join(guidance),
+        guidance=guidance,
+        confidence=0.9,
+    )
 
 
 def render_personalization_context(context: PersonalizationContext) -> str:
@@ -206,133 +264,230 @@ def render_personalization_context(context: PersonalizationContext) -> str:
     return "\n".join(f"- {item}" for item in context.guidance)
 
 
-def events_from_insights(text: str, *, area: UserPreferenceArea = "decision") -> list[UserMemoryEvent]:
-    statements = _extract_statements(text)
-    return [
-        UserMemoryEvent(
-            kind="insights",
-            area=area,
-            summary=statement,
-            source="claude_insights",
-            confidence=0.45,
+# --------------------------------------------------------------------------- #
+# Goal-end digest (reflect back what was learned, scoped honestly)
+# --------------------------------------------------------------------------- #
+def build_goal_memory_digest(goal_id: str, *, limit: int = 5) -> str:
+    """Plain-language reflection surfaced at goal end.
+
+    Shows the decisions seen in *this* goal (with their context, and your note
+    if you gave one), any pattern that has recurred across goals and could
+    become a standing preference, and the standing preferences currently in
+    effect. Nothing is generalized without your say-so.
+    """
+    slug = _slug(goal_id)
+    observations = load_observations()
+    here = [obs for obs in observations if obs.goal_id == slug]
+    preferences = load_preferences()
+    candidates = _recurring_candidates(observations, preferences)
+    if not here and not preferences and not candidates:
+        return ""
+    lines = ["", "Goal-execution memory — what I noticed:"]
+    if here:
+        lines.extend(["", "In this goal you decided (kept with its context, scoped to this goal):"])
+        lines.extend(f"- {_describe_observation(obs)}" for obs in here[-limit:])
+    if candidates:
+        lines.extend(["", "Seen across several goals — promote to a standing preference?"])
+        for choice, area, count in candidates[:limit]:
+            lines.append(
+                f'- {area}: "{choice}" ({count} goals). '
+                f'Confirm with `goals user record "{choice}" --area {area}`.'
+            )
+    if preferences:
+        lines.extend(["", "Standing preferences I'll apply to future goals (you set these):"])
+        lines.extend(f"- {pref.area}: {pref.text}" for pref in preferences[:limit])
+    elif here:
+        lines.extend(
+            [
+                "",
+                "I won't turn the choices above into standing rules on my own — a choice "
+                "made for one goal can be wrong for the next. Set any that should always "
+                "hold with `goals user record \"...\"` or the post-goal interview.",
+            ]
         )
-        for statement in statements
-    ]
-
-
-def record_interview_answers(goal_id: str, answers: list[str]) -> UserMemoryEvent:
-    clean_answers = [_clean_statement(answer) for answer in answers if _clean_statement(answer)]
-    if len(clean_answers) != 3:
-        raise GoalsError("Interview requires exactly three non-empty answers.")
-    return UserMemoryEvent(
-        kind="interview",
-        area="decision",
-        summary=" | ".join(clean_answers),
-        source="post_goal_interview",
-        goal_id=goal_id,
-        confidence=0.9,
-        details=clean_answers,
+    lines.extend(
+        [
+            "",
+            f"It's all editable Markdown: `{preferences_path()}` (yours) and "
+            f"`{observations_path()}` (the log).",
+        ]
     )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Post-goal interview (answers become stated preferences)
+# --------------------------------------------------------------------------- #
+def record_interview_answers(goal_id: str, answers: list[str]) -> list[Preference]:
+    clean = [_clean(answer) for answer in answers if _clean(answer)]
+    if len(clean) != 3:
+        raise GoalsError("Interview requires exactly three non-empty answers.")
+    areas: tuple[str, str, str] = ("decision", "workflow", "communication")
+    preferences = [add_preference(area, text) for area, text in zip(areas, clean)]
+    _mark_state(_slug(goal_id), "interviewed")
+    return preferences
 
 
 def mark_interview_prompted(goal_id: str) -> bool:
-    if not goal_id:
+    slug = _slug(goal_id)
+    if not slug:
         return False
-    memory = load_user_memory()
-    if goal_id in memory.prompted_goal_ids or goal_id in memory.interviewed_goal_ids:
+    state = _load_state()
+    if slug in state.get("prompted", []) or slug in state.get("interviewed", []):
         return False
-    append_user_event(
-        UserMemoryEvent(
-            kind="interview_prompted",
-            source="system",
-            goal_id=goal_id,
-            summary="Post-goal interview was shown.",
-        )
-    )
+    _mark_state(slug, "prompted")
     return True
 
 
 def render_post_goal_interview(goal_id: str) -> str:
-    questions = "\n".join(f"{index}. {question}" for index, question in enumerate(INTERVIEW_QUESTIONS, 1))
+    questions = "\n".join(
+        f"{index}. {question}" for index, question in enumerate(INTERVIEW_QUESTIONS, 1)
+    )
     return (
-        "\nPost-goal personalization interview:\n"
+        "\nPost-goal personalization interview (answers become editable preferences):\n"
         f"{questions}\n\n"
         "Record answers with:\n"
         f'goals user interview --goal {goal_id} --answer "..." --answer "..." --answer "..."\n'
     )
 
 
-def build_goal_memory_digest(goal_id: str, *, limit: int = 5) -> str:
-    """Plain-language reflection of goal-execution memory, surfaced at goal end.
-
-    Shows what *this* goal taught Goals and how the accumulated memory will steer
-    auto-execution on future goals, so silent learning becomes visible and the
-    user can correct it. Returns an empty string when there is nothing to show.
-    """
-    memory = load_user_memory()
-    active = [claim for claim in memory.claims if claim.status == "active"]
-    active.sort(key=lambda claim: (claim.confidence, len(claim.evidence_event_ids)), reverse=True)
-    learned_here = _unique_statements(
-        statement
-        for event in read_user_events()
-        if event.goal_id == goal_id
-        and event.kind in {"judgement", "interview", "insights", "manual"}
-        for statement in _claim_statements(event)
-    )
-    if not active and not learned_here:
-        return ""
-    lines = ["", "Goal-execution memory — what I learned:"]
-    if learned_here:
-        lines.extend(
-            [
-                "",
-                "In this goal you decided (kept with its reason, scoped to this goal):",
-            ]
-        )
-        lines.extend(f"- {statement}" for statement in learned_here[-limit:])
-    if active:
-        lines.extend(
-            [
-                "",
-                "Standing preferences I'll apply to future goals (you confirmed these):",
-            ]
-        )
-        lines.extend(
-            f"- {claim.area}: {claim.statement} ({claim.confidence:.0%})"
-            for claim in active[:limit]
-        )
-    elif learned_here:
-        lines.extend(
-            [
-                "",
-                "I won't turn the choices above into standing rules on my own — a choice "
-                "made for one goal's reasons can be wrong for the next. Confirm any that "
-                "should always hold with `goals user record \"...\"` or the post-goal interview.",
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            f"Stored privately in `{user_memory_path()}`. Review or correct it with "
-            "`goals user show` / `goals user forget <claim-id>`.",
-        ]
-    )
-    return "\n".join(lines).rstrip() + "\n"
+# --------------------------------------------------------------------------- #
+# Claude /insights import (user-curated -> stated preferences)
+# --------------------------------------------------------------------------- #
+def preferences_from_insights(text: str, *, area: str = "decision") -> list[str]:
+    validated = _validate_area(area)
+    added: list[str] = []
+    for statement in _extract_statements(text):
+        added.append(add_preference(validated, statement).text)
+    return added
 
 
-def forget_claim(target: str, *, purge: bool = False) -> UserMemory:
-    if purge and target == "--all":
-        for path in (user_events_path(), user_memory_path()):
-            path.unlink(missing_ok=True)
-        return UserMemory()
-    return append_user_event(
-        UserMemoryEvent(
-            kind="forget",
-            source="manual",
-            target_claim_id="*" if target == "--all" else target,
-            summary=f"Forget {target}",
-        )
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+def _read_lines(path: Path, header: str) -> list[str]:
+    if path.exists():
+        return path.read_text(encoding="utf-8").splitlines()
+    return header.rstrip("\n").splitlines()
+
+
+def _insert_preference_line(lines: list[str], preference: Preference) -> None:
+    heading = f"## {preference.area}"
+    bullet = f"- {preference.text}"
+    for index, raw in enumerate(lines):
+        if raw.strip().lower() == heading.lower():
+            insert_at = index + 1
+            while insert_at < len(lines) and not re.match(r"^##\s+", lines[insert_at].strip()):
+                insert_at += 1
+            lines.insert(insert_at, bullet)
+            return
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.append(heading)
+    lines.append(bullet)
+
+
+def _format_observation_line(observation: JudgementObservation) -> str:
+    date = observation.created_at[:10]
+    parts = [
+        f"- {date}",
+        f"goal:{observation.goal_id or 'none'}",
+        f"[{observation.area}] chose: {observation.choice}",
+    ]
+    line = f" {_MIDDOT} ".join(parts)
+    if observation.context:
+        line += f" — when: {observation.context}"
+    if observation.note:
+        line += f' (you said: "{observation.note}")'
+    return line
+
+
+_OBS_RE = re.compile(
+    r"^-\s+(?P<date>\d{4}-\d{2}-\d{2})\s+·\s+goal:(?P<goal>\S*)\s+·\s+"
+    r"\[(?P<area>[^\]]+)\]\s+chose:\s+(?P<rest>.*)$"
+)
+
+
+def _parse_observation_line(raw: str) -> JudgementObservation | None:
+    match = _OBS_RE.match(raw.strip())
+    if not match:
+        return None
+    rest = match.group("rest")
+    note = ""
+    note_match = re.search(r'\s*\(you said:\s*"(?P<note>.*)"\)\s*$', rest)
+    if note_match:
+        note = note_match.group("note")
+        rest = rest[: note_match.start()]
+    context = ""
+    if " — when: " in rest:
+        choice, context = rest.split(" — when: ", 1)
+    else:
+        choice = rest
+    area = match.group("area").strip().lower()
+    goal = match.group("goal")
+    return JudgementObservation(
+        goal_id="" if goal == "none" else goal,
+        area=area if area in _AREAS else "other",  # type: ignore[arg-type]
+        choice=_clean(choice),
+        context=_clean(context),
+        note=_clean(note),
+        provenance="stated" if note else "observed",
+        created_at=match.group("date"),
     )
+
+
+def _describe_observation(observation: JudgementObservation) -> str:
+    text = f"chose {observation.choice}"
+    if observation.context:
+        text += f" — when {observation.context}"
+    if observation.note:
+        text += f' (you said: "{observation.note}")'
+    if observation.goal_id:
+        text += f" [goal:{observation.goal_id}]"
+    return text
+
+
+def _recurring_candidates(
+    observations: list[JudgementObservation],
+    preferences: list[Preference],
+) -> list[tuple[str, str, int]]:
+    """Choices made in >= 2 distinct goals that aren't already a preference."""
+    seen: dict[tuple[str, str], set[str]] = {}
+    for obs in observations:
+        if not obs.choice or not obs.goal_id:
+            continue
+        seen.setdefault((obs.area, obs.choice), set()).add(obs.goal_id)
+    covered = {(pref.area, pref.text.lower()) for pref in preferences}
+    candidates = [
+        (choice, area, len(goals))
+        for (area, choice), goals in seen.items()
+        if len(goals) >= 2 and (area, choice.lower()) not in covered
+    ]
+    candidates.sort(key=lambda item: item[2], reverse=True)
+    return candidates
+
+
+def _load_state() -> dict:
+    path = _state_path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _mark_state(goal_id: str, bucket: str) -> None:
+    if not goal_id:
+        return
+    path = _state_path()
+    with lock_file(path):
+        state = _load_state()
+        items = state.setdefault(bucket, [])
+        if goal_id not in items:
+            items.append(goal_id)
+        state["updated_at"] = utc_now()
+        atomic_write_text(path, json.dumps(state, indent=2) + "\n")
 
 
 def _extract_statements(text: str) -> list[str]:
@@ -342,7 +497,7 @@ def _extract_statements(text: str) -> list[str]:
         line = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", raw).strip()
         if len(line) < 8:
             continue
-        statement = _clean_statement(line)
+        statement = _clean(line)
         key = statement.lower()
         if key in seen:
             continue
@@ -351,97 +506,20 @@ def _extract_statements(text: str) -> list[str]:
         if len(statements) >= 8:
             break
     if not statements and text.strip():
-        statements.append(_clean_statement(text.strip()[:320]))
+        statements.append(_clean(text.strip()[:320]))
     return [statement for statement in statements if statement]
 
 
-def _clean_statement(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip()
+def _validate_area(value: str) -> UserPreferenceArea:
+    candidate = (value or "").strip().lower()
+    if candidate not in _AREAS:
+        raise GoalsError(f"Unknown area '{value}'. Choose one of: {', '.join(_AREAS)}.")
+    return candidate  # type: ignore[return-value]
 
 
-def _unique_statements(statements) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for statement in statements:
-        key = statement.lower()
-        if not statement or key in seen:
-            continue
-        seen.add(key)
-        ordered.append(statement)
-    return ordered
+def _clean(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
 
 
-def _claim_id(area: str, statement: str) -> str:
-    digest = hashlib.sha1(f"{area}\0{statement.lower()}".encode("utf-8")).hexdigest()[:10]
-    return f"UPC-{digest}"
-
-
-def _claim_confidence(claim: UserPreferenceClaim, event: UserMemoryEvent) -> float:
-    base = max(claim.confidence, max(0.0, min(1.0, event.confidence)))
-    bonus = 0.08 * max(0, len(claim.evidence_event_ids) - 1)
-    if event.source in _ACTIVE_SOURCES:
-        bonus += 0.05
-    return min(0.98, base + bonus)
-
-
-def _deactivate_conflicts(
-    claims: dict[str, UserPreferenceClaim], active_claim: UserPreferenceClaim
-) -> None:
-    for claim in claims.values():
-        if (
-            claim.claim_id != active_claim.claim_id
-            and claim.area == active_claim.area
-            and claim.status == "active"
-            and _claims_conflict(claim.statement, active_claim.statement)
-        ):
-            claim.status = "inactive"
-
-
-def _claims_conflict(left: str, right: str) -> bool:
-    left_tokens = set(re.findall(r"[a-z0-9]+", left.lower()))
-    right_tokens = set(re.findall(r"[a-z0-9]+", right.lower()))
-    opposite_pairs = (
-        ("fast", "ask"),
-        ("fast", "asking"),
-        ("quick", "ask"),
-        ("quick", "asking"),
-        ("decide", "ask"),
-        ("decide", "asking"),
-        ("auto", "ask"),
-        ("auto", "asking"),
-        ("concise", "detailed"),
-        ("brief", "detailed"),
-        ("technical", "plain"),
-    )
-    for a, b in opposite_pairs:
-        if (a in left_tokens and b in right_tokens) or (b in left_tokens and a in right_tokens):
-            return True
-    return False
-
-
-def _apply_forget(claims: dict[str, UserPreferenceClaim], target: str) -> None:
-    if target == "*":
-        for claim in claims.values():
-            claim.status = "forgotten"
-        return
-    if target in claims:
-        claims[target].status = "forgotten"
-
-
-def _status_rank(status: str) -> int:
-    return {"active": 0, "candidate": 1, "inactive": 2, "forgotten": 3}.get(status, 4)
-
-
-def _render_claims(claims: list[UserPreferenceClaim], empty: str) -> str:
-    if not claims:
-        return f"- {empty}"
-    return "\n".join(
-        f"- `{claim.claim_id}` [{claim.area}/{claim.status}] {claim.statement} "
-        f"({claim.confidence:.0%}, {len(claim.evidence_event_ids)} evidence ref(s))"
-        for claim in claims
-    )
-
-
-def _append_unique(items: list[str], item: str) -> None:
-    if item and item not in items:
-        items.append(item)
+def _slug(value: str) -> str:
+    return _clean(value).replace(" ", "-")

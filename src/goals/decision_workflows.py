@@ -17,11 +17,10 @@ from goals.models import (
     EventType,
     JudgementRecord,
     PersonalizationContext,
-    UserMemoryEvent,
 )
 from goals.runtime import append_event, load_active_snapshot
 from goals.storage import GoalsError
-from goals.user_memory import append_user_event
+from goals.user_memory import record_observation
 
 
 @dataclass(frozen=True)
@@ -92,37 +91,23 @@ def decision_brief_workflow(
 
 
 def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
+    """Log the user's decision as a situated observation — context, not cause.
+
+    We store *what* was decided and the observable context (the question). We do
+    NOT infer or fabricate a reason; the ``--why`` note is recorded only when the
+    user actually supplies one, in their own words. The observation is scoped to
+    this goal and never becomes a standing preference on its own.
+    """
     if record.decided_by != "user":
         return ""
-    # A judgement is "in this goal, the user chose X because Y". The reason is
-    # load-bearing: without it the choice is context-bound and must NOT be
-    # generalized into a standing preference, or Goals will misapply it elsewhere.
-    reason = record.rationale.strip()
-    if reason:
-        summary = f"Chose '{record.choice}' for '{record.question}' because {reason}"
-        confidence = record.confidence or 0.5
-    else:
-        summary = f"Chose '{record.choice}' for '{record.question}' (no reason recorded)"
-        confidence = min(record.confidence, 0.3) if record.confidence else 0.25
     try:
-        append_user_event(
-            UserMemoryEvent(
-                kind="judgement",
-                area="decision",
-                summary=summary,
-                source="judgement",
-                goal_id=goal_id,
-                confidence=confidence,
-                # Keep the parts structured so the reason/context are never lost.
-                details=[record.question, record.choice, reason],
-            )
+        record_observation(
+            goal_id=goal_id,
+            area="decision",
+            choice=record.choice,
+            context=record.question,
+            note=record.rationale,
         )
     except GoalsError as exc:
         return f"User memory warning: {exc}"
-    if not reason:
-        return (
-            "Recorded without a reason. Pass --why next time so Goals remembers "
-            "*why* you chose this, not just *what* — context-free choices aren't "
-            "generalized into preferences."
-        )
     return ""

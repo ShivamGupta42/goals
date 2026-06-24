@@ -98,7 +98,6 @@ from goals.models import (
     SourceClaim,
     SourceRecord,
     Subproblem,
-    UserMemoryEvent,
     Verification,
 )
 from goals.permission_policy import decide_permission, render_permission_report
@@ -151,12 +150,13 @@ from goals.tools import render_tool_health_report
 from goals.tool_workflows import tool_doctor
 from goals.user_memory import (
     INTERVIEW_QUESTIONS,
-    append_user_event,
+    add_preference,
     build_goal_memory_digest,
     build_personalization_context,
-    events_from_insights,
-    forget_claim,
+    forget_preference,
     load_user_memory,
+    preferences_from_insights,
+    preferences_path,
     record_interview_answers,
     render_user_memory,
 )
@@ -1197,23 +1197,13 @@ def user_record(
         "decision",
         help="risk, communication, workflow, technical, decision, or other.",
     ),
-    confidence: float = typer.Option(0.95, "--confidence", min=0.0, max=1.0),
 ) -> None:
-    """Record an explicit user preference in private global memory."""
+    """Add a standing preference (appended to your editable preferences.md)."""
 
     def run():
-        event = UserMemoryEvent(
-            kind="manual",
-            area=_user_area(area),  # type: ignore[arg-type]
-            summary=preference,
-            source="manual",
-            confidence=confidence,
-        )
-        memory = append_user_event(event)
-        typer.echo(f"Recorded user memory event: {event.event_id}")
-        active = [claim for claim in memory.claims if claim.status == "active"]
-        if active:
-            typer.echo(render_user_memory(memory))
+        pref = add_preference(_user_area(area), preference)
+        typer.echo(f"Recorded preference [{pref.area}]: {pref.text}")
+        typer.echo(f"Edit it any time: {preferences_path()}")
 
     _handle(run)
 
@@ -1226,7 +1216,7 @@ def user_import_insights(
         help="risk, communication, workflow, technical, decision, or other.",
     ),
 ) -> None:
-    """Import a Claude Code /insights summary as candidate user memory."""
+    """Import a Claude Code /insights summary as standing preferences."""
 
     def run():
         if str(file) == "-":
@@ -1236,15 +1226,11 @@ def user_import_insights(
                 text = file.read_text(encoding="utf-8")
             except OSError as exc:
                 raise GoalsError(f"Could not read {file}: {exc}") from exc
-        events = events_from_insights(text, area=_user_area(area))  # type: ignore[arg-type]
-        if not events:
+        added = preferences_from_insights(text, area=_user_area(area))
+        if not added:
             raise GoalsError("No usable insight statements found.")
-        memory = None
-        for event in events:
-            memory = append_user_event(event)
-        typer.echo(f"Imported {len(events)} user memory candidate(s) from Claude insights.")
-        if memory is not None:
-            typer.echo(render_user_memory(memory))
+        typer.echo(f"Imported {len(added)} preference(s) from Claude insights.")
+        typer.echo(render_user_memory())
 
     _handle(run)
 
@@ -1259,41 +1245,40 @@ def user_interview(
         help="Interview answer. Repeat exactly three times.",
     ),
 ) -> None:
-    """Record the three-question post-goal personalization interview."""
+    """Record the three-question post-goal interview as standing preferences."""
 
     def run():
         goal_id = _resolve_user_goal_id(goal)
         collected = list(answers or [])
         if not collected and sys.stdin.isatty():
             collected = [typer.prompt(question) for question in INTERVIEW_QUESTIONS]
-        event = record_interview_answers(goal_id, collected)
-        memory = append_user_event(event)
-        typer.echo(f"Recorded post-goal user interview: {event.event_id}")
-        typer.echo(render_user_memory(memory))
+        prefs = record_interview_answers(goal_id, collected)
+        typer.echo(f"Recorded {len(prefs)} preference(s) from the post-goal interview.")
+        typer.echo(render_user_memory())
 
     _handle(run)
 
 
 @user_app.command("forget")
 def user_forget(
-    claim_id: Optional[str] = typer.Argument(None, help="Claim id to forget."),
-    all_claims: bool = typer.Option(False, "--all", help="Forget all user-memory claims."),
-    purge: bool = typer.Option(False, "--purge", help="Delete user memory files when used with --all."),
+    text: Optional[str] = typer.Argument(None, help="Preference text to forget (substring match)."),
+    all_prefs: bool = typer.Option(False, "--all", help="Forget all preferences."),
+    purge: bool = typer.Option(False, "--purge", help="Delete the memory files when used with --all."),
 ) -> None:
-    """Deactivate or purge private user-memory claims."""
+    """Remove standing preferences (you can also just edit preferences.md)."""
 
     def run():
-        if all_claims:
-            memory = forget_claim("--all", purge=purge)
-            typer.echo("Forgot all user-memory claims." if not purge else "Purged user memory.")
-            if not purge:
-                typer.echo(render_user_memory(memory))
+        if all_prefs:
+            removed = forget_preference("--all", purge=purge)
+            if purge:
+                typer.echo("Purged user memory files.")
+            else:
+                typer.echo(f"Forgot {removed} preference(s).")
             return
-        if not claim_id:
-            raise GoalsError("Provide a claim id, or use --all.")
-        memory = forget_claim(claim_id)
-        typer.echo(f"Forgot user-memory claim: {claim_id}")
-        typer.echo(render_user_memory(memory))
+        if not text:
+            raise GoalsError("Provide preference text to forget, or use --all.")
+        removed = forget_preference(text)
+        typer.echo(f"Forgot {removed} preference(s) matching: {text}")
 
     _handle(run)
 

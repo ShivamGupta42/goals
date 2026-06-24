@@ -2,278 +2,234 @@ from goals.decisions import build_decision_context, explain_decision, render_dec
 from goals.models import (
     DecisionOption,
     GoalSnapshot,
+    JudgementRecord,
     PersonalizationContext,
-    UserMemoryEvent,
     WorktreeLease,
 )
 from goals.runtime import default_phases
 from goals.user_memory import (
-    append_user_event,
+    add_preference,
     build_goal_memory_digest,
     build_personalization_context,
-    events_from_insights,
-    forget_claim,
-    load_user_memory,
-    user_memory_path,
+    forget_preference,
+    load_observations,
+    load_preferences,
+    observations_path,
+    preferences_from_insights,
+    preferences_path,
+    record_interview_answers,
+    record_observation,
 )
 
 
-def test_user_memory_records_active_manual_claim(monkeypatch, tmp_path) -> None:
+def test_add_preference_writes_editable_markdown(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
-    append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="communication",
-            summary="Prefer concise explanations with direct tradeoffs.",
-            source="manual",
-            confidence=0.9,
-        )
-    )
+    add_preference("communication", "Prefer concise explanations with direct tradeoffs.")
 
-    memory = load_user_memory()
-    assert user_memory_path().exists()
-    assert len(memory.claims) == 1
-    assert memory.claims[0].status == "active"
-    assert memory.claims[0].area == "communication"
-    context = build_personalization_context()
-    assert "Prefer concise explanations" in context.summary
-    assert context.claim_ids == [memory.claims[0].claim_id]
+    text = preferences_path().read_text(encoding="utf-8")
+    assert "## communication" in text
+    assert "- Prefer concise explanations with direct tradeoffs." in text
+    # Round-trips through the parser.
+    prefs = load_preferences()
+    assert len(prefs) == 1
+    assert prefs[0].area == "communication"
+    # Confirmed preferences steer auto-execution.
+    assert "Prefer concise explanations" in build_personalization_context().summary
 
 
-def test_user_memory_imported_insights_start_as_candidates(monkeypatch, tmp_path) -> None:
+def test_add_preference_is_idempotent(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
-    events = events_from_insights(
-        "- User tends to choose reversible local changes first.\n"
-        "- User dislikes broad rewrites without evidence."
-    )
-    for event in events:
-        append_user_event(event)
+    add_preference("workflow", "Run tests before summaries.")
+    add_preference("workflow", "Run tests before summaries.")
 
-    memory = load_user_memory()
-    assert len(memory.claims) == 2
-    assert {claim.status for claim in memory.claims} == {"candidate"}
+    assert len(load_preferences()) == 1
+
+
+def test_hand_edited_preferences_are_read(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    path = preferences_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # A human writes the file directly — no Goals command involved.
+    path.write_text(
+        "# Your Goals preferences\n\n"
+        "## risk\n"
+        "- Ask before anything irreversible.\n"
+        "- Decide reversible local changes yourself.\n",
+        encoding="utf-8",
+    )
+
+    prefs = load_preferences()
+    assert [p.text for p in prefs] == [
+        "Ask before anything irreversible.",
+        "Decide reversible local changes yourself.",
+    ]
+    assert all(p.area == "risk" for p in prefs)
+
+
+def test_observation_records_context_not_cause(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_observation(
+        goal_id="add auth",
+        area="decision",
+        choice="store sessions in Redis",
+        context="sessions must be shared across instances",
+    )
+
+    line = observations_path().read_text(encoding="utf-8")
+    assert "goal:add-auth" in line
+    assert "chose: store sessions in Redis" in line
+    assert "when: sessions must be shared across instances" in line
+    # No fabricated reason when none was given.
+    assert "because" not in line.lower()
+    assert "you said" not in line
+
+    obs = load_observations()
+    assert len(obs) == 1
+    assert obs[0].provenance == "observed"
+    assert obs[0].note == ""
+
+
+def test_observation_keeps_user_words_as_stated_note(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_observation(
+        goal_id="g1",
+        area="risk",
+        choice="a local file over a database",
+        context="throwaway prototype",
+        note="I don't want to manage a server",
+    )
+
+    obs = load_observations()[0]
+    assert obs.note == "I don't want to manage a server"
+    assert obs.provenance == "stated"
+    assert 'you said: "I don\'t want to manage a server"' in observations_path().read_text(
+        encoding="utf-8"
+    )
+
+
+def test_observations_do_not_steer_other_goals(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    record_observation(goal_id="g1", choice="use Redis", context="needed shared sessions")
+
+    # A goal-scoped observation never becomes a standing preference on its own.
     assert build_personalization_context().summary == "No user preference memory recorded yet."
+    assert load_preferences() == []
 
 
-def test_user_memory_imported_insights_dedupe_single_paste(monkeypatch, tmp_path) -> None:
+def test_digest_scopes_to_goal_and_offers_promotion(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
-    events = events_from_insights(
-        "- User tends to choose reversible local changes first.\n"
-        "- User tends to choose reversible local changes first.\n"
-    )
-    for event in events:
-        append_user_event(event)
+    # Same choice recurs across two distinct goals -> a promotion candidate.
+    record_observation(goal_id="g1", area="workflow", choice="write tests first")
+    record_observation(goal_id="g2", area="workflow", choice="write tests first")
 
-    memory = load_user_memory()
-    assert len(events) == 1
-    assert len(memory.claims) == 1
-    assert memory.claims[0].status == "candidate"
+    digest = build_goal_memory_digest("g2")
+    assert "In this goal you decided" in digest
+    assert "Seen across several goals — promote to a standing preference?" in digest
+    assert "write tests first" in digest
+    assert 'goals user record "write tests first" --area workflow' in digest
+    # Not yet a standing preference (must be confirmed).
+    assert "Standing preferences I'll apply" not in digest
 
 
-def test_user_memory_interview_derives_one_claim_per_answer(monkeypatch, tmp_path) -> None:
+def test_digest_drops_candidate_once_confirmed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
-    append_user_event(
-        UserMemoryEvent(
-            kind="interview",
-            area="decision",
-            summary="combined fallback",
-            source="post_goal_interview",
-            goal_id="demo",
-            confidence=0.9,
-            details=[
-                "Prefer small reversible changes.",
-                "Ask earlier when product direction changes.",
-                "Explain tradeoffs without long background.",
-            ],
-        )
-    )
+    record_observation(goal_id="g1", area="workflow", choice="write tests first")
+    record_observation(goal_id="g2", area="workflow", choice="write tests first")
+    add_preference("workflow", "write tests first")
 
-    memory = load_user_memory()
-
-    assert len(memory.claims) == 3
-    assert memory.interviewed_goal_ids == ["demo"]
-    assert {claim.status for claim in memory.claims} == {"active"}
-    assert any("small reversible changes" in claim.statement for claim in memory.claims)
-    assert all("combined fallback" not in claim.statement for claim in memory.claims)
+    digest = build_goal_memory_digest("g2")
+    assert "promote to a standing preference" not in digest
+    assert "Standing preferences I'll apply to future goals" in digest
 
 
-def test_user_memory_conflicting_explicit_claims_keep_newest_active(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-
-    append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="risk",
-            summary="Prefer fast choices when the change is reversible.",
-            source="manual",
-            confidence=0.9,
-        )
-    )
-    memory = append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="risk",
-            summary="Prefer asking before risk tradeoffs even when reversible.",
-            source="manual",
-            confidence=0.95,
-        )
-    )
-
-    active = [claim for claim in memory.claims if claim.status == "active"]
-    inactive = [claim for claim in memory.claims if claim.status == "inactive"]
-    assert len(active) == 1
-    assert "asking before risk tradeoffs" in active[0].statement
-    assert len(inactive) == 1
-
-
-def test_user_memory_forget_deactivates_claim(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-
-    memory = append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="workflow",
-            summary="Prefer tests before implementation summaries.",
-            source="manual",
-            confidence=0.9,
-        )
-    )
-    claim_id = memory.claims[0].claim_id
-
-    memory = forget_claim(claim_id)
-
-    assert memory.claims[0].status == "forgotten"
-    assert build_personalization_context().summary == "No user preference memory recorded yet."
-
-
-def test_goal_memory_digest_empty_when_nothing_learned(monkeypatch, tmp_path) -> None:
+def test_digest_empty_when_nothing_recorded(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
 
     assert build_goal_memory_digest("demo") == ""
 
 
-def test_judgement_capture_preserves_reason_and_goal(monkeypatch, tmp_path) -> None:
+def test_interview_answers_become_preferences(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    prefs = record_interview_answers(
+        "demo",
+        [
+            "Prefer small reversible changes.",
+            "Ask earlier when product direction changes.",
+            "Explain tradeoffs without long background.",
+        ],
+    )
+
+    assert len(prefs) == 3
+    assert {p.area for p in prefs} == {"decision", "workflow", "communication"}
+    assert any("reversible" in p.text for p in load_preferences())
+
+
+def test_forget_preference_removes_matching_bullet(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    add_preference("workflow", "Run tests before summaries.")
+    add_preference("communication", "Be concise.")
+
+    removed = forget_preference("tests before")
+    assert removed == 1
+    remaining = [p.text for p in load_preferences()]
+    assert remaining == ["Be concise."]
+
+
+def test_import_insights_adds_preferences(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+
+    added = preferences_from_insights(
+        "- User tends to choose reversible local changes first.\n"
+        "- User dislikes broad rewrites without evidence."
+    )
+
+    assert len(added) == 2
+    assert len(load_preferences()) == 2
+
+
+def test_judgement_capture_writes_observation(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
     from goals.decision_workflows import _record_user_judgement_signal
-    from goals.models import JudgementRecord
-    from goals.user_memory import read_user_events
 
     warning = _record_user_judgement_signal(
         "G1",
         JudgementRecord(
-            question="Pick storage",
-            choice="local file",
-            rationale="the data is throwaway",
+            question="Where should sessions live?",
+            choice="Redis",
+            rationale="they must survive a restart",
             decided_by="user",
         ),
     )
 
-    assert warning == ""  # reason present -> no nudge
-    events = read_user_events()
-    assert len(events) == 1
-    event = events[0]
-    assert event.goal_id == "G1"  # tied to the particular goal
-    assert "because the data is throwaway" in event.summary  # X because Y kept
-    assert event.details == ["Pick storage", "local file", "the data is throwaway"]
+    assert warning == ""
+    obs = load_observations()
+    assert len(obs) == 1
+    assert obs[0].goal_id == "G1"
+    assert obs[0].choice == "Redis"
+    assert obs[0].context == "Where should sessions live?"
+    assert obs[0].note == "they must survive a restart"  # user's words, not inferred
+    assert obs[0].provenance == "stated"
 
 
-def test_reasonless_judgement_is_nudged_and_weak(monkeypatch, tmp_path) -> None:
+def test_agent_decisions_are_not_recorded_as_user_memory(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
     from goals.decision_workflows import _record_user_judgement_signal
-    from goals.models import JudgementRecord
 
-    warning = _record_user_judgement_signal(
+    _record_user_judgement_signal(
         "G1",
-        JudgementRecord(question="Pick storage", choice="local file", decided_by="user"),
+        JudgementRecord(question="q", choice="x", decided_by="agent"),
     )
 
-    assert "Pass --why" in warning  # nudge to capture the reason
-    memory = load_user_memory()
-    assert memory.claims and memory.claims[0].confidence <= 0.3  # never a confident rule
-    assert all(claim.status != "active" for claim in memory.claims)
-
-
-def test_goal_memory_digest_keeps_reason_and_separates_standing_prefs(
-    monkeypatch, tmp_path
-) -> None:
-    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-
-    # A goal-scoped judgement that carries its reason ("because Y").
-    append_user_event(
-        UserMemoryEvent(
-            kind="judgement",
-            area="decision",
-            summary="Chose 'local file' for 'Pick storage' because the data is throwaway",
-            source="judgement",
-            goal_id="demo",
-            confidence=0.6,
-        )
-    )
-    # A standing preference the user explicitly stated.
-    append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="communication",
-            summary="Prefer concise explanations with direct tradeoffs.",
-            source="manual",
-            confidence=0.9,
-        )
-    )
-
-    digest = build_goal_memory_digest("demo")
-
-    assert "Goal-execution memory" in digest
-    # The judgement is reflected back WITH its reason, scoped to this goal.
-    assert "because the data is throwaway" in digest
-    assert "scoped to this goal" in digest
-    # The confirmed preference is surfaced separately as a standing rule.
-    assert "Prefer concise explanations" in digest
-    assert "Standing preferences I'll apply to future goals" in digest
-
-
-def test_goal_memory_digest_does_not_generalize_lone_judgements(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-
-    # Two judgements, no explicit preference: they must NOT become standing rules.
-    append_user_event(
-        UserMemoryEvent(
-            kind="judgement",
-            area="decision",
-            summary="Chose 'local file' for 'storage' because it is reversible",
-            source="judgement",
-            goal_id="demo",
-            confidence=0.6,
-        )
-    )
-
-    memory = load_user_memory()
-    assert all(claim.status != "active" for claim in memory.claims)
-
-    digest = build_goal_memory_digest("demo")
-    assert "Standing preferences I'll apply to future goals" not in digest
-    assert "won't turn the choices above into standing rules" in digest
-
-
-def test_goal_memory_digest_scopes_judgements_to_goal(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-
-    append_user_event(
-        UserMemoryEvent(
-            kind="judgement",
-            area="decision",
-            summary="Chose 'database' for 'Other goal' because of scale",
-            source="judgement",
-            goal_id="other",
-            confidence=0.6,
-        )
-    )
-
-    # No active claims and no judgements for THIS goal -> nothing to surface.
-    assert build_goal_memory_digest("demo") == ""
+    assert load_observations() == []
 
 
 def test_personalization_does_not_hide_high_risk_decision(tmp_path) -> None:
