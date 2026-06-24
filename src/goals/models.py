@@ -640,54 +640,81 @@ UserPreferenceArea = Literal[
 ]
 
 
-class UserMemoryEvent(BaseModel):
+class JudgementObservation(BaseModel):
+    """One situated decision observed while a goal ran — NOT a causal rule.
+
+    Records *what* was decided and the observable *context* it was decided in,
+    plus an optional note in the user's own words. Goals never infers *why* the
+    user chose something (people confabulate reasons; self-reported causes are
+    unreliable). A reason is stored only when the user actually states one, and
+    is then marked ``provenance="stated"``. Scoped to its ``goal_id``: a choice
+    made for one goal is an observation, never a standing rule for the next.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    event_id: str = Field(default_factory=lambda: f"UME-{uuid4().hex[:8]}")
-    kind: Literal[
-        "manual",
-        "interview",
-        "insights",
-        "judgement",
-        "interview_prompted",
-        "forget",
-    ]
-    area: UserPreferenceArea = "other"
-    summary: str = ""
-    source: Literal[
-        "manual",
-        "post_goal_interview",
-        "claude_insights",
-        "judgement",
-        "system",
-    ] = "manual"
     goal_id: str = ""
-    confidence: float = 0.5
-    target_claim_id: str = ""
-    details: list[str] = Field(default_factory=list)
-    created_at: str = Field(default_factory=utc_now)
+    area: UserPreferenceArea = "decision"
+    choice: str = ""
+    context: str = ""
+    note: str = ""
+    # "stated" only when the note is the user's own words. Agent-recorded
+    # rationale (e.g. a `--why` flag) stays "observed" — we never attribute a
+    # reason to the user that they did not actually say.
+    provenance: Literal["observed", "stated"] = "observed"
+    # Conditioning metadata: whether the choice was reversible and which phase it
+    # was made in. These let memory answer "how does this user decide about
+    # risky/irreversible things" instead of just "what string did they pick".
+    # ``None`` when not recorded (e.g. a hand-written or legacy line).
+    reversible: bool | None = None
+    phase_id: str = ""
+    # Date the decision was observed (YYYY-MM-DD). File order preserves
+    # intra-day ordering; the log is append-only.
+    created_at: str = Field(default_factory=lambda: utc_now()[:10])
 
 
-class UserPreferenceClaim(BaseModel):
+class Preference(BaseModel):
+    """A durable, user-owned preference that steers how Goals auto-executes.
+
+    These live in a plain-Markdown file the user can edit or delete by hand.
+    A preference exists only because the user stated or confirmed it — Goals
+    never promotes an observation to a preference silently.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    claim_id: str
-    area: UserPreferenceArea = "other"
-    statement: str
-    confidence: float = 0.0
-    evidence_event_ids: list[str] = Field(default_factory=list)
-    status: Literal["candidate", "active", "inactive", "forgotten"] = "candidate"
-    updated_at: str = Field(default_factory=utc_now)
+    area: UserPreferenceArea = "decision"
+    text: str
 
 
 class UserMemory(BaseModel):
+    """Aggregate view of the two human-editable memory files."""
+
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
-    claims: list[UserPreferenceClaim] = Field(default_factory=list)
-    prompted_goal_ids: list[str] = Field(default_factory=list)
-    interviewed_goal_ids: list[str] = Field(default_factory=list)
-    updated_at: str = Field(default_factory=utc_now)
+    preferences: list[Preference] = Field(default_factory=list)
+    observations: list[JudgementObservation] = Field(default_factory=list)
+
+
+class AutonomySignals(BaseModel):
+    """How the user's confirmed preferences should modulate the ask-vs-act gate.
+
+    Derived from `preferences.md`. These can only ever make Goals ask *more*
+    (tighten) or, within already-safe bounds, relax — they can NEVER hide a
+    high-risk or irreversible decision (that floor lives in
+    ``should_surface_decision`` and is preference-immune).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Tightening signals (always safe): surface even borderline decisions.
+    confirm_irreversible: bool = False
+    confirm_risky: bool = False
+    # Relaxing signal (informational; never lowers the safety floor): the user is
+    # comfortable letting the agent decide reversible / low-risk things itself.
+    autonomous_when_reversible: bool = False
+    # The preference texts that produced these signals, for a plain-language "why".
+    sources: list[str] = Field(default_factory=list)
 
 
 class PersonalizationContext(BaseModel):
@@ -697,6 +724,7 @@ class PersonalizationContext(BaseModel):
     claim_ids: list[str] = Field(default_factory=list)
     guidance: list[str] = Field(default_factory=list)
     confidence: float = 0.0
+    autonomy: AutonomySignals | None = None
 
 
 class SourceFreshnessFinding(BaseModel):

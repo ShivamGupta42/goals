@@ -5,8 +5,11 @@ This directory holds deeper design notes and long-lived project context.
 
 ## Guides
 
-- `subsystems.md` - behavior reference for the durable subsystems: the memory
-  loop, the decision rule, and the enforced stop gate.
+- `subsystems.md` - behavior reference for the durable subsystems: the
+  self-evolution memory loop, the decision rule, and the enforced stop gate.
+- `GOAL_EXECUTION_MEMORY.md` - the private, hand-editable goal-execution memory
+  (`~/.goals/user/`): situated observations vs. durable preferences, and how
+  preferences steer the ask-vs-act gate.
 - `skill-evolution/README.md` - when repeated workflow friction should become a
   skill update.
 - `DOGFOOD_FINDINGS.md` - observations from using Goals on itself.

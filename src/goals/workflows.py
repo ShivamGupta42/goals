@@ -22,6 +22,7 @@ from goals.models import (
     PortableExport,
 )
 from goals.runtime import claim_worktree, create_goal, load_active_snapshot
+from goals.user_memory import build_goal_memory_digest
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class WorkflowFinish:
     snapshot: GoalSnapshot
     check: WorkflowCheck
     export: PortableExport
+    memory_digest: str = ""
 
     @property
     def passed(self) -> bool:
@@ -166,7 +168,11 @@ def finish_workflow(cwd: Path) -> WorkflowFinish:
     check = check_workflow(cwd, refresh=True)
     export = export_goal(cwd)
     snapshot = load_active_snapshot(cwd)
-    return WorkflowFinish(snapshot=snapshot, check=check, export=export)
+    try:
+        digest = build_goal_memory_digest(snapshot.goal_id)
+    except GoalsError:
+        digest = ""
+    return WorkflowFinish(snapshot=snapshot, check=check, export=export, memory_digest=digest)
 
 
 def render_start_workflow(report: WorkflowStart) -> str:
@@ -400,6 +406,12 @@ def render_finish_workflow(report: WorkflowFinish) -> str:
             f"- Issues: {report.check.issues.summary}",
             f"- Merge: {report.check.merge.summary}",
             f"- Architecture: {report.check.architecture.summary}",
+        ]
+    )
+    if report.memory_digest:
+        lines.extend(["", "## Goal Execution Memory", report.memory_digest.rstrip()])
+    lines.extend(
+        [
             "",
             "Next:",
             "- Commit the refreshed `.goals` portable state with the implementation.",

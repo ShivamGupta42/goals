@@ -12,8 +12,7 @@ from goals.portability import (
     _replace_block,
 )
 from goals.runtime import create_goal, default_phases, transition_phase
-from goals.models import UserMemoryEvent
-from goals.user_memory import append_user_event
+from goals.user_memory import add_preference
 
 
 def snapshot_for(tmp_path: Path) -> GoalSnapshot:
@@ -47,15 +46,7 @@ def test_build_portable_state_is_sanitized(tmp_path: Path) -> None:
 
 def test_portable_state_excludes_user_memory(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-    append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="communication",
-            summary="Prefer unusually specific private wording.",
-            source="manual",
-            confidence=0.95,
-        )
-    )
+    add_preference("communication", "Prefer unusually specific private wording.")
 
     state = build_portable_state(snapshot_for(tmp_path))
     rendered = render_goal_markdown(snapshot_for(tmp_path))

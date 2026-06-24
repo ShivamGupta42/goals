@@ -184,6 +184,44 @@ Most people only need these:
 | `goals loop import <source>` | Import a loop/catalog from a URL, file, directory, or builder script |
 | `goals loop build/check/activate/improve` | Design, validate, start from, and improve the workflow itself |
 
+## It learns how you like goals executed
+
+Goals keeps a tiny, private, **hand-editable** memory of how you like goals run — two
+plain-Markdown files under `~/.goals/user/`, yours to read and edit, that never leave
+your machine:
+
+- **`observations.md`** — an append-only log of the decisions Goals sees you make as a
+  goal runs: *what* you chose and the *context*. It **never invents a "because"**; any
+  reason it stores is kept verbatim, and labelled as your own words (`you said:`) only
+  when you actually said it.
+- **`preferences.md`** — the durable preferences that steer how Goals auto-executes.
+  You own this file; Goals only adds to it when you state or confirm a preference, and
+  never rewrites your edits.
+
+The split is deliberate: a choice made for one goal is an *observation*, scoped to that
+goal — it only becomes a standing preference when **you** confirm it. So Goals gets
+better at auto-execution over time without silently turning a one-off into a rule.
+
+Confirmed preferences don't just advise the agent — they **change when Goals asks vs acts**.
+Tell it *"ask before anything irreversible"* and it will stop to confirm a decision it would
+otherwise have handled silently; tell it *"decide reversible changes yourself"* and it won't
+interrupt you for safe ones. A safety floor stays fixed: genuinely risky or irreversible
+decisions are always surfaced — a preference can make Goals ask *more*, never less.
+
+At the **end of every goal**, Goals reflects back what it noticed, flags any choice that
+has recurred across goals ("promote to a standing preference?"), and shows the
+preferences currently in effect.
+
+```bash
+goals user digest                 # what Goals noticed this goal + what it'll apply next
+goals user record "Keep explanations concise" --area communication
+goals user show                   # everything; or just open ~/.goals/user/*.md and edit
+```
+
+Full design — the situated-observation model, why no fabricated "because," the
+human/agent file split, deliberate tradeoffs, and how an older JSON store is migrated —
+is in [**docs/GOAL_EXECUTION_MEMORY.md**](docs/GOAL_EXECUTION_MEMORY.md).
+
 ## Keep long runs safe
 
 A long agent loop can run away — retrying a failing step forever, or quietly

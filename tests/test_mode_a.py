@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from goals.mode_a import build_mode_a_plan
-from goals.models import GoalSnapshot, UserMemoryEvent, WorktreeLease
+from goals.models import GoalSnapshot, WorktreeLease
 from goals.runtime import default_phases
-from goals.user_memory import append_user_event
+from goals.user_memory import add_preference
 
 
 def snapshot_for(tmp_path: Path) -> GoalSnapshot:
@@ -27,15 +27,7 @@ def snapshot_for(tmp_path: Path) -> GoalSnapshot:
 
 def test_build_mode_a_plan_selects_ready_claude(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
-    append_user_event(
-        UserMemoryEvent(
-            kind="manual",
-            area="communication",
-            summary="Prefer concise explanations.",
-            source="manual",
-            confidence=0.9,
-        )
-    )
+    add_preference("communication", "Prefer concise explanations.")
 
     def fake_adapter_check(name: str) -> tuple[bool, str]:
         return name == "claude", f"{name} detail"

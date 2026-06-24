@@ -6,7 +6,11 @@ from pathlib import Path
 from goals.models import Evidence, Event, EventType, GateResult, GoalSnapshot, GoalStatus
 from goals.runtime import append_event, load_active_snapshot, run_gate, transition_phase, verify_phase
 from goals.storage import GoalsError
-from goals.user_memory import mark_interview_prompted, render_post_goal_interview
+from goals.user_memory import (
+    build_goal_memory_digest,
+    mark_interview_prompted,
+    render_post_goal_interview,
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,7 @@ class PhaseAcceptReport:
     interview: str = ""
     warning: str = ""
     completion_note: str = ""
+    memory_digest: str = ""
 
 
 COMPLETION_CRITIQUE_NUDGE = (
@@ -66,9 +71,13 @@ def accept_phase(cwd: Path, phase_id: str) -> PhaseAcceptReport:
     if snapshot.status != GoalStatus.COMPLETE:
         return PhaseAcceptReport(snapshot=snapshot)
     try:
+        digest = build_goal_memory_digest(snapshot.goal_id)
         interview = render_post_goal_interview(snapshot.goal_id) if mark_interview_prompted(snapshot.goal_id) else ""
         return PhaseAcceptReport(
-            snapshot=snapshot, interview=interview, completion_note=COMPLETION_CRITIQUE_NUDGE
+            snapshot=snapshot,
+            interview=interview,
+            completion_note=COMPLETION_CRITIQUE_NUDGE,
+            memory_digest=digest,
         )
     except GoalsError as exc:
         return PhaseAcceptReport(

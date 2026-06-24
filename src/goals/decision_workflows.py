@@ -17,11 +17,10 @@ from goals.models import (
     EventType,
     JudgementRecord,
     PersonalizationContext,
-    UserMemoryEvent,
 )
 from goals.runtime import append_event, load_active_snapshot
 from goals.storage import GoalsError
-from goals.user_memory import append_user_event
+from goals.user_memory import infer_area, record_observation
 
 
 @dataclass(frozen=True)
@@ -92,21 +91,27 @@ def decision_brief_workflow(
 
 
 def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
+    """Log the user's decision as a situated observation — context, not cause.
+
+    We store *what* was decided and the observable context (the question). We do
+    NOT infer or fabricate a reason; the ``--why`` note is recorded only when the
+    user actually supplies one, in their own words. The observation is scoped to
+    this goal and never becomes a standing preference on its own.
+    """
     if record.decided_by != "user":
         return ""
-    summary = f"For '{record.question}', the user chose '{record.choice}'."
-    if record.rationale:
-        summary += f" Rationale: {record.rationale}"
     try:
-        append_user_event(
-            UserMemoryEvent(
-                kind="judgement",
-                area="decision",
-                summary=summary,
-                source="judgement",
-                goal_id=goal_id,
-                confidence=record.confidence or 0.5,
-            )
+        record_observation(
+            goal_id=goal_id,
+            # Infer the area from the question instead of a meaningless constant,
+            # and carry reversibility/phase so memory can learn how this user
+            # decides about risky/irreversible things (not just what they picked).
+            area=infer_area(record.question),
+            choice=record.choice,
+            context=record.question,
+            note=record.rationale,
+            reversible=record.reversible,
+            phase_id=record.phase_id or "",
         )
     except GoalsError as exc:
         return f"User memory warning: {exc}"

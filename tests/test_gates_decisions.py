@@ -4,9 +4,11 @@ from goals.decisions import (
     explain_decision,
     render_decision_brief,
     render_decision_explanation,
+    should_surface_decision,
 )
 from goals.gates import review_phase
 from goals.models import (
+    AutonomySignals,
     CheckpointStatus,
     DecisionOption,
     Evidence,
@@ -21,6 +23,60 @@ from goals.models import (
     Verification,
     WorktreeLease,
 )
+
+
+def _decision(*, risk: str, reversible: bool):
+    """A non-blocking decision the default gate would leave with the agent."""
+    return explain_decision(
+        title="Pick an approach",
+        plain_summary="Choose how to do it.",
+        why_it_matters="Affects the build.",
+        recommendation="Option A",
+        options=[
+            DecisionOption(label="Option A", explanation="…", reversible=reversible, risk=risk),
+        ],
+        confidence=0.8,
+    )
+
+
+def test_gate_default_unchanged_without_preferences() -> None:
+    # A low-risk, NOT-reversible decision stays with the agent by default.
+    surfaced, _ = should_surface_decision(_decision(risk="low", reversible=False))
+    assert surfaced is False
+
+
+def test_preference_tightens_gate_for_irreversible() -> None:
+    # The same low-risk irreversible decision is surfaced when the user has asked
+    # to confirm anything they can't undo.
+    autonomy = AutonomySignals(confirm_irreversible=True)
+    surfaced, reason = should_surface_decision(
+        _decision(risk="low", reversible=False), autonomy
+    )
+    assert surfaced is True
+    assert "can't undo" in reason
+
+
+def test_preference_tightens_gate_for_risky() -> None:
+    autonomy = AutonomySignals(confirm_risky=True)
+    surfaced, reason = should_surface_decision(_decision(risk="medium", reversible=True), autonomy)
+    assert surfaced is True
+    assert "risky" in reason
+
+
+def test_preferences_cannot_lower_the_safety_floor() -> None:
+    # Even with a maximally "be autonomous" preference, a high-risk option is
+    # ALWAYS surfaced — preferences can never hide the floor.
+    autonomy = AutonomySignals(autonomous_when_reversible=True)
+    surfaced, reason = should_surface_decision(_decision(risk="high", reversible=True), autonomy)
+    assert surfaced is True
+    assert "high risk" in reason
+
+
+def test_relax_preference_does_not_suppress_a_floor_decision() -> None:
+    # An irreversible+medium decision is on the floor; a relax signal can't drop it.
+    autonomy = AutonomySignals(autonomous_when_reversible=True)
+    surfaced, _ = should_surface_decision(_decision(risk="medium", reversible=False), autonomy)
+    assert surfaced is True
 
 
 def _verified() -> Evidence:
