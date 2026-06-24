@@ -505,10 +505,17 @@ def _insert_preference_line(lines: list[str], preference: Preference) -> None:
     bullet = f"- {preference.text}"
     for index, raw in enumerate(lines):
         if raw.strip().lower() == heading.lower():
+            # Insert right after the section's last non-blank line, not after the
+            # blank that separates it from the next heading. Otherwise the new
+            # bullet lands below a stray blank and abuts the next `## heading`,
+            # producing messy Markdown in a file the user reads and edits.
             insert_at = index + 1
+            last_content = insert_at
             while insert_at < len(lines) and not re.match(r"^##\s+", lines[insert_at].strip()):
+                if lines[insert_at].strip():
+                    last_content = insert_at + 1
                 insert_at += 1
-            lines.insert(insert_at, bullet)
+            lines.insert(last_content, bullet)
             return
     if lines and lines[-1].strip():
         lines.append("")

@@ -49,6 +49,27 @@ def test_add_preference_is_idempotent(monkeypatch, tmp_path) -> None:
     assert len(load_preferences()) == 1
 
 
+def test_adding_to_an_existing_section_keeps_markdown_well_formed(monkeypatch, tmp_path) -> None:
+    # Regression: a preference added to an earlier section must land right after
+    # that section's last bullet, not below its trailing blank where it would
+    # abut the next `## heading`.
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
+    add_preference("workflow", "first workflow rule")
+    add_preference("risk", "a risk rule")  # creates a later section
+    add_preference("workflow", "second workflow rule")  # insert into earlier section
+
+    lines = preferences_path().read_text(encoding="utf-8").splitlines()
+    wf = lines.index("## workflow")
+    # Both workflow bullets are contiguous — no stray blank between them.
+    assert lines[wf + 1] == "- first workflow rule"
+    assert lines[wf + 2] == "- second workflow rule"
+    # Every heading is preceded by a blank (or header), never glued to a bullet.
+    for i, line in enumerate(lines):
+        if line.startswith("## ") and i > 0:
+            prev = lines[i - 1]
+            assert prev.strip() == "" or prev.startswith("#") or prev.startswith("<!--")
+
+
 def test_hand_edited_preferences_are_read(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GOALS_HOME", str(tmp_path / "home"))
     path = preferences_path()
