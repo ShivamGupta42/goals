@@ -17,7 +17,8 @@ cheaper to fix a misunderstanding now than after it's built.
    their goal back in plain English, then lay out the approach with **honest
    pros/cons a non-technical person can weigh** (including doing nothing).
 3. Capture it durably as you go: desired properties via `goals assess assume`
-   (`--depends`), the rephrased problem and open unknowns via
+   (plain — not `--depends` at phase one; a "feel" property can't be falsified
+   until it's built), the rephrased problem and open unknowns via
    `goals assess breakdown`, the approach via `goals decision record`, and the
    alignment question as an `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).

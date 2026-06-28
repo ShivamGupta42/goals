@@ -22,7 +22,7 @@ user before building — ships today as the `goals-discovery` skill and the
 `/goals:discover` command, wired into `/goals:create` ahead of Assess. It drives
 the dialogue (start from pain and the desired *feel*, name the unknowns, weigh the
 approach in plain pros/cons) and records its output through existing durable
-surfaces: desired properties as load-bearing `goals assess assume` entries, the
+surfaces: desired properties as plain `goals assess assume` entries, the
 rephrased problem and open unknowns via `goals assess breakdown`, the approach via
 `goals decision record`, and the alignment gate as an `understanding`
 `goals checkpoint`. A plain-file `DISCOVERY.md` captures the full picture.

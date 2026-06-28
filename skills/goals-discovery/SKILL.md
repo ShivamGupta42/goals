@@ -43,17 +43,22 @@ Turn the pain into the properties of a good outcome. Ask how they'll know it
 worked, what "good" feels like, what would make them *not* trust or use it. You're
 collecting things like *"fast enough that I never wait,"* *"I can hand it to my
 mum,"* *"I trust the number without checking it,"* — not screens and buttons.
-Record each as a load-bearing property the solution must have, in their words
-where you can:
+Record each as a property the solution must have, in their words where you can:
 
 ```bash
 goals assess assume "The result has to feel <property> — <what that means here>" \
   --building "the thing we're making" --toward "the user's real outcome" \
-  --depends --status holding
+  --status holding
 ```
 
-These are the success properties the build will later have to *prove*, so write
-them at a high-school reading level — no jargon.
+Write them at a high-school reading level — no jargon. These are the success
+targets the build should later honour. Record them as **plain** assumptions here —
+do **not** add `--depends` at phase one. A `--depends` (load-bearing) assumption
+attaches to the current phase (Confirm) and makes the gate demand a runnable check
+that would *fail if it's wrong* before that phase can pass — but a "feel" property
+like *"instant to log"* can't be tested until there's something built. Capture the
+property now; the place to prove it is the phase that builds it. (Enforcing that
+link automatically is the "first-class durable discovery" item on the roadmap.)
 
 **3. Name what you do NOT understand — out loud.**
 This is the heart of Discovery. Instead of quietly assuming, list the gaps: the
@@ -71,8 +76,11 @@ goals assess breakdown --problem "<the user's goal, rephrased plainly>" \
 `goals assess breakdown --file breakdown.json`; see `goals-problem-solving`.)
 
 Prefer one honest "I don't know X yet" over ten confident assumptions. If you
-*must* lean on an assumption to move, mark it as load-bearing (`--depends`) so it
-stays visible and can be revisited.
+*must* lean on an assumption to move, record it with `goals assess assume` so it
+stays visible and can be revisited. Mark it `--depends` only once you can write a
+check that fails if it's wrong, and `--phase` it to the phase that runs that check
+— the gate holds you to proving a load-bearing assumption *in its phase*, so an
+untestable one tagged `--depends` here just blocks Confirm.
 
 **4. Reflect their goal back in plain English.**
 Before proposing anything, say what you now believe they're really trying to do
