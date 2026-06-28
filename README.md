@@ -20,6 +20,11 @@ in plain files you own.
 
 ## What Goals does
 
+- **Understands before it builds.** Phase one isn't coding — it's getting your
+  goal right. It starts from what's *painful today* and how the finished thing
+  should *feel*, not a feature list; says plainly what it doesn't yet understand
+  instead of guessing; lays out the approach with pros and cons in plain English;
+  and waits for your "yes, that's it" before any building starts.
 - **Thinks before it builds.** It breaks your goal into smaller problems, writes
   down the assumptions it's relying on, weighs a few options (including doing
   nothing), and tries to break its own work to catch mistakes — and you can read
@@ -49,6 +54,10 @@ Anyone using AI to get real work done:
 
 ```
    you say the goal
+         │
+         ▼
+   Goals draws out the real want  ──▶  pain + how it should feel, what's unclear,
+   (and waits for your "yes")              the approach in plain pros & cons
          │
          ▼
    Goals breaks it into clear steps  ──▶   the AI agent does the next step
@@ -126,6 +135,7 @@ That's it. Now just talk to it in Claude Code:
 | You type | What happens |
 | --- | --- |
 | `/goals:create "build me a weight-loss tracking app"` | Goals turns it into a tracked plan and starts step 1 |
+| `/goals:discover` | Phase one: draw out what you really want — your pain, the desired feel, what's unclear — and confirm it before building |
 | `/goals:import https://signals.forwardfuture.ai/loop-library/` | Import an external loop/catalog, ask for missing details, and validate it for Claude |
 | `/goals:next` | Do the next step; Goals saves the proof and checks it off |
 | `/goals:check` | See where things stand and what (if anything) needs *you* |

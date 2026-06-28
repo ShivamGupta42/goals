@@ -15,6 +15,42 @@ For the Trust V1 dogfood follow-up plan, including the 48-issue improvement
 inventory and the proposed capability-gap architecture, see
 [`docs/TRUST_V1_LONG_TERM_IMPROVEMENT_PLAN.md`](docs/TRUST_V1_LONG_TERM_IMPROVEMENT_PLAN.md).
 
+## Discovery as first-class durable state
+
+**Status:** Partially implemented (prompt layer). Phase one — understanding the
+user before building — ships today as the `goals-discovery` skill and the
+`/goals:discover` command, wired into `/goals:create` ahead of Assess. It drives
+the dialogue (start from pain and the desired *feel*, name the unknowns, weigh the
+approach in plain pros/cons) and records its output through existing durable
+surfaces: desired properties as load-bearing `goals assess assume` entries, the
+rephrased problem and open unknowns via `goals assess breakdown`, the approach via
+`goals decision record`, and the alignment gate as an `understanding`
+`goals checkpoint`. A plain-file `DISCOVERY.md` captures the full picture.
+
+The next step is to make pain points and desired outcome-properties **first-class
+durable state** rather than borrowing the assumption/breakdown models — so they
+get their own schema, events, and a dedicated dashboard view, and the build can
+later prove each desired property the way it proves acceptance criteria.
+
+### Direction
+
+- Typed `PainPoint` and `DesiredProperty` records (plain-English, audience-framed)
+  with their own event types and storage.
+- A `goals discover` CLI surface to record/show them, and a dashboard "What you
+  want / What hurts today" view.
+- Link each desired property to the acceptance criteria that later prove it, so
+  "done" is measured against the *feel* the user asked for, not just features.
+- Promote recurring desired-property patterns into goal-execution memory.
+
+### Open Questions
+
+- Should desired properties become acceptance criteria automatically, or only
+  when the user confirms the mapping?
+- How is the alignment checkpoint reconciled if the user's understanding shifts
+  mid-goal — re-open phase one, or branch a new framing?
+- How much of Discovery should be required vs. skippable for technical users who
+  already know exactly what they want?
+
 ## Capability gap management
 
 **Status:** Implemented (read-only vertical slice). `goals capability check`
