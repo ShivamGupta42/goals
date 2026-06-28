@@ -10,10 +10,13 @@ from goals.models import (
     Evidence,
     GoalArchitectureMap,
     GoalSnapshot,
+    JudgementObservation,
     JudgementRecord,
     Phase,
     PhaseCheckpoint,
     PhaseStatus,
+    Preference,
+    UserMemory,
     WorktreeLease,
 )
 from goals.registry import validate_registry_file
@@ -69,10 +72,13 @@ def test_dashboard_escapes_html_and_shows_overview(tmp_path: Path) -> None:
     assert "Source commit:" in text
     assert "P1 has no evidence yet." in text
 
-    # Empty sections are hidden, not shown as "none yet" collapsibles.
+    # Empty sections are hidden, not shown as "none yet" collapsibles. (The word
+    # "Decisions" still appears in the always-on "how to read" primer, so target
+    # the section's own markup rather than the bare word.)
     assert "Architecture map" not in text  # no recorded map → hidden
-    assert "Decisions" not in text  # no judgements → hidden
-    assert "Sources" not in text  # no sources → hidden
+    assert 'class="dtimeline"' not in text  # no judgements → decision timeline hidden
+    assert 'class="decisions"' not in text
+    assert "<summary>Sources" not in text  # no sources → hidden
     assert "No decisions recorded yet." not in text
 
     # Skills and self-evolution memory are no longer part of the overview.
@@ -158,6 +164,124 @@ def test_dashboard_shows_decision_log_not_solicitation(tmp_path: Path) -> None:
     assert "Decision Brief" not in text
     assert "Recommended option" not in text
     assert "Suggested reply" not in text
+
+
+def test_dashboard_shows_journey_strip_and_how_to_read_primer(tmp_path: Path) -> None:
+    # The page orients and teaches: a horizontal lifecycle strip marks where the
+    # goal is, and an always-on plain-language primer explains the vocabulary.
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship the thing",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P2",
+        status="active",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    # Journey strip with the in-flight stage lit.
+    assert 'class="loopstrip"' in text
+    assert "lstage doing current" in text  # P2 is the active phase
+
+    # The educational primer is present and open by default.
+    assert "How to read this page" in text
+    assert 'class="primer" open' in text
+    assert "judgement calls made while building" in text
+
+
+def test_dashboard_decision_timeline_separates_agent_and_human(tmp_path: Path) -> None:
+    # The decision log is a visual timeline that tells AI-made and human-made
+    # calls apart — by label and icon, not colour alone — and counts each side.
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add sessions",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+        judgements=[
+            JudgementRecord(question="Where should sessions live?", choice="Redis",
+                            decided_by="user", reversible=True),
+            JudgementRecord(question="Token expiry?", choice="15m + refresh",
+                            decided_by="agent", reversible=True),
+            JudgementRecord(question="Drop legacy table?", choice="Stage it",
+                            decided_by="user", reversible=False),
+        ],
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    # Timeline scaffolding with a per-decider tally derived from decided_by.
+    assert 'class="dtimeline"' in text
+    assert "Agent decided 1" in text
+    assert "You decided 2" in text
+
+    # Each call carries a text decider label (a11y: never colour-only) and the
+    # decided_by token survives as the node class.
+    assert "dnode user" in text
+    assert "dnode agent" in text
+
+    # Reversibility is a visible, text-bearing pill, not just a colour.
+    assert "locked in" in text  # the irreversible call
+    assert "reversible" in text
+
+
+def test_dashboard_renders_user_memory_hierarchy(tmp_path: Path) -> None:
+    # User memory renders as a two-tier hierarchy: situated observations roll up
+    # into standing preferences, with an explicit promotion link between them.
+    memory = UserMemory(
+        preferences=[
+            Preference(area="risk", text="Ask before anything <irreversible>"),
+            Preference(area="workflow", text="Run tests before every commit"),
+        ],
+        observations=[
+            JudgementObservation(goal_id="add-auth", area="technical",
+                                 choice="Redis for sessions", context="multi-node deploy"),
+        ],
+    )
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add sessions",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output, user_memory=memory)
+    text = output.read_text()
+
+    assert "What Goals remembers about you" in text
+    assert "Observed · situated choices" in text
+    assert "Standing · durable preferences" in text
+    assert "promoted when you confirm" in text  # the link between the tiers
+    assert "Run tests before every commit" in text
+    assert "Redis for sessions" in text
+    assert "add-auth" in text  # observation is scoped to its goal
+
+    # Memory content is escaped like everything else on the page.
+    assert "<irreversible>" not in text
+    assert "&lt;irreversible&gt;" in text
+
+
+def test_dashboard_hides_user_memory_when_absent_or_empty(tmp_path: Path) -> None:
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Add sessions",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P1",
+    )
+    output = tmp_path / "dashboard.html"
+
+    # No memory supplied → the panel is hidden entirely.
+    render_dashboard(snapshot, output)
+    assert "What Goals remembers about you" not in output.read_text()
+
+    # An empty memory store is also hidden (no "none yet" noise).
+    render_dashboard(snapshot, output, user_memory=UserMemory())
+    assert "What Goals remembers about you" not in output.read_text()
 
 
 def test_dashboard_humanizes_status_and_timestamp(tmp_path: Path) -> None:

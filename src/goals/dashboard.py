@@ -18,7 +18,7 @@ from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
 from goals.journey import sort_assumptions
-from goals.models import Event, GoalArchitectureMap, GoalSnapshot
+from goals.models import Event, GoalArchitectureMap, GoalSnapshot, UserMemory
 from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
 
@@ -62,6 +62,7 @@ def render_dashboard(
     architecture_path: Path | None = None,
     events: list[Event] | None = None,
     health=None,
+    user_memory: UserMemory | None = None,
 ) -> None:
     """Render the read-only goal dashboard.
 
@@ -96,11 +97,14 @@ def render_dashboard(
     )
 
     full_goal = _full_goal_html(snapshot.objective)
+    lifecycle_strip = _lifecycle_strip_html(snapshot)
+    how_to_read = _how_to_read_html(snapshot)
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
     journey_section = _journey_html(snapshot)
-    decisions_teaser = _decisions_teaser_html(snapshot)
+    decisions_section = _decisions_section_html(snapshot)
+    memory_section = _memory_section_html(user_memory)
     issues_section = _issues_section_html(issue_report)
     capability_section = _capability_section_html(capability_report)
     evidence = _evidence_detail_html(snapshot, checkpoint)
@@ -225,12 +229,94 @@ def render_dashboard(
     .asm .toward {{ color:var(--soft); font-size:.85rem; display:block; margin-top:.2rem; }}
     .oq {{ margin:.2rem 0 1rem 1.1rem; color:var(--soft); font-size:.9rem; }}
     footer {{ margin-top:2.8rem; color:var(--soft); font-size:.8rem; letter-spacing:.03em; }}
+    /* Decision timeline — who decided what, and is it still cheap to revisit. */
+    .decisions {{ margin:.5rem 0 .4rem; }}
+    .dlegend {{ display:flex; flex-wrap:wrap; gap:.35rem 1.1rem; font-size:.78rem; color:var(--soft); margin:.1rem 0 1rem; }}
+    .dlegend .ic {{ font-size:.95em; vertical-align:-.02em; }}
+    .dl.agent .ic {{ color:var(--sage); }} .dl.user .ic {{ color:var(--clay); }}
+    .dtimeline {{ list-style:none; margin:0; padding:0 0 0 1.7rem; position:relative; }}
+    .dtimeline::before {{ content:""; position:absolute; left:7px; top:.55rem; bottom:.55rem; width:2px; background:var(--line); border-radius:2px; }}
+    .dnode {{ position:relative; margin:0 0 .65rem; }}
+    .dnode .dmark {{ position:absolute; left:-1.7rem; top:.5rem; width:1.05rem; height:1.05rem; line-height:1.02rem; text-align:center;
+      font-size:.78rem; background:var(--paper); border-radius:50%; }}
+    .dnode.agent .dmark {{ color:var(--sage); }} .dnode.user .dmark {{ color:var(--clay); }}
+    .dcard {{ border:1px solid var(--line); border-left-width:3px; border-radius:10px; background:var(--card); padding:.55rem .85rem; }}
+    .dnode.agent .dcard {{ border-left-color:var(--sage); }} .dnode.user .dcard {{ border-left-color:var(--clay); }}
+    .dcard .dq {{ font-weight:700; display:block; }}
+    .dcard .dchoice {{ display:block; font-size:.93rem; margin:.12rem 0; }}
+    .dcard .dchoice::before {{ content:"\\2192 "; color:var(--soft); }}
+    .dmeta {{ display:flex; flex-wrap:wrap; gap:.45rem; align-items:center; font-size:.74rem; color:var(--soft); margin-top:.2rem; }}
+    .dmeta .who {{ font-weight:700; text-transform:uppercase; letter-spacing:.04em; }}
+    .dnode.agent .who {{ color:var(--sage); }} .dnode.user .who {{ color:var(--clay); }}
+    .rev-pill {{ border-radius:999px; padding:.04rem .5rem; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }}
+    .rev-pill.rev {{ background:var(--chip); color:var(--soft); }}
+    .rev-pill.irr {{ background:#fbeae4; color:var(--clay); }}
+    .drat {{ display:block; color:var(--soft); font-size:.85rem; margin-top:.3rem; }}
+    .dmore {{ color:var(--soft); font-size:.82rem; margin:.3rem 0 0; }}
+    /* User memory — situated observations rolling up into durable preferences. */
+    .memory {{ margin:1.6rem 0 .4rem; }}
+    .mtiers {{ display:grid; gap:.2rem; margin-top:.7rem; }}
+    .mtier {{ border:1px solid var(--line); border-radius:12px; background:var(--card); padding:.75rem .95rem; }}
+    .mtier.observed {{ border-top:3px solid var(--gold); }}
+    .mtier.standing {{ border-top:3px solid var(--sage); }}
+    .mtier-label {{ font-size:.68rem; letter-spacing:.09em; text-transform:uppercase; color:var(--soft); font-weight:700; display:block; margin-bottom:.55rem; }}
+    .mlist {{ list-style:none; margin:0; padding:0; display:grid; gap:.45rem; }}
+    .mobs {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.4rem; font-size:.9rem; }}
+    .marea-tag {{ font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--gold); background:var(--chip); border-radius:5px; padding:.06rem .42rem; }}
+    .mobs .mtext {{ color:var(--ink); }} .mobs .mctx {{ color:var(--soft); }}
+    .mobs .mgoal {{ margin-left:auto; font-size:.68rem; color:var(--soft); font-family:ui-monospace,Menlo,monospace; }}
+    .marrow {{ display:flex; align-items:center; gap:.6rem; justify-content:center; color:var(--soft); font-size:.74rem; padding:.15rem 0; }}
+    .marrow::before, .marrow::after {{ content:""; height:1px; background:var(--line); flex:1; max-width:5rem; }}
+    .mareas {{ display:grid; gap:.55rem; }}
+    .marea {{ display:grid; grid-template-columns:7rem 1fr; gap:.6rem; align-items:start; }}
+    .marea-name {{ font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--sage); padding-top:.25rem; }}
+    .mchips {{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:.35rem; }}
+    .pchip {{ background:var(--chip); border-radius:999px; padding:.18rem .65rem; font-size:.84rem; }}
+    /* Journey strip — the goal's lifecycle as a horizontal stepper, current stage lit. */
+    .loopstrip {{ list-style:none; display:flex; gap:0; margin:.2rem 0 1.9rem; padding:0; overflow-x:auto; scrollbar-width:none; }}
+    .loopstrip::-webkit-scrollbar {{ display:none; }}
+    .lstage {{ flex:1 1 0; min-width:62px; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center; padding:0 .25rem; }}
+    .lstage::before {{ content:""; position:absolute; top:11px; left:-50%; width:100%; height:2px; background:var(--line); z-index:0; }}
+    .lstage:first-child::before {{ display:none; }}
+    .lstage .ldot {{ position:relative; z-index:1; width:24px; height:24px; line-height:21px; text-align:center; border-radius:50%;
+      background:var(--paper); border:2px solid var(--line); font-size:.72rem; font-weight:800; color:var(--soft); }}
+    .lstage .lname {{ font-size:.69rem; line-height:1.25; margin-top:.42rem; color:var(--soft);
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+    .lstage.done .ldot {{ border-color:var(--sage); color:var(--sage); }}
+    .lstage.done::before {{ background:var(--sage); }}
+    .lstage.doing .ldot, .lstage.current .ldot {{ border-color:var(--clay); color:var(--clay); box-shadow:0 0 0 4px rgba(176,106,79,.13); }}
+    .lstage.doing .lname, .lstage.current .lname {{ color:var(--ink); font-weight:700; }}
+    .lstage.blocked .ldot {{ border-color:#b42318; color:#b42318; }}
+    .lstage.blocked .lname {{ color:#b42318; }}
+    /* "How to read this page" — a plain-language primer on the page's vocabulary. */
+    .primer {{ border:1px solid var(--line); border-radius:12px; background:var(--card); margin:0 0 1.1rem; }}
+    .primer summary {{ font-size:.92rem; font-weight:700; color:var(--clay); padding:.85rem 1.1rem; cursor:pointer;
+      list-style:none; display:flex; align-items:center; gap:.55rem; }}
+    .primer summary::-webkit-details-marker {{ display:none; }}
+    .primer summary::before {{ content:"?"; display:inline-flex; align-items:center; justify-content:center;
+      width:1.25rem; height:1.25rem; border-radius:50%; background:var(--clay); color:var(--paper); font-size:.78rem; font-weight:800; flex:none; }}
+    .primer summary::after {{ content:"+"; margin-left:auto; color:var(--clay); font-weight:700; }}
+    .primer[open] summary::after {{ content:"\\2013"; }}
+    .primer-body {{ padding:0 1.2rem 1.05rem; font-size:.93rem; }}
+    .primer-body > p {{ color:var(--soft); margin:.1rem 0 .7rem; }}
+    .primer-list {{ margin:0; padding-left:1.15rem; display:grid; gap:.55rem; }}
+    .primer-list li {{ color:var(--ink); line-height:1.5; }}
+    .primer-list b {{ color:var(--ink); }}
+    .ic-agent {{ color:var(--sage); font-weight:800; }} .ic-you {{ color:var(--clay); font-weight:800; }}
+    /* Self-explaining one-line caption under a section heading. */
+    .secap {{ margin:-.1rem 0 .7rem; font-size:.86rem; color:var(--soft); max-width:60ch; }}
+    /* Who-decided split: a slim at-a-glance proportion bar. */
+    .dsplit {{ display:flex; height:7px; border-radius:7px; overflow:hidden; margin:.1rem 0 1rem; background:var(--line); }}
+    .dsplit i {{ display:block; height:100%; }}
+    .dsplit i.agent {{ background:var(--sage); }} .dsplit i.user {{ background:var(--clay); }}
     @media (max-width:600px) {{
       body {{ font-size:16px; }}
       .wrap {{ padding:2rem 1.1rem 4rem; }}
       .facts {{ gap:.6rem 1.1rem; }}
       .steps li {{ grid-template-columns:auto 1fr; }}
       .steps .st {{ grid-column:2; }}
+      .marea {{ grid-template-columns:1fr; gap:.2rem; }}
+      .mobs .mgoal {{ margin-left:0; }}
     }}
   </style>
 </head>
@@ -245,6 +331,7 @@ def render_dashboard(
 
     <div class="meter"><span class="big">{accepted} of {total}</span><span class="small">steps accepted · {escape(brief.progress)}</span></div>
     <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
+    {lifecycle_strip}
     <p class="facts">
       <span class="fact"><span class="k">Waiting on</span> <span class="v">{escape(_waiting_label(brief.waiting_on))}</span></span>
       {now_on}
@@ -254,13 +341,16 @@ def render_dashboard(
 
     <main id="main" tabindex="-1">
     {status_banner}
+    {how_to_read}
     {produced}
 
     <h2 class="sec">What happened</h2>
     <h3 class="subsec">The steps</h3>
+    <p class="secap">The goal broken into stages. Each one must show proof it works before it counts as done.</p>
     <ul class="steps">{steps}</ul>
     {journey_section}
-    {decisions_teaser}
+    {decisions_section}
+    {memory_section}
 
     <h2 class="sec">Checks &amp; references</h2>
     {issues_section}
@@ -334,6 +424,58 @@ def _full_goal_html(objective: str) -> str:
     return (
         '<details class="full-goal"><summary>Read the full goal</summary>'
         f"<p>{escape(objective)}</p></details>"
+    )
+
+
+def _lifecycle_strip_html(snapshot: GoalSnapshot) -> str:
+    """The goal's lifecycle as a compact horizontal stepper — the "map".
+
+    Each phase is a node on a connecting line, with the connector into a finished
+    stage filled. The stage in flight is lit, so a reader sees *where the goal is
+    in its journey* before reading the detailed step list below. State rides on an
+    icon as well as colour, so it survives for colourblind readers. Hidden when
+    there are no phases.
+    """
+    if not snapshot.phases:
+        return ""
+    active = str(snapshot.status) == "active"
+    stages = []
+    for phase in snapshot.phases:
+        status = str(phase.status)
+        cls = _step_class(status)
+        if active and snapshot.current_phase == phase.phase_id and cls not in {"done", "blocked"}:
+            cls = "doing current"
+        icon = _STEP_ICON.get(status, "○")
+        stages.append(
+            f'<li class="lstage {cls}"><span class="ldot" aria-hidden="true">{icon}</span>'
+            f'<span class="lname">{escape(phase.title)}</span></li>'
+        )
+    return f'<ol class="loopstrip" aria-label="Goal journey stages">{"".join(stages)}</ol>'
+
+
+# A plain-language primer on what the page is and the few terms it uses. It is
+# the same vocabulary the rest of the page leans on (◆/● deciders, "locked in",
+# memory promotion, proof), gathered in one place so a first-time reader can
+# learn it once. Open by default — the page should teach, not assume.
+def _how_to_read_html(snapshot: GoalSnapshot) -> str:
+    return (
+        '<details class="primer" open><summary>New here? How to read this page</summary>'
+        '<div class="primer-body">'
+        "<p>This is a read-only window into a goal an AI agent is working on. "
+        "Nothing here needs your action — it just keeps you in the loop. The shorthand:</p>"
+        '<ul class="primer-list">'
+        "<li><b>The journey strip</b> up top shows the stages a goal moves through — "
+        "from framing it, to building, to proving it's done — and which one is in flight now.</li>"
+        '<li><b>Decisions</b> are the judgement calls made while building. A '
+        '<span class="ic-agent">◆</span> means the agent settled a routine, reversible '
+        'choice on its own; a <span class="ic-you">●</span> means it was your call. '
+        "<em>Locked in</em> flags a choice that's hard to undo.</li>"
+        "<li><b>Memory</b> is how Goals learns the way you like things done. A one-off "
+        "choice stays scoped to this goal until you confirm it — only then does it become "
+        "a standing preference that steers future goals.</li>"
+        "<li><b>Proof</b> is the rule that nothing counts as done on the agent's word. "
+        "Each finished stage carries evidence that was actually run.</li>"
+        "</ul></div></details>"
     )
 
 
@@ -544,30 +686,178 @@ def _assumptions_html(snapshot: GoalSnapshot) -> str:
     return '<p class="d">What the agent assumed</p><ul class="asm">' + "".join(items) + "</ul>"
 
 
-def _decisions_teaser_html(snapshot: GoalSnapshot) -> str:
-    """Tier-2 decision log: latest call inline, full log behind expand.
+# Each decider gets a label and a glyph so a call reads at a glance — and never
+# by colour alone (the label and icon both carry "who decided").
+_DECIDER = {
+    "agent": ("Agent", "◆"),  # ◆ filled diamond, sage
+    "user": ("You", "●"),  # ● filled disc, clay
+}
+
+
+def _decisions_section_html(snapshot: GoalSnapshot) -> str:
+    """A vertical decision timeline — every call made during the goal, at a glance.
+
+    Replaces the old flat text log. Entries hang off a single spine, newest
+    first. An agent-made call and a human-made call are told apart by icon,
+    colour, AND a text label (never colour alone), and reversibility shows as a
+    pill so you can see what is still cheap to revisit versus locked in.
 
     Hidden entirely when no judgements have been recorded.
     """
     if not snapshot.judgements:
         return ""
-    latest = snapshot.judgements[-1]
-    count = len(snapshot.judgements)
-    if latest.reversible:
-        reversible = '<span title="Cheap to revisit — safe to revise later">reversible</span>'
-    else:
-        reversible = '<span title="Hard to undo — weigh carefully">irreversible</span>'
-    return (
-        '<div class="teaser">'
-        f'<h3 class="subsec">Decisions <span class="meta muted">{count} recorded</span></h3>'
-        '<div class="lead">'
-        f'<span class="q">{escape(latest.question)}</span><br>'
-        f'<span class="d">Chose: {escape(latest.choice)}'
-        f'<span class="chip">{escape(latest.decided_by)}</span>'
-        f'<span class="chip">{reversible}</span></span></div>'
-        f'<details><summary>See all {count} decisions</summary>'
-        f'<div class="body">{_decisions_log_html(snapshot)}</div></details>'
+    judgements = snapshot.judgements
+    count = len(judgements)
+    agent_n = sum(1 for j in judgements if j.decided_by == "agent")
+    you_n = count - agent_n
+    legend = (
+        '<div class="dlegend">'
+        f'<span class="dl agent"><span class="ic">◆</span> Agent decided {agent_n}</span>'
+        f'<span class="dl user"><span class="ic">●</span> You decided {you_n}</span>'
         "</div>"
+    )
+    split = _decisions_split_html(agent_n, you_n)
+    recent = list(reversed(judgements))[:12]
+    nodes = "".join(_decision_node_html(j) for j in recent)
+    more = (
+        f'<p class="dmore">Showing the latest 12 of {count} decisions.</p>'
+        if count > 12
+        else ""
+    )
+    return (
+        '<section class="decisions" aria-label="Decisions">'
+        f'<h3 class="subsec">Decisions <span class="meta muted">{count} recorded</span></h3>'
+        '<p class="secap">Every judgement call made while building, newest first — so '
+        "nothing was decided silently. Who owned each call is marked on it.</p>"
+        f'{legend}{split}<ol class="dtimeline">{nodes}</ol>{more}'
+        "</section>"
+    )
+
+
+def _decisions_split_html(agent_n: int, you_n: int) -> str:
+    """A slim two-tone bar showing the agent/you split at a glance."""
+    total = agent_n + you_n
+    if total < 2:  # a single call needs no proportion bar
+        return ""
+    agent_pct = round(agent_n / total * 100)
+    return (
+        '<div class="dsplit" role="img" '
+        f'aria-label="{agent_n} decided by the agent, {you_n} by you">'
+        f'<i class="agent" style="width:{agent_pct}%"></i>'
+        f'<i class="user" style="width:{100 - agent_pct}%"></i></div>'
+    )
+
+
+def _decision_node_html(judgement) -> str:
+    decider = judgement.decided_by if judgement.decided_by in _DECIDER else "agent"
+    who, icon = _DECIDER[decider]
+    rev_cls = "rev" if judgement.reversible else "irr"
+    rev_label = "reversible" if judgement.reversible else "locked in"
+    rev_title = (
+        "Cheap to revisit — safe to revise later"
+        if judgement.reversible
+        else "Hard to undo — weigh carefully"
+    )
+    rationale = (
+        f'<span class="drat">{escape(judgement.rationale)}</span>'
+        if judgement.rationale
+        else ""
+    )
+    return (
+        f'<li class="dnode {decider} {rev_cls}">'
+        f'<span class="dmark" aria-hidden="true">{icon}</span>'
+        '<div class="dcard">'
+        f'<span class="dq">{escape(judgement.question)}</span>'
+        f'<span class="dchoice">Chose: {escape(judgement.choice)}</span>'
+        f'<span class="dmeta"><span class="who">{who}</span>'
+        f'<span class="rev-pill {rev_cls}" title="{rev_title}">{rev_label}</span></span>'
+        f"{rationale}</div></li>"
+    )
+
+
+# Stable display order and friendly names for the preference areas.
+_AREA_ORDER = ("risk", "communication", "workflow", "technical", "decision", "other")
+_AREA_LABEL = {
+    "risk": "Risk",
+    "communication": "Comms",
+    "workflow": "Workflow",
+    "technical": "Technical",
+    "decision": "Decisions",
+    "other": "Other",
+}
+
+
+def _memory_section_html(user_memory: UserMemory | None) -> str:
+    """User memory as a two-tier hierarchy: situated observations roll up into
+    durable, standing preferences.
+
+    The arrow between the tiers makes the relationship explicit — an observation
+    is scoped to one goal until you confirm it, at which point it becomes a
+    standing preference that steers how Goals decides next time. Hidden entirely
+    when Goals has learned nothing about you yet (or no memory was supplied).
+    """
+    if user_memory is None:
+        return ""
+    observed = _memory_observed_html(user_memory.observations)
+    standing = _memory_standing_html(user_memory.preferences)
+    if not observed and not standing:
+        return ""
+    arrow = (
+        '<div class="marrow" aria-hidden="true">↓ promoted when you confirm</div>'
+        if observed and standing
+        else ""
+    )
+    return (
+        '<section class="memory" aria-label="What Goals remembers about you">'
+        '<h3 class="subsec">What Goals remembers about you</h3>'
+        '<p class="d">Your situated choices — what you did, and when — roll up into '
+        "durable preferences that steer how Goals decides next time.</p>"
+        f'<div class="mtiers">{observed}{arrow}{standing}</div>'
+        "</section>"
+    )
+
+
+def _memory_observed_html(observations) -> str:
+    if not observations:
+        return ""
+    items = []
+    for obs in reversed(observations[-6:]):
+        ctx = f' <span class="mctx">when {escape(obs.context)}</span>' if obs.context else ""
+        goal = f'<span class="mgoal">{escape(obs.goal_id)}</span>' if obs.goal_id else ""
+        rev = (
+            '<span class="rev-pill irr" title="Hard to undo">locked in</span>'
+            if obs.reversible is False
+            else ""
+        )
+        area = _AREA_LABEL.get(obs.area, obs.area.title())
+        items.append(
+            f'<li class="mobs"><span class="marea-tag">{escape(area)}</span>'
+            f'<span class="mtext">chose {escape(obs.choice)}{ctx}</span>{rev}{goal}</li>'
+        )
+    return (
+        '<div class="mtier observed">'
+        '<span class="mtier-label">Observed · situated choices</span>'
+        f'<ul class="mlist">{"".join(items)}</ul></div>'
+    )
+
+
+def _memory_standing_html(preferences) -> str:
+    if not preferences:
+        return ""
+    lanes = []
+    for area in _AREA_ORDER:
+        in_area = [pref for pref in preferences if pref.area == area]
+        if not in_area:
+            continue
+        chips = "".join(f'<li class="pchip">{escape(pref.text)}</li>' for pref in in_area)
+        lanes.append(
+            f'<div class="marea"><span class="marea-name">{escape(_AREA_LABEL[area])}</span>'
+            f'<ul class="mchips">{chips}</ul></div>'
+        )
+    return (
+        '<div class="mtier standing">'
+        '<span class="mtier-label">Standing · durable preferences</span>'
+        f'<div class="mareas">{"".join(lanes)}</div></div>'
     )
 
 
@@ -871,26 +1161,6 @@ def _architecture_svg(architecture: GoalArchitectureMap) -> str:
 
 def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
-def _decisions_log_html(snapshot: GoalSnapshot) -> str:
-    if not snapshot.judgements:
-        return "<p>No decisions recorded yet.</p>"
-    items = []
-    for judgement in snapshot.judgements[:12]:
-        reversible = "reversible" if judgement.reversible else "irreversible"
-        rationale = (
-            f'<br><span class="d">{escape(judgement.rationale)}</span>'
-            if judgement.rationale
-            else ""
-        )
-        items.append(
-            f'<li><span class="t">{escape(judgement.question)}</span>'
-            f'<br><span class="d">Chose: {escape(judgement.choice)}'
-            f'<span class="chip">{escape(judgement.decided_by)}</span>'
-            f'<span class="chip">{reversible}</span></span>{rationale}</li>'
-        )
-    return f'<ul class="kv">{"".join(items)}</ul>'
 
 
 def _issues_html(report) -> str:

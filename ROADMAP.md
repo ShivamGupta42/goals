@@ -193,7 +193,9 @@ uncertainty is shown when history is incomplete or stale.
 ## Dashboard depth
 
 **Status:** Partially implemented. The dashboard is a single read-only HTML file
-with Goal Brief, Progress, Issues, Decisions, Memory, Architecture, Evidence,
+with a Journey strip, a "how to read this page" primer, Goal Brief, Progress,
+Issues, a visual Decisions timeline (who decided, and reversibility), a Memory
+hierarchy (observations rolling up into preferences), Architecture, Evidence,
 Sources, and Technical Details views.
 
 Future dashboard work should deepen those views without making the dashboard a

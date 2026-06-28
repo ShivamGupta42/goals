@@ -80,11 +80,12 @@ Here's the whole loop, each step in plain English (click to enlarge):
   <a href="docs/assets/lifecycle.png"><img src="docs/assets/lifecycle.png" alt="How Goals works, step by step: 1 your goal in plain English, 2 the problem is broken into smaller steps with its assumptions written out, 3 the AI agent starts executing one step at a time, 4 each step must show undeniable proof it is done and that proof is run for real, not the agent's word, 5 step done and proof saved, 6 finished with a full readable record — plus a dashboard anyone can read anytime and a private memory that remembers your decisions so the simple safe ones get made the way you would" width="520"></a>
 </p>
 
-And you never lose the thread: a **dashboard anyone can read** shows status,
-decisions, and proof at a glance (click to view full size):
+And you never lose the thread: a **dashboard anyone can read** shows the goal's
+journey, every decision and who made it, what Goals has learned about you, and
+proof — at a glance (click to view full size):
 
 <p align="center">
-  <a href="docs/assets/dashboard-hero.png"><img src="docs/assets/dashboard-hero.png" alt="The Goals dashboard — a human-readable view of the goal, its building journey, and proof. Click to view full size." width="300"></a>
+  <a href="docs/assets/dashboard-hero.png"><img src="docs/assets/dashboard-hero.png" alt="The Goals dashboard — a human-readable view of the goal: its journey, the decisions and who made each, what Goals has learned about you, and proof. Click to view full size." width="300"></a>
 </p>
 
 <sub>Diagram source: [`docs/assets/lifecycle.mmd`](docs/assets/lifecycle.mmd) — regenerate with `npx -y @mermaid-js/mermaid-cli -i docs/assets/lifecycle.mmd -o docs/assets/lifecycle.png -b white -s 2`.</sub>

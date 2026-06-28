@@ -5,7 +5,7 @@ from pathlib import Path
 from goals.architecture import architecture_for_snapshot, render_architecture_markdown
 from goals.dashboard import render_dashboard
 from goals.health import GoalHealthReport, build_goal_health
-from goals.models import GoalSnapshot, PortableExport
+from goals.models import GoalSnapshot, PortableExport, UserMemory
 from goals.portability import export_snapshot
 from goals.storage import EventStore
 
@@ -60,8 +60,24 @@ def emit_dashboard_for_snapshot(
         architecture_path=architecture_path,
         events=events,
         health=health,
+        user_memory=_load_user_memory_safe(),
     )
     return output_path
+
+
+def _load_user_memory_safe() -> UserMemory | None:
+    """Read the user's standing memory for the dashboard, never failing the render.
+
+    User memory lives outside the goal (``~/.goals/user/``) and is the user's to
+    hand-edit, so a malformed or unreadable store must not break the dashboard —
+    it just renders without the memory panel.
+    """
+    try:
+        from goals.user_memory import load_user_memory
+
+        return load_user_memory()
+    except Exception:  # noqa: BLE001 — memory is best-effort, never load-bearing
+        return None
 
 
 def refresh_goal_outputs(cwd: Path) -> tuple[PortableExport, Path, Path]:
