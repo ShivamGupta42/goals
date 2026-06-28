@@ -97,6 +97,8 @@ def render_dashboard(
     )
 
     full_goal = _full_goal_html(snapshot.objective)
+    lifecycle_strip = _lifecycle_strip_html(snapshot)
+    how_to_read = _how_to_read_html(snapshot)
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
@@ -270,6 +272,43 @@ def render_dashboard(
     .marea-name {{ font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--sage); padding-top:.25rem; }}
     .mchips {{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:.35rem; }}
     .pchip {{ background:var(--chip); border-radius:999px; padding:.18rem .65rem; font-size:.84rem; }}
+    /* Journey strip — the goal's lifecycle as a horizontal stepper, current stage lit. */
+    .loopstrip {{ list-style:none; display:flex; gap:0; margin:.2rem 0 1.9rem; padding:0; overflow-x:auto; scrollbar-width:none; }}
+    .loopstrip::-webkit-scrollbar {{ display:none; }}
+    .lstage {{ flex:1 1 0; min-width:62px; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center; padding:0 .25rem; }}
+    .lstage::before {{ content:""; position:absolute; top:11px; left:-50%; width:100%; height:2px; background:var(--line); z-index:0; }}
+    .lstage:first-child::before {{ display:none; }}
+    .lstage .ldot {{ position:relative; z-index:1; width:24px; height:24px; line-height:21px; text-align:center; border-radius:50%;
+      background:var(--paper); border:2px solid var(--line); font-size:.72rem; font-weight:800; color:var(--soft); }}
+    .lstage .lname {{ font-size:.69rem; line-height:1.25; margin-top:.42rem; color:var(--soft);
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+    .lstage.done .ldot {{ border-color:var(--sage); color:var(--sage); }}
+    .lstage.done::before {{ background:var(--sage); }}
+    .lstage.doing .ldot, .lstage.current .ldot {{ border-color:var(--clay); color:var(--clay); box-shadow:0 0 0 4px rgba(176,106,79,.13); }}
+    .lstage.doing .lname, .lstage.current .lname {{ color:var(--ink); font-weight:700; }}
+    .lstage.blocked .ldot {{ border-color:#b42318; color:#b42318; }}
+    .lstage.blocked .lname {{ color:#b42318; }}
+    /* "How to read this page" — a plain-language primer on the page's vocabulary. */
+    .primer {{ border:1px solid var(--line); border-radius:12px; background:var(--card); margin:0 0 1.1rem; }}
+    .primer summary {{ font-size:.92rem; font-weight:700; color:var(--clay); padding:.85rem 1.1rem; cursor:pointer;
+      list-style:none; display:flex; align-items:center; gap:.55rem; }}
+    .primer summary::-webkit-details-marker {{ display:none; }}
+    .primer summary::before {{ content:"?"; display:inline-flex; align-items:center; justify-content:center;
+      width:1.25rem; height:1.25rem; border-radius:50%; background:var(--clay); color:var(--paper); font-size:.78rem; font-weight:800; flex:none; }}
+    .primer summary::after {{ content:"+"; margin-left:auto; color:var(--clay); font-weight:700; }}
+    .primer[open] summary::after {{ content:"\\2013"; }}
+    .primer-body {{ padding:0 1.2rem 1.05rem; font-size:.93rem; }}
+    .primer-body > p {{ color:var(--soft); margin:.1rem 0 .7rem; }}
+    .primer-list {{ margin:0; padding-left:1.15rem; display:grid; gap:.55rem; }}
+    .primer-list li {{ color:var(--ink); line-height:1.5; }}
+    .primer-list b {{ color:var(--ink); }}
+    .ic-agent {{ color:var(--sage); font-weight:800; }} .ic-you {{ color:var(--clay); font-weight:800; }}
+    /* Self-explaining one-line caption under a section heading. */
+    .secap {{ margin:-.1rem 0 .7rem; font-size:.86rem; color:var(--soft); max-width:60ch; }}
+    /* Who-decided split: a slim at-a-glance proportion bar. */
+    .dsplit {{ display:flex; height:7px; border-radius:7px; overflow:hidden; margin:.1rem 0 1rem; background:var(--line); }}
+    .dsplit i {{ display:block; height:100%; }}
+    .dsplit i.agent {{ background:var(--sage); }} .dsplit i.user {{ background:var(--clay); }}
     @media (max-width:600px) {{
       body {{ font-size:16px; }}
       .wrap {{ padding:2rem 1.1rem 4rem; }}
@@ -292,6 +331,7 @@ def render_dashboard(
 
     <div class="meter"><span class="big">{accepted} of {total}</span><span class="small">steps accepted · {escape(brief.progress)}</span></div>
     <div class="rule" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100" aria-label="{accepted} of {total} steps accepted"><i style="width:{pct}%"></i></div>
+    {lifecycle_strip}
     <p class="facts">
       <span class="fact"><span class="k">Waiting on</span> <span class="v">{escape(_waiting_label(brief.waiting_on))}</span></span>
       {now_on}
@@ -301,10 +341,12 @@ def render_dashboard(
 
     <main id="main" tabindex="-1">
     {status_banner}
+    {how_to_read}
     {produced}
 
     <h2 class="sec">What happened</h2>
     <h3 class="subsec">The steps</h3>
+    <p class="secap">The goal broken into stages. Each one must show proof it works before it counts as done.</p>
     <ul class="steps">{steps}</ul>
     {journey_section}
     {decisions_section}
@@ -382,6 +424,58 @@ def _full_goal_html(objective: str) -> str:
     return (
         '<details class="full-goal"><summary>Read the full goal</summary>'
         f"<p>{escape(objective)}</p></details>"
+    )
+
+
+def _lifecycle_strip_html(snapshot: GoalSnapshot) -> str:
+    """The goal's lifecycle as a compact horizontal stepper — the "map".
+
+    Each phase is a node on a connecting line, with the connector into a finished
+    stage filled. The stage in flight is lit, so a reader sees *where the goal is
+    in its journey* before reading the detailed step list below. State rides on an
+    icon as well as colour, so it survives for colourblind readers. Hidden when
+    there are no phases.
+    """
+    if not snapshot.phases:
+        return ""
+    active = str(snapshot.status) == "active"
+    stages = []
+    for phase in snapshot.phases:
+        status = str(phase.status)
+        cls = _step_class(status)
+        if active and snapshot.current_phase == phase.phase_id and cls not in {"done", "blocked"}:
+            cls = "doing current"
+        icon = _STEP_ICON.get(status, "○")
+        stages.append(
+            f'<li class="lstage {cls}"><span class="ldot" aria-hidden="true">{icon}</span>'
+            f'<span class="lname">{escape(phase.title)}</span></li>'
+        )
+    return f'<ol class="loopstrip" aria-label="Goal journey stages">{"".join(stages)}</ol>'
+
+
+# A plain-language primer on what the page is and the few terms it uses. It is
+# the same vocabulary the rest of the page leans on (◆/● deciders, "locked in",
+# memory promotion, proof), gathered in one place so a first-time reader can
+# learn it once. Open by default — the page should teach, not assume.
+def _how_to_read_html(snapshot: GoalSnapshot) -> str:
+    return (
+        '<details class="primer" open><summary>New here? How to read this page</summary>'
+        '<div class="primer-body">'
+        "<p>This is a read-only window into a goal an AI agent is working on. "
+        "Nothing here needs your action — it just keeps you in the loop. The shorthand:</p>"
+        '<ul class="primer-list">'
+        "<li><b>The journey strip</b> up top shows the stages a goal moves through — "
+        "from framing it, to building, to proving it's done — and which one is in flight now.</li>"
+        '<li><b>Decisions</b> are the judgement calls made while building. A '
+        '<span class="ic-agent">◆</span> means the agent settled a routine, reversible '
+        'choice on its own; a <span class="ic-you">●</span> means it was your call. '
+        "<em>Locked in</em> flags a choice that's hard to undo.</li>"
+        "<li><b>Memory</b> is how Goals learns the way you like things done. A one-off "
+        "choice stays scoped to this goal until you confirm it — only then does it become "
+        "a standing preference that steers future goals.</li>"
+        "<li><b>Proof</b> is the rule that nothing counts as done on the agent's word. "
+        "Each finished stage carries evidence that was actually run.</li>"
+        "</ul></div></details>"
     )
 
 
@@ -622,6 +716,7 @@ def _decisions_section_html(snapshot: GoalSnapshot) -> str:
         f'<span class="dl user"><span class="ic">●</span> You decided {you_n}</span>'
         "</div>"
     )
+    split = _decisions_split_html(agent_n, you_n)
     recent = list(reversed(judgements))[:12]
     nodes = "".join(_decision_node_html(j) for j in recent)
     more = (
@@ -632,8 +727,24 @@ def _decisions_section_html(snapshot: GoalSnapshot) -> str:
     return (
         '<section class="decisions" aria-label="Decisions">'
         f'<h3 class="subsec">Decisions <span class="meta muted">{count} recorded</span></h3>'
-        f'{legend}<ol class="dtimeline">{nodes}</ol>{more}'
+        '<p class="secap">Every judgement call made while building, newest first — so '
+        "nothing was decided silently. Who owned each call is marked on it.</p>"
+        f'{legend}{split}<ol class="dtimeline">{nodes}</ol>{more}'
         "</section>"
+    )
+
+
+def _decisions_split_html(agent_n: int, you_n: int) -> str:
+    """A slim two-tone bar showing the agent/you split at a glance."""
+    total = agent_n + you_n
+    if total < 2:  # a single call needs no proportion bar
+        return ""
+    agent_pct = round(agent_n / total * 100)
+    return (
+        '<div class="dsplit" role="img" '
+        f'aria-label="{agent_n} decided by the agent, {you_n} by you">'
+        f'<i class="agent" style="width:{agent_pct}%"></i>'
+        f'<i class="user" style="width:{100 - agent_pct}%"></i></div>'
     )
 
 

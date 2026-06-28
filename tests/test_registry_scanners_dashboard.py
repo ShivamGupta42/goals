@@ -72,10 +72,13 @@ def test_dashboard_escapes_html_and_shows_overview(tmp_path: Path) -> None:
     assert "Source commit:" in text
     assert "P1 has no evidence yet." in text
 
-    # Empty sections are hidden, not shown as "none yet" collapsibles.
+    # Empty sections are hidden, not shown as "none yet" collapsibles. (The word
+    # "Decisions" still appears in the always-on "how to read" primer, so target
+    # the section's own markup rather than the bare word.)
     assert "Architecture map" not in text  # no recorded map → hidden
-    assert "Decisions" not in text  # no judgements → hidden
-    assert "Sources" not in text  # no sources → hidden
+    assert 'class="dtimeline"' not in text  # no judgements → decision timeline hidden
+    assert 'class="decisions"' not in text
+    assert "<summary>Sources" not in text  # no sources → hidden
     assert "No decisions recorded yet." not in text
 
     # Skills and self-evolution memory are no longer part of the overview.
@@ -161,6 +164,31 @@ def test_dashboard_shows_decision_log_not_solicitation(tmp_path: Path) -> None:
     assert "Decision Brief" not in text
     assert "Recommended option" not in text
     assert "Suggested reply" not in text
+
+
+def test_dashboard_shows_journey_strip_and_how_to_read_primer(tmp_path: Path) -> None:
+    # The page orients and teaches: a horizontal lifecycle strip marks where the
+    # goal is, and an always-on plain-language primer explains the vocabulary.
+    snapshot = GoalSnapshot(
+        goal_id="demo",
+        objective="Ship the thing",
+        topology=_lease(tmp_path),
+        phases=default_phases("Demo"),
+        current_phase="P2",
+        status="active",
+    )
+    output = tmp_path / "dashboard.html"
+    render_dashboard(snapshot, output)
+    text = output.read_text()
+
+    # Journey strip with the in-flight stage lit.
+    assert 'class="loopstrip"' in text
+    assert "lstage doing current" in text  # P2 is the active phase
+
+    # The educational primer is present and open by default.
+    assert "How to read this page" in text
+    assert 'class="primer" open' in text
+    assert "judgement calls made while building" in text
 
 
 def test_dashboard_decision_timeline_separates_agent_and_human(tmp_path: Path) -> None:
