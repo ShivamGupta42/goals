@@ -20,7 +20,7 @@ cheaper to fix a misunderstanding now than after it's built.
    (`--depends`), the rephrased problem and open unknowns via
    `goals assess breakdown`, the approach via `goals decision record`, and the
    alignment question as an `understanding` checkpoint that needs the user
-   (`goals checkpoint record P1 alignment --kind understanding --needs-user`).
+   (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    Write `DISCOVERY.md` in the goal worktree.
 4. **Get an explicit yes before building.** Ask plainly: *"Here's what I
    understand and how I'd approach it — is this what you want to build?"* When the

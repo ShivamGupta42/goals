@@ -16,7 +16,7 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    in plain English, lay out the approach with **honest pros/cons a non-technical
    person can weigh** (`goals decision record`), and record the alignment question
    as an `understanding` checkpoint that needs the user
-   (`goals checkpoint record P1 alignment --kind understanding --needs-user`).
+   (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    **Don't build until the user confirms "yes, this is what I want."** Write
    `DISCOVERY.md`. Skip only if the goal is trivial and unambiguous.
 3. **Pause + Assess the goal** (PACERS — see `/goals-problem-solving`).
