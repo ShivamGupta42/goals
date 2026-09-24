@@ -10,6 +10,8 @@ This directory holds deeper design notes and long-lived project context.
 - `GOAL_EXECUTION_MEMORY.md` - the private, hand-editable goal-execution memory
   (`~/.goals/user/`): situated observations vs. durable preferences, and how
   preferences steer the ask-vs-act gate.
+- `DECISION_FILTER_PLAN.md` - proposed decision filter: two typed questions,
+  an explicit correction log, and a later fine-tune. Not implemented.
 - `skill-evolution/README.md` - when repeated workflow friction should become a
   skill update.
 - `DOGFOOD_FINDINGS.md` - observations from using Goals on itself.
