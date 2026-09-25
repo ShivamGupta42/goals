@@ -92,6 +92,7 @@ class EventType(StrEnum):
     USER_MESSAGE_RECORDED = "user_message_recorded"
     PAIN_POINT_RECORDED = "pain_point_recorded"
     DESIRED_PROPERTY_RECORDED = "desired_property_recorded"
+    DISCOVERY_REVISED = "discovery_revised"
 
 
 class Event(BaseModel):
@@ -673,6 +674,20 @@ class DesiredProperty(BaseModel):
     recorded_at: str = Field(default_factory=utc_now)
 
 
+class DiscoveryRevision(BaseModel):
+    """The user's understanding shifted mid-goal, so Discovery starts over.
+
+    Replaying it supersedes the recorded pain points and desired properties,
+    reopens the first phase for a fresh "yes", and sends later accepted phases
+    back for review against the new framing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    revised_at: str = Field(default_factory=utc_now)
+
+
 class ProblemBreakdown(BaseModel):
     """The Assess output: how the agent broke a goal or phase into sub-problems.
 
@@ -1191,6 +1206,7 @@ class GoalSnapshot(BaseModel):
     user_messages: list[UserMessage] = Field(default_factory=list)
     pain_points: list[PainPoint] = Field(default_factory=list)
     desired_properties: list[DesiredProperty] = Field(default_factory=list)
+    discovery_revisions: list[DiscoveryRevision] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

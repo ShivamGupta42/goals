@@ -13,8 +13,11 @@ from pydantic import BaseModel
 
 from goals.models import (
     Assumption,
+    CheckpointKind,
+    CheckpointStatus,
     Decision,
     DesiredProperty,
+    DiscoveryRevision,
     Evidence,
     EvidenceArtifact,
     Event,
@@ -362,6 +365,11 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 _drop_unknown_fields(payload["property"], DesiredProperty)
             )
             _upsert_by(snapshot.desired_properties, wanted, "property_id")
+        elif event.event_type == EventType.DISCOVERY_REVISED:
+            revision = DiscoveryRevision.model_validate(
+                _drop_unknown_fields(payload["revision"], DiscoveryRevision)
+            )
+            _apply_discovery_revision(snapshot, revision)
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(
                 _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)
@@ -502,6 +510,60 @@ def _upsert_breakdown(breakdowns: list[ProblemBreakdown], breakdown: ProblemBrea
             breakdowns[index] = breakdown
             return
     breakdowns.append(breakdown)
+
+
+def _apply_discovery_revision(snapshot: GoalSnapshot, revision: DiscoveryRevision) -> None:
+    """Start Discovery over without losing history.
+
+    - Recorded pain points and desired properties are superseded (they stop
+      gating); an open user check for a superseded property is waived.
+    - The first phase reopens with its reviews cleared, and its understanding
+      checkpoints go back to pending: the user must confirm the new framing.
+    - Later phases lose their reviews; accepted ones go back to needs_review, so
+      nothing stays "done" against the old framing.
+    """
+    snapshot.discovery_revisions.append(revision)
+    superseded: set[str] = set()
+    for pain in snapshot.pain_points:
+        pain.status = "superseded"
+    for wanted in snapshot.desired_properties:
+        if wanted.status == "active" and wanted.proof == "user":
+            superseded.add(wanted.property_id)
+        wanted.status = "superseded"
+    note = f"Superseded by a Discovery revision: {revision.reason}"
+    for index, phase in enumerate(snapshot.phases):
+        for checkpoint in phase.checkpoints:
+            if checkpoint.status in {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}:
+                if index == 0 and checkpoint.kind == CheckpointKind.UNDERSTANDING:
+                    _reset_understanding(checkpoint, revision)
+                continue
+            if checkpoint.checkpoint_id in superseded:
+                checkpoint.status = CheckpointStatus.WAIVED
+                checkpoint.needs_user = False
+                checkpoint.summary = note
+                checkpoint.notes = note
+                checkpoint.updated_at = revision.revised_at
+            elif index == 0 and checkpoint.kind == CheckpointKind.UNDERSTANDING:
+                _reset_understanding(checkpoint, revision)
+        phase.reviews = []
+        if index == 0:
+            phase.status = PhaseStatus.IN_PROGRESS
+        elif phase.status == PhaseStatus.ACCEPTED:
+            phase.status = PhaseStatus.NEEDS_REVIEW
+    snapshot.current_phase = _next_pending_phase_id(snapshot)
+    if snapshot.status == GoalStatus.COMPLETE:
+        snapshot.status = GoalStatus.ACTIVE
+
+
+def _reset_understanding(checkpoint: PhaseCheckpoint, revision: DiscoveryRevision) -> None:
+    checkpoint.status = CheckpointStatus.PENDING
+    checkpoint.needs_user = False
+    checkpoint.user_message_id = ""
+    checkpoint.unverified = False
+    checkpoint.asked_at = ""
+    checkpoint.asked_session = ""
+    checkpoint.summary = f"Re-confirm with the user after the revision: {revision.reason}"
+    checkpoint.updated_at = revision.revised_at
 
 
 def _next_pending_phase_id(snapshot: GoalSnapshot) -> str | None:

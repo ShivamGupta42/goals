@@ -166,6 +166,17 @@ hook, add `--unverified`: it closes, and every view says it wasn't verified.
 If they correct you, fold the correction back in (steps 2–5) and re-ask. A "no"
 here is the cheapest, most valuable feedback in the whole run.
 
+If their understanding shifts **later** — mid-build, after they've said yes —
+don't patch around it. Start Discovery over:
+
+```bash
+goals assess revise --reason "<what changed, in plain words>"
+```
+
+That sets aside what Discovery recorded, reopens P1 for a fresh yes, and sends
+any phase already accepted back for review against the new framing. Then redo
+steps 1–6 with them.
+
 Don't run `goals phase review P1` while this checkpoint is waiting: all it can
 return is "needs you", and each review counts toward the phase's attempt cap.
 Record P1's evidence and review after the yes.

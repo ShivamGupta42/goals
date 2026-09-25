@@ -16,7 +16,7 @@ FILENAME = "DISCOVERY.md"
 
 
 def has_discovery_record(snapshot: GoalSnapshot) -> bool:
-    return bool(snapshot.pain_points or snapshot.desired_properties)
+    return bool(snapshot.pain_points or snapshot.desired_properties or snapshot.discovery_revisions)
 
 
 def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
@@ -64,6 +64,12 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
         "## What the user confirmed",
         *_bullets(confirmation_lines(snapshot)),
     ]
+    if snapshot.discovery_revisions:
+        lines += [
+            "",
+            "## Revisions",
+            *[f"- {r.revised_at[:10]}: {r.reason}" for r in snapshot.discovery_revisions],
+        ]
     return "\n".join(lines) + "\n"
 
 

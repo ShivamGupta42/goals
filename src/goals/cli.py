@@ -87,6 +87,7 @@ from goals.models import (
     CheckpointStatus,
     Decision,
     DesiredProperty,
+    DiscoveryRevision,
     Event,
     EventType,
     Evidence,
@@ -1910,6 +1911,46 @@ def _record_property_check(
         summary="A desired property only the user can judge. Ask once there's something "
         "to try, then close it on their reply.",
     )
+
+
+@assess_app.command("revise")
+def assess_revise(
+    reason: str = typer.Option(
+        ..., "--reason", help="What changed in the user's understanding, in plain words."
+    ),
+) -> None:
+    """Start Discovery over when the user's understanding shifts mid-goal.
+
+    Supersedes the recorded pain points and desired properties, reopens the first
+    phase for a fresh "yes" from the user, and sends phases already accepted back
+    for review against the new framing. Then redo Discovery with them.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        revision = DiscoveryRevision(reason=reason)
+        updated = append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.DISCOVERY_REVISED,
+                payload={"revision": revision.model_dump()},
+            ),
+        )
+        superseded = sum(1 for w in snapshot.desired_properties if w.status == "active")
+        superseded += sum(1 for p in snapshot.pain_points if p.status == "active")
+        rereview = [
+            p.phase_id for p in updated.phases[1:] if p.status == PhaseStatus.NEEDS_REVIEW
+        ]
+        first = updated.phases[0].phase_id if updated.phases else "the first phase"
+        typer.echo(f"Revised Discovery: {superseded} earlier record(s) superseded; {first} reopened.")
+        typer.echo(
+            "Next: record what the user wants now (`goals assess pain`/`want`), re-confirm "
+            f"{first} with them"
+            + (f", then re-review {', '.join(rereview)}." if rereview else ".")
+        )
+
+    _handle(run)
 
 
 @assess_app.command("breakdown")

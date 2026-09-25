@@ -101,10 +101,15 @@ def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
 def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
     """One line per closed user checkpoint, and the reply (if any) it was closed on."""
     lines: list[str] = []
+    superseded = {
+        w.property_id for w in snapshot.desired_properties if w.status == "superseded"
+    }
     for phase in snapshot.phases:
         for checkpoint in phase.checkpoints:
             if checkpoint.status not in COMPLETE_CHECKPOINT_STATUSES:
                 continue
+            if checkpoint.checkpoint_id in superseded and not checkpoint.user_message_id:
+                continue  # dropped by a revision, never answered: not a reply on record
             provenance = checkpoint_provenance(snapshot, checkpoint)
             if not provenance and not (
                 checkpoint.user_owned or checkpoint.kind in USER_CHECKPOINT_KINDS

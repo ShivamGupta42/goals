@@ -159,6 +159,7 @@ def _state_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
 def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     issues: list[GoalIssue] = []
     current_phase = snapshot.current_phase
+    issues.extend(_revision_issues(snapshot))
     for phase in snapshot.phases:
         refs = [f"phase:{phase.phase_id}"]
         checkpoints = phase.checkpoints
@@ -271,6 +272,29 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                     )
                 )
     return issues
+
+
+def _revision_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    """After a Discovery revision, say what has to be redone until it is."""
+    if not snapshot.discovery_revisions or not snapshot.phases:
+        return []
+    first = snapshot.phases[0]
+    if first.status == PhaseStatus.ACCEPTED:
+        return []
+    revision = snapshot.discovery_revisions[-1]
+    rereview = [p.phase_id for p in snapshot.phases[1:] if p.status == PhaseStatus.NEEDS_REVIEW]
+    return [
+        GoalIssue(
+            severity="p1",
+            area="state",
+            summary=f"Discovery was revised: {revision.reason}.",
+            suggested_action=(
+                "Record what the user wants now (`goals assess pain`/`want`), re-confirm "
+                f"{first.phase_id} with them"
+                + (f", then re-review {', '.join(rereview)}." if rereview else ".")
+            ),
+        )
+    ]
 
 
 def _unproven_property_issues(snapshot: GoalSnapshot, phase, refs: list[str]) -> list[GoalIssue]:
