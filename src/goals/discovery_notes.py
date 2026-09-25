@@ -67,10 +67,15 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
         *_bullets(confirmation_lines(snapshot)),
     ]
     if snapshot.discovery_revisions:
+        set_aside = [p.statement for p in snapshot.pain_points if p.status == "superseded"]
+        set_aside += [w.statement for w in snapshot.desired_properties if w.status == "superseded"]
         lines += [
             "",
             "## Revisions",
             *[f"- {r.revised_at[:10]}: {r.reason}" for r in snapshot.discovery_revisions],
+            "",
+            "## Set aside by revisions",
+            *_bullets(set_aside),
         ]
     return "\n".join(lines) + "\n"
 

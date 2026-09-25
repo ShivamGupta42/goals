@@ -27,6 +27,7 @@ from goals.models import (
     EventType,
     GateResult,
     GateVerdict,
+    PhaseStatus,
     GoalSnapshot,
     Phase,
     WorktreeLease,
@@ -325,6 +326,9 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
     if action == "start":
         event_type = EventType.PHASE_STARTED
     elif action == "accept":
+        blocked = revision_blocks(snapshot, phase_id)
+        if blocked:
+            raise GoalsError(blocked)
         checkpoint_issues = phase_checkpoint_blockers(phase)
         if checkpoint_issues:
             raise GoalsError(
@@ -367,11 +371,32 @@ def claim_worktree(cwd: Path) -> WorktreeLease:
     return lease
 
 
+def revision_blocks(snapshot: GoalSnapshot, phase_id: str) -> str | None:
+    """Why a phase can't be reviewed or accepted yet after a Discovery revision.
+
+    Until the user re-confirms the first phase, later phases would only be
+    re-approved against the old framing on their old evidence.
+    """
+    if not snapshot.discovery_revisions or not snapshot.phases:
+        return None
+    first = snapshot.phases[0]
+    if first.status == PhaseStatus.ACCEPTED or phase_id == first.phase_id:
+        return None
+    return (
+        f"Discovery was revised, so {phase_id} waits until {first.phase_id} is re-confirmed "
+        f"with the user and accepted. Record what they want now (`goals assess pain`/`want`), "
+        f"re-confirm {first.phase_id}, then review {phase_id} against the new framing."
+    )
+
+
 def run_gate(cwd: Path, phase_id: str, *, max_attempts: int | None = None) -> GateResult:
     if max_attempts is None:
         max_attempts = resolve_max_phase_attempts()
     snapshot = load_active_snapshot(cwd)
     phase = _find_phase(snapshot, phase_id)
+    blocked = revision_blocks(snapshot, phase_id)
+    if blocked:
+        raise GoalsError(blocked)
     attempt = len([review for review in phase.reviews if review.gate_id == "phase-review"]) + 1
     load_bearing, desired = proof_targets(snapshot, phase_id)
     result = review_phase(

@@ -23,6 +23,7 @@ from goals.models import (
     Event,
     EventType,
     GateResult,
+    GateVerdict,
     GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
@@ -247,6 +248,11 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
     )
     snapshot.event_count = len(events)
     seen_messages = {m.message_id for m in snapshot.user_messages}
+    # Phases a Discovery revision reset that haven't passed review since. An
+    # accept for one of them (e.g. from an older Goals that skipped the revision
+    # and accepted on stale reviews) is ignored, as the accept command would
+    # refuse it — so the revision can't be silently undone.
+    unreviewed_since_revision: set[str] = set()
     for event in events[1:]:
         snapshot.last_updated = event.timestamp
         payload = event.payload
@@ -313,6 +319,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )
+            if phase.reviews[-1].verdict == GateVerdict.PASS:
+                unreviewed_since_revision.discard(phase.phase_id)
             snapshot.current_phase = phase.phase_id
             _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
@@ -323,6 +331,13 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             _upsert_checkpoint(phase.checkpoints, checkpoint)
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
+            first = snapshot.phases[0]
+            if phase.phase_id in unreviewed_since_revision or (
+                snapshot.discovery_revisions
+                and phase is not first
+                and first.status != PhaseStatus.ACCEPTED
+            ):
+                continue
             phase.status = PhaseStatus.ACCEPTED
             snapshot.current_phase = _next_pending_phase_id(snapshot)
             if snapshot.current_phase is None:
@@ -370,6 +385,7 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 _drop_unknown_fields(payload["revision"], DiscoveryRevision)
             )
             _apply_discovery_revision(snapshot, revision)
+            unreviewed_since_revision = {phase.phase_id for phase in snapshot.phases}
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(
                 _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)
@@ -550,6 +566,24 @@ def _apply_discovery_revision(snapshot: GoalSnapshot, revision: DiscoveryRevisio
             phase.status = PhaseStatus.IN_PROGRESS
         elif phase.status == PhaseStatus.ACCEPTED:
             phase.status = PhaseStatus.NEEDS_REVIEW
+    if snapshot.phases and not any(
+        c.kind == CheckpointKind.UNDERSTANDING for c in snapshot.phases[0].checkpoints
+    ):
+        # Discovery was skipped before: the new framing still needs the user's yes.
+        existing_ids = {c.checkpoint_id for c in snapshot.phases[0].checkpoints}
+        snapshot.phases[0].checkpoints.append(
+            PhaseCheckpoint(
+                checkpoint_id="alignment" if "alignment" not in existing_ids else "alignment-revised",
+                kind=CheckpointKind.UNDERSTANDING,
+                title="Does this still match what you want to build?",
+                status=CheckpointStatus.PENDING,
+                required=True,
+                user_owned=True,
+                summary=f"Confirm with the user after the revision: {revision.reason}",
+                created_at=revision.revised_at,
+                updated_at=revision.revised_at,
+            )
+        )
     snapshot.current_phase = _next_pending_phase_id(snapshot)
     if snapshot.status == GoalStatus.COMPLETE:
         snapshot.status = GoalStatus.ACTIVE

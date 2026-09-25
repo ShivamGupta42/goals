@@ -114,8 +114,12 @@ def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
         for checkpoint in phase.checkpoints:
             if checkpoint.status not in COMPLETE_CHECKPOINT_STATUSES:
                 continue
-            if checkpoint.checkpoint_id in superseded and not checkpoint.user_message_id:
-                continue  # dropped by a revision, never answered: not a reply on record
+            if (
+                checkpoint.checkpoint_id in superseded
+                and not checkpoint.user_message_id
+                and not checkpoint.unverified
+            ):
+                continue  # set aside by a revision before anyone answered it
             provenance = checkpoint_provenance(snapshot, checkpoint)
             if not provenance and not (
                 checkpoint.user_owned or checkpoint.kind in USER_CHECKPOINT_KINDS

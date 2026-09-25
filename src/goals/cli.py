@@ -1826,6 +1826,11 @@ def assess_want(
             )
             if prior is None:
                 raise GoalsError(f"Unknown desired property id: {property_id}.")
+            if prior.status == "superseded":
+                raise GoalsError(
+                    f"{property_id} was set aside when Discovery was revised; record it as a new "
+                    "property (and ask the user about it) instead of reviving the old one."
+                )
         chosen = proof if proof is not None else (prior.proof if prior else None)
         if chosen is None:
             raise GoalsError(
@@ -1952,9 +1957,13 @@ def assess_revise(
         first = updated.phases[0].phase_id if updated.phases else "the first phase"
         typer.echo(f"Revised Discovery: {superseded} earlier record(s) superseded; {first} reopened.")
         typer.echo(
-            "Next: record what the user wants now (`goals assess pain`/`want`), re-confirm "
+            "Next: record what the user wants now (`goals assess pain`/`want`), then re-confirm "
             f"{first} with them"
-            + (f", then re-review {', '.join(rereview)}." if rereview else ".")
+            + (
+                f". {', '.join(rereview)} can be re-reviewed only after {first} is accepted again."
+                if rereview
+                else "."
+            )
         )
 
     _handle(run)

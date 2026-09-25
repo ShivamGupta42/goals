@@ -89,7 +89,7 @@ def _discovery_then_two_phases(repo: Path) -> None:
 def test_revising_reopens_confirmation_and_sends_done_work_back(repo: Path) -> None:
     _discovery_then_two_phases(repo)
     out = _invoke("assess", "revise", "--reason", "They want a paper log, not an app")
-    assert "P1 reopened" in out and "re-review P2" in out
+    assert "P1 reopened" in out and "P2 can be re-reviewed only after P1 is accepted again" in out
 
     snapshot = load_active_snapshot(repo)
     p1, p2, p3, p4 = snapshot.phases
@@ -127,15 +127,70 @@ def test_check_names_what_to_redo(repo: Path) -> None:
     assert "P2 has evidence but no review" in check
 
 
-def test_superseded_properties_stop_gating_and_new_ones_start(repo: Path) -> None:
+def _reconfirm_p1(repo: Path) -> None:
+    _invoke(*ALIGN, "--status", "needs_user")
+    _say(repo, "yes, the new plan")
+    _invoke(*ALIGN, "--status", "passed")
+    _accept(repo, "P1")
+
+
+def test_later_phases_wait_for_the_user_to_reconfirm(repo: Path) -> None:
     _discovery_then_two_phases(repo)
     _invoke("assess", "revise", "--reason", "Different audience")
-    # The old auto property no longer gates P2's re-review...
-    assert run_gate(repo, "P2").verdict == GateVerdict.PASS
-    # ...a new one bound to a phase still ahead does.
-    _invoke("assess", "want", "Prints on one page", "--proof", "auto", "--phase", "P3")
+    # No rubber-stamping P2 on its old evidence before the user says yes again.
+    assert "waits until P1 is re-confirmed" in _fails("phase", "review", "P2")
+    assert "waits until P1 is re-confirmed" in _fails("phase", "accept", "P2")
+    # A want for the new framing can still target P2, since it isn't accepted.
+    _invoke("assess", "want", "Prints on one page", "--proof", "auto", "--phase", "P2")
+    _reconfirm_p1(repo)
     dp = next(w for w in load_active_snapshot(repo).desired_properties if w.status == "active")
-    assert dp.phase_id == "P3"
+    # The old property no longer gates P2; the new one does.
+    blocked = run_gate(repo, "P2")
+    assert blocked.verdict != GateVerdict.PASS and any(f.ref == dp.property_id for f in blocked.findings)
+
+
+def test_a_set_aside_property_cannot_be_revived_by_id(repo: Path) -> None:
+    _discovery_then_two_phases(repo)
+    user_dp = next(w for w in load_active_snapshot(repo).desired_properties if w.proof == "user")
+    _invoke("assess", "revise", "--reason", "Different audience")
+    out = _fails("assess", "want", user_dp.statement, "--id", user_dp.property_id)
+    assert "set aside when Discovery was revised" in out
+
+
+def test_an_earlier_unverified_close_stays_visible_after_a_revision(repo: Path) -> None:
+    _discovery_then_two_phases(repo)
+    _invoke("phase", "start", "P3")
+    _accept(repo, "P3")
+    user_dp = next(w for w in load_active_snapshot(repo).desired_properties if w.proof == "user")
+    _invoke("checkpoint", "record", "P4", user_dp.property_id, "--status", "needs_user")
+    _invoke("checkpoint", "record", "P4", user_dp.property_id, "--status", "passed", "--unverified")
+    _invoke("assess", "revise", "--reason", "Different audience")
+    assert "Not verified" in _invoke("check")
+
+
+def test_an_older_goals_cannot_silently_undo_a_revision(repo: Path) -> None:
+    # An older binary skips DISCOVERY_REVISED and could accept on stale reviews;
+    # replay ignores an accept that didn't pass review after the revision.
+    from goals.models import Event, EventType
+    from goals.storage import EventStore
+
+    _discovery_then_two_phases(repo)
+    _invoke("assess", "revise", "--reason", "Different audience")
+    snapshot = load_active_snapshot(repo)
+    store = EventStore(next((repo / ".agent-workflow" / "goals").iterdir()))
+    for phase_id in ("P1", "P2"):
+        store.append(Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_ACCEPTED, payload={"phase_id": phase_id}))
+    after = load_active_snapshot(repo)
+    assert after.phases[0].status == PhaseStatus.IN_PROGRESS
+    assert after.phases[1].status == PhaseStatus.NEEDS_REVIEW
+
+
+def test_a_revision_asks_for_a_yes_even_if_discovery_was_skipped(repo: Path) -> None:
+    _accept(repo, "P1")
+    _invoke("assess", "revise", "--reason", "Wrong problem")
+    alignment = next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.kind.value == "understanding")
+    assert alignment.status == CheckpointStatus.PENDING and alignment.required and alignment.user_owned
+    _fails("phase", "accept", "P1")
 
 
 def test_a_completed_goal_reopens(repo: Path) -> None:
@@ -154,4 +209,6 @@ def test_the_notes_keep_the_history(repo: Path) -> None:
     notes = next((repo / ".agent-workflow" / "goals").iterdir()) / "DISCOVERY.md"
     text = notes.read_text()
     assert "## Revisions" in text and "They want a paper log" in text
-    assert "Logging takes too many taps" not in text  # superseded, no longer current
+    current, set_aside = text.split("## Set aside by revisions")
+    assert "Logging takes too many taps" not in current  # no longer what hurts today...
+    assert "Logging takes too many taps" in set_aside  # ...but what was dropped is on record
