@@ -32,33 +32,155 @@ gate as an `understanding` `goals checkpoint`. A plain-file `DISCOVERY.md` next 
 the goal's dashboard captures the full picture. Discovery is skipped only for
 trivial, unambiguous goals.
 
+**Known gaps in the stand-in** (critique cycle 1): every "user" signal is a label
+the agent writes itself, and the agent can also `goals checkpoint waive` the
+alignment gate. The user's desired properties and open questions are exported
+verbatim to the committable `.goals/` spec. A `--by user` decision's `--why` is
+copied into global user memory, which other projects' dashboards display. On a
+custom loop with no `P3`, a `--depends --phase P3` assumption silently escapes
+every gate.
+
 The next step is to make pain points and desired outcome-properties **first-class
 durable state** rather than borrowing the assumption/breakdown/checkpoint models —
-so they get their own schema, events, and a dedicated dashboard view (today the
-dashboard lists the user's desired properties under "What the agent assumed").
+own records, events, gate rules, and dashboard view (today the dashboard lists the
+user's desired properties under "What the agent assumed").
 
-### Direction
+### Threat model
 
-- Make the alignment gate user-only. Today it runs on trust: the agent can record
-  `--status passed` itself, and nothing proves the user said yes. Options: a
-  confirm command only a person at the terminal can complete, or requiring
-  `passed` to cite (`--decision-ref`) a `--by user` decision.
-- Typed `PainPoint` and `DesiredProperty` records (plain-English, audience-framed)
-  with their own event types and storage.
-- A `goals discover` CLI surface to record/show them, and a dashboard "What you
-  want / What hurts today" view.
-- Link each desired property to the acceptance criteria that later prove it,
-  replacing today's stand-ins (a P3 load-bearing assumption or a P4 user
-  checkpoint), so "done" is measured against the *feel* the user asked for, not
-  just features.
-- Promote recurring desired-property patterns into goal-execution memory.
+The agent runs every `goals` command and can write every file, including the
+event log and the hook entry points, so nothing in-process can *prove* the user
+said yes. The target is an **over-eager agent that shortcuts**, not a hostile
+one: make the honest path the only easy path, make a shortcut take a deliberate
+forgery, and show the user the exact words that counted as their yes so they can
+catch one.
+
+### Build order
+
+Each step ships and meets its criteria before the next starts.
+
+1. **Forward-compatible event log** — ships at least one release before step 3
+   writes new event types.
+   - `EventStore.append` keeps lines it can't parse byte-for-byte. Today it
+     rewrites the log from parsed events, so an older CLI permanently deletes
+     event types it doesn't know.
+   - New concepts get new event types, never new values in existing enums
+     (`CheckpointKind`, `Assumption.status`) — an older CLI crashes on those.
+   - `assess assume --phase` must name a phase that exists, as checkpoints
+     already must.
+2. **User-confirmation provenance.**
+   - A Claude Code `UserPromptSubmit` hook records the user's own message
+     verbatim as a `USER_CONFIRMATION` event while a `needs_user` `understanding`
+     checkpoint is open.
+   - The engine refuses `passed` or `waive` on an `understanding` checkpoint
+     unless a `USER_CONFIRMATION` newer than its `needs_user` exists; the passing
+     record cites it.
+   - `goals check` and the dashboard show provenance: *"You said: '…'"* versus
+     *"Recorded by the agent — not verified."*
+   - Codex has no equivalent hook wired today, so it stays on the honest-agent
+     path, labelled "not verified", until it does.
+3. **Typed records.**
+   - `PainPoint` and `DesiredProperty` with stable ids (`PP-…`, `DP-…`) and
+     their own event types, recorded with `goals assess pain` and
+     `goals assess want`. Not a top-level `goals discover`: "discover" already
+     means skill discovery, and `/goals:discover` runs the whole flow.
+   - Each `DesiredProperty` carries `proof: auto | user` and a bound phase,
+     validated to exist. `auto`: the bound phase's review needs an engine-run
+     check whose `covers` is the `DP-` id — only `auto` counts, as for
+     load-bearing assumptions. `user`: the last phase (`phases[-1]`) can't be
+     accepted until a `USER_CONFIRMATION` for that property exists.
+   - The skill switches from stand-ins to these commands in the same release;
+     never dual-write. Goals already on stand-ins keep rendering as today — no
+     history rewrite.
+4. **Views and privacy.**
+   - A dashboard "What you want / What hurts today" section, replacing
+     properties-listed-as-assumptions.
+   - `DISCOVERY.md` is generated from the events, like the dashboard, instead
+     of hand-written.
+   - Pain points and desired properties stay out of the `.goals/` export (it's
+     an allowlist — keep them off it) and are never logged to user memory; the
+     Discovery approach decision is logged without its `--why` text.
+   - Memory promotion: only a desired property (never pain text) seen in two or
+     more goals, offered through the existing confirm-before-promote digest.
+5. **Re-framing mid-goal.**
+   - A `DISCOVERY_REVISED` event supersedes the prior properties, clears P1's
+     reviews (today `goals phase start P1` keeps a stale PASS), and flags
+     later accepted phases for re-review in `goals check`.
+
+### Decisions
+
+- Desired properties are **not** acceptance criteria. Criteria are frozen when a
+  goal starts and their ids are positional (`P3.C2`), and Discovery runs after
+  the start; properties are a separate gate input with stable ids. *(Supersedes
+  "link each desired property to the acceptance criteria that later prove it"
+  and closes the open question on automatic mapping.)*
+- A feel property is proven by the user's own words, not a `manual`
+  verification — those are agent-authored.
+- The user-only gate targets an over-eager agent (see Threat model). *(Supersedes
+  the options "a confirm command only a person at the terminal can complete" —
+  an agent can fake a TTY — and "`passed` must cite a `--by user` decision" —
+  `--by user` is a self-declared label.)*
+
+### Validation criteria
+
+P0 — block release:
+- [ ] (auto) An older CLI appending to a log that contains an unknown event
+  type leaves that line byte-identical.
+- [ ] (auto) `checkpoint record P1 alignment --status passed` and
+  `checkpoint waive P1 alignment` both fail while it is `needs_user` with no
+  newer `USER_CONFIRMATION`, and both succeed after one.
+- [ ] (auto) An `auto` property blocks its phase's review until an engine-run
+  check covering its `DP-` id passes; a `manual` verification covering it
+  doesn't count.
+- [ ] (auto) A `user` property blocks accepting `phases[-1]` on a custom
+  two-phase loop.
+- [ ] (auto) After recording pain points and properties, none of their text
+  appears in `.goals/goal-state.json`, `.goals/GOAL.md`, or
+  `~/.goals/user/observations.md`.
+
+P1:
+- [ ] (auto) `assess assume --depends --phase P9` on a four-phase goal errors.
+- [ ] (auto) A stand-in goal replays and renders with no duplicate entries in
+  the new view.
+- [ ] (auto) `DISCOVERY_REVISED` clears P1's reviews and flags accepted later
+  phases; `goals check` names what needs re-review.
+- [ ] (manual) A non-technical reader can tell from the dashboard alone what
+  they said yes to and whether that yes was verified.
+- [ ] (manual, Codex) The gate reads "not verified" rather than implying proof.
+
+P2:
+- [ ] (auto) `goals assess pain` and `goals assess want` exist; there is no
+  top-level `goals discover`.
+- [ ] (auto) The generated `DISCOVERY.md` matches the event log after each
+  Discovery command.
+
+Rollback signal: an event missing from `events.jsonl`, or a goal stuck in P1
+with the user's yes in chat but no `USER_CONFIRMATION` — turn off the engine
+refusal, keep the provenance labels, and investigate.
 
 ### Open Questions
 
-- Should desired properties become acceptance criteria automatically, or only
-  when the user confirms the mapping?
-- How is the alignment checkpoint reconciled if the user's understanding shifts
-  mid-goal — re-open phase one, or branch a new framing?
+- Does the `UserPromptSubmit` payload carry the user's text reliably enough to
+  record verbatim, and which checkpoint does a message answer when several are
+  open? Verify against the Claude Code hook docs before step 2.
+- What user-message hook, if any, does Codex expose?
+- Should a mid-goal revision (step 5) also send P2 (Inspect) back for review?
+
+### Critique cycle 1 (2026-09-26)
+
+Frame (from an independent agent): consent provenance (P0), gate semantics for
+properties (P0), event-schema evolution (P1), re-framing lifecycle (P1), privacy
+of free text (P1), single source of truth (P2). Excluded: performance and scale
+(small, local logs); cost and observability (no new services).
+
+Evidence, read from code: `storage.py:181-189` (append rewrites the log from
+parsed events), `criteria.py:14-24` (positional criterion ids), `runtime.py:196-223`
+(criteria frozen at `GOAL_CREATED`), `hooks/hooks.json` (only `SessionStart` and
+`Stop`), `cli.py:1529` (`--by` is self-declared), `cli.py:817-829` (waive has no
+guard), `portability.py:97-110` (breakdowns exported verbatim),
+`decision_workflows.py:92-117` (`--by user` writes global memory),
+`runtime.py:369-373` (an orphan assumption phase matches no gate).
+
+Criteria completeness: 7/10 — the hook payload and Codex parity are unverified.
 
 ## Capability gap management
 
