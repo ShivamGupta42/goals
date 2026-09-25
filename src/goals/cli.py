@@ -1598,7 +1598,7 @@ def decision_record(
     private: bool = typer.Option(
         False,
         "--private",
-        help="Keep --why on this goal only; don't copy it into your cross-project memory.",
+        help="Keep this decision on this goal only; don't copy it into your cross-project memory.",
     ),
 ) -> None:
     """Record a decision the user (or agent) made, building the judgement log.
@@ -1799,6 +1799,12 @@ def assess_want(
     property_id: Optional[str] = typer.Option(
         None, "--id", help="Reuse an id to reword an existing desired property."
     ),
+    remember: Optional[bool] = typer.Option(
+        None,
+        "--remember/--no-remember",
+        help="Once the user confirms Discovery, keep this in their memory across projects "
+        "(off by default; only for general, non-personal wants).",
+    ),
 ) -> None:
     """Record a desired property — how the result should feel — and how it's proven.
 
@@ -1862,6 +1868,7 @@ def assess_want(
             statement=statement,
             proof=chosen,
             phase_id=bound,
+            remember=remember if remember is not None else (prior.remember if prior else False),
             **({"property_id": property_id} if property_id else {}),
         )
         if chosen == "user":

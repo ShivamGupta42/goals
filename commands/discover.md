@@ -26,9 +26,10 @@ cheaper to fix a misunderstanding now than after it's built.
    `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    Keep private details (health, family, money, names) out of the breakdown (copied
-   into the committable `.goals/` spec) and the desired properties (remembered
-   in the user's memory once confirmed); pain points stay on this goal. Goals
-   writes `DISCOVERY.md` next to the goal's dashboard for you (kept out of git).
+   into the committable `.goals/` spec); pain points and desired properties stay on
+   this goal unless you `--remember` a general, non-personal want (then say so when
+   you ask for their yes). Goals writes `DISCOVERY.md` next to the goal's dashboard
+   for you (kept out of git).
 4. **Get an explicit yes before building.** Ask plainly: *"Here's what I
    understand and how I'd approach it — is this what you want to build?"* When the
    user confirms, flip the checkpoint to `passed` (Goals cites their recorded reply;

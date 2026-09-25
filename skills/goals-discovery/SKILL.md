@@ -84,9 +84,12 @@ last phase on its own.
 
 Pain points stay on this goal: they're never exported to the goal's `.goals/`
 spec or copied into the user's memory, so record them in the user's own words.
-Desired properties aren't exported either, but once the user confirms Discovery
-they're kept in the user's memory (so one that keeps coming back can become a
-standing preference, with their say-so) — word them without private details.
+Desired properties aren't exported or remembered either — unless you add
+`--remember` to a general, non-personal one (*"works offline,"* *"no setup"*):
+once the user confirms Discovery, that one is kept in their memory across
+projects, so one that keeps coming back can become a standing preference with
+their say-so. Never `--remember` anything personal, and tell the user which ones
+you'll remember when you ask for their yes.
 
 **3. Name what you do NOT understand — out loud.**
 This is the heart of Discovery. Instead of quietly assuming, list the gaps: the
@@ -156,7 +159,7 @@ goals decision record "How we'll approach <goal>" --choice "<the path they confi
 ```
 
 A `--by user` decision is also copied into the user's memory across all their
-projects; `--private` keeps its `--why` on this goal only.
+projects; `--private` keeps it on this goal only.
 
 Only the user's reply can close this checkpoint. The Goals hook records what they
 type while a checkpoint waits on them, and `--status passed` cites that reply —
@@ -200,9 +203,9 @@ project's commits. Don't edit it by hand — record through the commands above.
   — an automated check where one can fail, the user's judgement where only they
   can tell. A property recorded nowhere enforceable is a wish.
 - Keep private details out of open questions (`goals assess breakdown`, exported
-  to `.goals/`) and desired properties (kept in the user's memory once confirmed).
-  Pain points, `DISCOVERY.md`, checkpoint summaries, and a `--private` decision's
-  `--why` stay on this goal.
+  to `.goals/`), and `--remember` only general, non-personal wants. Pain points,
+  other desired properties, `DISCOVERY.md`, checkpoint summaries, and `--private`
+  decisions stay on this goal.
 - Plain English throughout — a non-technical user must be able to weigh the
   pros and cons and answer the alignment question without decoding jargon.
 - Do not start building until the alignment checkpoint is `passed`.

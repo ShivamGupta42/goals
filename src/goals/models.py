@@ -672,6 +672,9 @@ class DesiredProperty(BaseModel):
     phase_id: str
     status: Literal["active", "superseded"] = "active"
     recorded_at: str = Field(default_factory=utc_now)
+    # Opt-in: once the user confirms Discovery, a property marked remember is kept
+    # in their cross-project memory (so a recurring one can become a preference).
+    remember: bool = False
 
 
 class DiscoveryRevision(BaseModel):

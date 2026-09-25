@@ -73,10 +73,11 @@ def checkpoint_provenance(snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint) -
 
 
 def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
-    """Where a desired property's proof stands, in plain words."""
+    """Where a desired property's proof stands, in plain words addressed to the user."""
     phase = next((p for p in snapshot.phases if p.phase_id == wanted.phase_id), None)
     if phase is None:
-        return f"bound to {wanted.phase_id}, which this goal doesn't have"
+        return f"meant for step {wanted.phase_id}, which this goal doesn't have"
+    step = f"{phase.phase_id} ({phase.title})"
     if wanted.proof == "auto":
         verifications = phase.evidence.verifications if phase.evidence is not None else []
         proven = any(
@@ -84,18 +85,23 @@ def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
             for v in verifications
         )
         return (
-            f"proven by an automated check in {phase.phase_id}"
+            f"proven by an automated check in {step}"
             if proven
-            else f"to be proven by an automated check in {phase.phase_id}"
+            else f"to be proven by an automated check in {step}"
         )
     check = next((c for c in phase.checkpoints if c.checkpoint_id == wanted.property_id), None)
     if check is None:
-        return f"to be confirmed by you in {phase.phase_id}"
+        return f"you'll confirm this in {step}"
+    if check.unverified:
+        return "closed without a reply from you on record (not verified)"
     if check.status in COMPLETE_CHECKPOINT_STATUSES:
-        return checkpoint_provenance(snapshot, check) or f"closed in {phase.phase_id}"
+        message = user_message_by_id(snapshot, check.user_message_id)
+        said = f': "{_clip(message.text)}"' if message else ""
+        verb = "you said yes" if check.status == CheckpointStatus.PASSED else "you skipped this"
+        return verb + said
     if checkpoint_is_asked(check):
         return "waiting on your answer"
-    return f"you'll be asked in {phase.phase_id}, once there's something to try"
+    return f"you'll be asked in {step}, once there's something to try"
 
 
 def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
@@ -226,36 +232,48 @@ def record_checkpoint(
         asked_session=asked_session,
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
-    if closing and cited and kind == CheckpointKind.UNDERSTANDING:
+    newly_confirmed = (
+        status == CheckpointStatus.PASSED
+        and cited
+        and kind == CheckpointKind.UNDERSTANDING
+        and (existing is None or existing.status not in COMPLETE_CHECKPOINT_STATUSES)
+    )
+    if newly_confirmed:
         _remember_confirmed_properties(snapshot, phase_id)
     return checkpoint
 
 
 def _remember_confirmed_properties(snapshot: GoalSnapshot, phase_id: str) -> None:
-    """Once the user confirms Discovery on their own reply, remember what they want.
+    """When the user first says yes to Discovery, remember the wants marked to remember.
 
-    Each active desired property becomes an observation in the user's memory, so
-    one that recurs across goals is offered for promotion (with their say-so) in
-    the end-of-goal digest. Pain points are never remembered. Best-effort: a
-    memory problem never undoes the confirmation.
+    Only desired properties recorded with ``remember`` (opt-in: general, not
+    personal) become observations in the user's cross-project memory, once, so a
+    recurring one is offered for promotion in the end-of-goal digest with their
+    say-so. Pain points never are. Best-effort: a memory problem (unwritable
+    home, a sandbox) never undoes the confirmation.
     """
     if not snapshot.phases or phase_id != snapshot.phases[0].phase_id:
         return
-    from goals.user_memory import infer_area, record_observation
+    from goals.user_memory import infer_area, load_observations, record_observation
 
-    for wanted in snapshot.desired_properties:
-        if wanted.status != "active":
-            continue
-        try:
+    try:
+        already = {
+            obs.choice for obs in load_observations() if obs.goal_id == snapshot.goal_id
+        }
+        for wanted in snapshot.desired_properties:
+            if not wanted.remember or wanted.status != "active":
+                continue
+            if " ".join(wanted.statement.split()) in already:
+                continue  # remembered once per goal, however often it's confirmed
             record_observation(
                 goal_id=snapshot.goal_id,
                 choice=wanted.statement,
-                context="What good feels like (a desired property you confirmed)",
+                context="what you wanted in this goal",
                 area=infer_area(wanted.statement),
                 phase_id=phase_id,
             )
-        except GoalsError:
-            return
+    except (GoalsError, OSError):
+        return
 
 
 #: Env vars through which a host tells the agent's shell its session id. The

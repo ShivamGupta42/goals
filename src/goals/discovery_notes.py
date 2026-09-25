@@ -8,6 +8,8 @@ hand-written file untouched.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from goals.checkpoint_workflows import confirmation_lines, property_state
 from goals.models import GoalSnapshot
 from goals.storage import atomic_write_text
@@ -45,7 +47,7 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
     lines = [
         f"# Discovery — {snapshot.objective}",
         "",
-        "_Written by Goals from this goal's record; edits here are overwritten. Change it "
+        f"{GENERATED_MARKER}; edits here are overwritten. Change it "
         "with `goals assess pain`, `goals assess want`, `goals assess breakdown`, and "
         "`goals decision record`._",
         "",
@@ -73,12 +75,23 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
     return "\n".join(lines) + "\n"
 
 
-def refresh_discovery_notes(snapshot: GoalSnapshot) -> None:
+GENERATED_MARKER = "_Written by Goals from this goal's record"
+
+
+def refresh_discovery_notes(snapshot: GoalSnapshot, goal_dir: Path) -> None:
+    """Rewrite DISCOVERY.md in ``goal_dir`` (the goal's real state folder).
+
+    A hand-written DISCOVERY.md from before typed Discovery records is moved
+    aside to DISCOVERY.hand-written.md once, never overwritten.
+    """
     if not has_discovery_record(snapshot):
         return
-    from goals.projections import goal_dir_for_snapshot
-
-    atomic_write_text(goal_dir_for_snapshot(snapshot) / FILENAME, render_discovery_markdown(snapshot))
+    path = goal_dir / FILENAME
+    if path.exists() and GENERATED_MARKER not in path.read_text(encoding="utf-8"):
+        backup = goal_dir / "DISCOVERY.hand-written.md"
+        if not backup.exists():
+            path.rename(backup)
+    atomic_write_text(path, render_discovery_markdown(snapshot))
 
 
 def _bullets(items: list[str]) -> list[str]:

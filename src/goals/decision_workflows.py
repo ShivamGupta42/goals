@@ -99,10 +99,10 @@ def _record_user_judgement_signal(
     We store *what* was decided and the observable context (the question). We do
     NOT infer or fabricate a reason; the ``--why`` note is recorded only when the
     user actually supplies one, in their own words. The observation is scoped to
-    this goal and never becomes a standing preference on its own. ``private``
-    keeps the ``--why`` on this goal only: user memory is shared across projects.
+    this goal and never becomes a standing preference on its own. A ``private``
+    decision stays on this goal only: user memory is shared across projects.
     """
-    if record.decided_by != "user":
+    if record.decided_by != "user" or private:
         return ""
     try:
         record_observation(
@@ -113,7 +113,7 @@ def _record_user_judgement_signal(
             area=infer_area(record.question),
             choice=record.choice,
             context=record.question,
-            note="" if private else record.rationale,
+            note=record.rationale,
             reversible=record.reversible,
             phase_id=record.phase_id or "",
         )
