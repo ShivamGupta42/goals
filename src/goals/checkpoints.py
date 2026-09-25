@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 from goals.models import (
+    CheckpointKind,
     CheckpointStatus,
     CurrentCheckpointBrief,
     GoalSnapshot,
     Phase,
     PhaseCheckpoint,
     PhaseStatus,
+    UserMessage,
 )
 
 COMPLETE_CHECKPOINT_STATUSES = {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}
+# Kinds whose whole point is the user's answer: closing one needs their reply.
+USER_CHECKPOINT_KINDS = {
+    CheckpointKind.UNDERSTANDING,
+    CheckpointKind.HUMAN_VALIDATION,
+    CheckpointKind.APPROVAL,
+}
 
 
 def checkpoint_blocks_phase(checkpoint: PhaseCheckpoint) -> bool:
@@ -24,6 +32,32 @@ def checkpoint_waits_on_user(checkpoint: PhaseCheckpoint) -> bool:
     if not checkpoint_blocks_phase(checkpoint):
         return False
     return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
+
+
+def is_user_checkpoint(checkpoint: PhaseCheckpoint) -> bool:
+    """A checkpoint only the user can close: a user kind, or one waiting on them."""
+    return checkpoint.kind in USER_CHECKPOINT_KINDS or checkpoint_waits_on_user(checkpoint)
+
+
+def replies_since_asked(
+    snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint | None
+) -> list[UserMessage]:
+    """User messages recorded after this checkpoint was last put to the user.
+
+    A checkpoint counts as asked only while it waits on the user; its
+    ``updated_at`` is then the moment it was (re)asked. Anything else — never
+    asked, or asked and since changed — has no valid reply yet.
+    """
+    if checkpoint is None or not checkpoint_waits_on_user(checkpoint):
+        return []
+    return [m for m in snapshot.user_messages if m.recorded_at > checkpoint.updated_at]
+
+
+def user_message_by_id(snapshot: GoalSnapshot, message_id: str) -> UserMessage | None:
+    for message in snapshot.user_messages:
+        if message.message_id == message_id:
+            return message
+    return None
 
 
 def phase_checkpoint_blockers(phase: Phase) -> list[str]:

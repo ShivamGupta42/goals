@@ -9,7 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from goals.adapters import adapter_check
-from goals.agent_hooks import session_start_payload, stop_payload
+from goals.agent_hooks import record_user_prompt, session_start_payload, stop_payload
 from goals.architecture import (
     analyze_code_architecture,
     architecture_for_snapshot,
@@ -771,7 +771,9 @@ def checkpoint_record(
     phase_id: str,
     checkpoint_id: str,
     title: str = typer.Option("", "--title", help="Plain-language checkpoint title."),
-    kind: CheckpointKind = typer.Option(CheckpointKind.CUSTOM, "--kind", help="Checkpoint kind."),
+    kind: Optional[CheckpointKind] = typer.Option(
+        None, "--kind", help="Checkpoint kind (default: keep the recorded kind, else custom)."
+    ),
     status: CheckpointStatus = typer.Option(
         CheckpointStatus.PASSED, "--status", help="pending, passed, blocked, needs_user, or waived."
     ),
@@ -791,8 +793,22 @@ def checkpoint_record(
         None, "--decision-ref", help="Decision reference. Repeat for multiple refs."
     ),
     notes: str = typer.Option("", "--notes", help="What changed or why this checkpoint exists."),
+    user_message: Optional[str] = typer.Option(
+        None, "--user-message", help="Cite this recorded user reply (default: the latest one)."
+    ),
+    unverified: bool = typer.Option(
+        False,
+        "--unverified",
+        help="Close a user checkpoint with no recorded reply (hosts without the Goals hook). "
+        "Shown as not verified.",
+    ),
 ) -> None:
-    """Record or update a phase checkpoint."""
+    """Record or update a phase checkpoint.
+
+    Passing or waiving a user checkpoint (kind understanding, human_validation,
+    or approval, or one waiting on the user) needs the user's reply, recorded by
+    the Goals hook after it was asked — or --unverified, which is shown as such.
+    """
 
     def run():
         record_checkpoint_workflow(
@@ -808,6 +824,8 @@ def checkpoint_record(
             evidence_refs=evidence_refs,
             decision_refs=decision_refs,
             notes=notes,
+            user_message_id=user_message,
+            unverified=unverified,
         )
         typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id}")
 
@@ -819,11 +837,24 @@ def checkpoint_waive(
     phase_id: str,
     checkpoint_id: str,
     reason: str = typer.Option(..., "--reason", help="Why it is safe to waive this checkpoint."),
+    user_message: Optional[str] = typer.Option(
+        None, "--user-message", help="Cite this recorded user reply (default: the latest one)."
+    ),
+    unverified: bool = typer.Option(
+        False, "--unverified", help="Waive a user checkpoint with no recorded reply (not verified)."
+    ),
 ) -> None:
     """Waive an existing required checkpoint with a reason."""
 
     def run():
-        waive_checkpoint_workflow(Path.cwd(), phase_id, checkpoint_id, reason)
+        waive_checkpoint_workflow(
+            Path.cwd(),
+            phase_id,
+            checkpoint_id,
+            reason,
+            user_message_id=user_message,
+            unverified=unverified,
+        )
         typer.echo(f"Waived checkpoint {checkpoint_id} for {phase_id}")
 
     _handle(run)
@@ -2306,29 +2337,49 @@ def hooks_stop() -> None:
     typer.echo(stop_payload(Path.cwd(), transcript_path=transcript_path), nl=False)
 
 
-def _hook_stdin_value(key: str) -> str | None:
-    """Pull one string field from the hook's JSON stdin payload, fail-open.
+@hooks_app.command("user-prompt")
+def hooks_user_prompt() -> None:
+    """Record the user's typed reply while a goal waits on them (UserPromptSubmit hook).
 
-    Claude Code pipes the Stop hook a JSON object (with ``transcript_path`` and
-    friends). Anything unexpected — no stdin, a tty, blank input, malformed JSON,
-    a non-string value — degrades to ``None`` so the hook never crashes the
-    session over its own input.
+    Silent and fail-open: it never prints (stdout would be injected into the
+    conversation) and never blocks the prompt.
+    """
+    try:
+        payload = _hook_stdin_payload()
+        prompt = payload.get("prompt")
+        cwd = payload.get("cwd")
+        if isinstance(prompt, str):
+            record_user_prompt(Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd(), prompt)
+    except Exception:  # noqa: BLE001 - a hook must never break the user's prompt
+        return
+
+
+def _hook_stdin_payload() -> dict:
+    """Read the hook's JSON stdin payload, fail-open.
+
+    Claude Code pipes hooks a JSON object (``prompt``, ``cwd``, ``transcript_path``
+    and friends). Anything unexpected — no stdin, a tty, blank input, malformed
+    JSON, a non-object — degrades to ``{}`` so a hook never crashes the session
+    over its own input.
     """
     try:
         if sys.stdin.isatty():
-            return None
+            return {}
         raw = sys.stdin.read()
     except Exception:  # noqa: BLE001 - a hook must not crash on stdin
-        return None
+        return {}
     if not raw.strip():
-        return None
+        return {}
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    value = data.get(key)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _hook_stdin_value(key: str) -> str | None:
+    """Pull one string field from the hook's JSON stdin payload, fail-open."""
+    value = _hook_stdin_payload().get(key)
     return value if isinstance(value, str) else None
 
 

@@ -29,6 +29,7 @@ from goals.models import (
     ProblemBreakdown,
     SourceClaim,
     SourceRecord,
+    UserMessage,
 )
 
 
@@ -313,6 +314,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 _drop_unknown_fields(payload["breakdown"], ProblemBreakdown)
             )
             _upsert_breakdown(snapshot.breakdowns, breakdown)
+        elif event.event_type == EventType.USER_MESSAGE_RECORDED:
+            message = UserMessage.model_validate(
+                _drop_unknown_fields(payload["message"], UserMessage)
+            )
+            if all(m.message_id != message.message_id for m in snapshot.user_messages):
+                snapshot.user_messages.append(message)
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(
                 _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)

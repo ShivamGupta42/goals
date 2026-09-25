@@ -13,6 +13,13 @@
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-bootstrap.sh hooks stop" }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-bootstrap.sh hooks user-prompt" }
+        ]
+      }
     ]
   }
 }

@@ -89,6 +89,7 @@ class EventType(StrEnum):
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     TOOL_HEALTH_RECORDED = "tool_health_recorded"
+    USER_MESSAGE_RECORDED = "user_message_recorded"
 
 
 class Event(BaseModel):
@@ -138,6 +139,10 @@ class PhaseCheckpoint(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
     notes: str = ""
+    # How a user checkpoint was closed: the recorded reply it cites, or an
+    # explicit agent claim with no recorded reply (shown as "not verified").
+    user_message_id: str = ""
+    unverified: bool = False
 
 
 class PhaseProtocol(BaseModel):
@@ -605,6 +610,23 @@ class Subproblem(BaseModel):
     assumption_ids: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     audience_notes: dict[str, str] = Field(default_factory=dict)
+
+
+class UserMessage(BaseModel):
+    """The user's own typed message, recorded by a host hook while a goal waits on them.
+
+    Only the host (e.g. Claude Code's UserPromptSubmit hook) writes these — the
+    agent never authors one through a normal command — so a checkpoint that cites
+    one shows the user's actual words instead of the agent's claim that they
+    agreed. Recorded verbatim (truncated) and kept local: never exported.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: str = Field(default_factory=lambda: f"UM-{uuid4().hex[:8]}")
+    text: str
+    recorded_at: str = Field(default_factory=utc_now)
+    source: str = "user-prompt-hook"
 
 
 class ProblemBreakdown(BaseModel):
@@ -1122,6 +1144,7 @@ class GoalSnapshot(BaseModel):
     judgements: list[JudgementRecord] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
     breakdowns: list[ProblemBreakdown] = Field(default_factory=list)
+    user_messages: list[UserMessage] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

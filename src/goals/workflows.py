@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from goals.checkpoint_workflows import confirmation_lines
 from goals.health import GoalHealthReport, build_goal_health
 from goals.loop_builder import load_design, profile_root_for_loop_path, to_snapshot
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
@@ -270,6 +271,7 @@ def render_check_workflow(report: WorkflowCheck) -> str:
             ],
             empty="Nothing important is waiting on the user.",
         ),
+        *_confirmation_section(report.snapshot),
         "",
         "## Agent Can Do",
         _bullets(
@@ -350,6 +352,13 @@ def _bullets(items: list[str], *, empty: str) -> str:
     if not items:
         return f"- {empty}"
     return "\n".join(f"- {item}" for item in items)
+
+
+def _confirmation_section(snapshot: GoalSnapshot) -> list[str]:
+    lines = confirmation_lines(snapshot)
+    if not lines:
+        return []
+    return ["", "## What You Confirmed", _bullets(lines, empty="")]
 
 
 def _issue_lines(report: GoalIssueReport) -> list[str]:

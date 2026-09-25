@@ -4,6 +4,7 @@ Examples here are deliberately generic (a trivial check that exits 0/1). The gat
 encodes no domain knowledge — only that proof was *run*, not asserted.
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -426,6 +427,8 @@ def test_answered_user_checkpoint_does_not_leave_goal_waiting_on_user(
     assert run_gate(repo, "P1").verdict == GateVerdict.NEEDS_HUMAN
     assert "Waiting on: you" in runner.invoke(app, ["check"]).stdout
 
+    reply = json.dumps({"prompt": "yes", "cwd": str(repo)})
+    assert runner.invoke(app, ["hooks", "user-prompt"], input=reply).exit_code == 0
     assert runner.invoke(app, [*record, "--status", "passed"]).exit_code == 0
     checked = runner.invoke(app, ["check"]).stdout
     assert "Waiting on: you" not in checked

@@ -30,7 +30,8 @@ cheaper to fix a misunderstanding now than after it's built.
    the goal's dashboard (`.agent-workflow/goals/<goal>/`, kept out of git).
 4. **Get an explicit yes before building.** Ask plainly: *"Here's what I
    understand and how I'd approach it — is this what you want to build?"* When the
-   user confirms, flip the checkpoint to `passed`, record their choice with
+   user confirms, flip the checkpoint to `passed` (Goals cites their recorded reply;
+   `--unverified` only on a host without the Goals hook), record their choice with
    `goals decision record --by user`, and continue to Assess. If they
    correct you, fold it in and re-ask — a "no" here is the most valuable feedback
    in the whole run.

@@ -13,6 +13,7 @@ from goals.architecture import (
 from goals.audit import build_phase_lineage
 from goals.brief import build_goal_brief
 from goals.capabilities import analyze_capabilities
+from goals.checkpoint_workflows import confirmation_lines
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
@@ -102,6 +103,7 @@ def render_dashboard(
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
+    confirmations_section = _confirmations_html(snapshot)
     journey_section = _journey_html(snapshot)
     decisions_section = _decisions_section_html(snapshot)
     memory_section = _memory_section_html(user_memory)
@@ -348,6 +350,7 @@ def render_dashboard(
     <h3 class="subsec">The steps</h3>
     <p class="secap">The goal broken into stages. Each one must show proof it works before it counts as done.</p>
     <ul class="steps">{steps}</ul>
+    {confirmations_section}
     {journey_section}
     {decisions_section}
     {memory_section}
@@ -555,6 +558,23 @@ def _waiting_label(value: str) -> str:
         "agent": "Agent",
         "no one": "No one",
     }.get(str(value), str(value))
+
+
+def _confirmations_html(snapshot: GoalSnapshot) -> str:
+    """What the user confirmed, and on whose word: their recorded reply, or the
+    agent's unverified claim. Hidden until a user checkpoint has been closed."""
+    lines = confirmation_lines(snapshot)
+    if not lines:
+        return ""
+    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+    return (
+        '<section aria-label="What you confirmed">'
+        '<h3 class="subsec">What you confirmed</h3>'
+        '<p class="secap">Each answer only you can give, with the words that counted as your '
+        "answer — or a note that the agent closed it without a recorded reply.</p>"
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
 
 
 def _journey_html(snapshot: GoalSnapshot) -> str:

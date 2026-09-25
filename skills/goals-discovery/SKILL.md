@@ -154,6 +154,11 @@ goals decision record "How we'll approach <goal>" --choice "<the path they confi
 A `--by user` decision is also copied into the user's memory across all their
 projects, so keep private details out of its `--why`.
 
+Only the user's reply can close this checkpoint. The Goals hook records what they
+type while a checkpoint waits on them, and `--status passed` cites that reply —
+it's refused if they haven't answered since you asked. On a host without the
+hook, add `--unverified`: it closes, and every view says it wasn't verified.
+
 If they correct you, fold the correction back in (steps 2–5) and re-ask. A "no"
 here is the cheapest, most valuable feedback in the whole run.
 

@@ -8,6 +8,9 @@ second code path.
 - **SessionStart** → inject the active goal's context (silent no-op if none).
 - **Stop** (opt-in) → block stopping while the current phase still needs the
   agent, so the loop doesn't end mid-phase. Off unless ``GOALS_ENFORCE`` is set.
+- **UserPromptSubmit** → record the user's own typed words in every goal that is
+  waiting on them, so a user checkpoint can cite the actual reply instead of the
+  agent's claim that they agreed. Silent; never blocks the prompt.
 """
 
 from __future__ import annotations
@@ -17,17 +20,23 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.models import GateVerdict, GoalStatus, Phase
+from goals.checkpoints import checkpoint_waits_on_user
+from goals.git_ops import find_git_root, goal_worktrees
+from goals.models import Event, EventType, GateVerdict, GoalStatus, Phase, UserMessage
 from goals.portability import render_context_block
 from goals.runtime import (
     MAX_PHASE_ATTEMPTS_ENV,
     load_active_snapshot,
     resolve_max_phase_attempts,
 )
+from goals.storage import EventStore
 from goals.token_budget import transcript_token_usage
 
 #: Re-exported so callers/tests can reach the cap env var via agent_hooks.
 MAX_ATTEMPTS_ENV = MAX_PHASE_ATTEMPTS_ENV
+
+#: Longest user message kept verbatim; anything past it is clipped.
+MAX_USER_MESSAGE_CHARS = 2000
 
 #: Env var that turns the Stop gate on. Off by default so it never nags.
 ENFORCE_ENV = "GOALS_ENFORCE"
@@ -198,3 +207,64 @@ def _max_tokens() -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value >= 1 else None
+
+
+def record_user_prompt(cwd: Path, prompt: str) -> int:
+    """UserPromptSubmit backend: record the user's words where a goal waits on them.
+
+    Looks at every goal in this repo and its goal worktrees (the session usually
+    runs in the base checkout while the goal lives in a worktree) and appends a
+    ``USER_MESSAGE_RECORDED`` event to each goal with a checkpoint waiting on the
+    user. Nothing is recorded otherwise, so ordinary chat never lands in a goal.
+    Returns how many goals recorded it.
+    """
+    text = prompt.strip()
+    if not text:
+        return 0
+    if len(text) > MAX_USER_MESSAGE_CHARS:
+        text = text[: MAX_USER_MESSAGE_CHARS - 1] + "…"
+    recorded = 0
+    for goal_dir in _candidate_goal_dirs(cwd):
+        store = EventStore(goal_dir)
+        try:
+            snapshot = store.snapshot()
+        except Exception:  # noqa: BLE001 - one unreadable goal must not stop the rest
+            continue
+        waiting = any(
+            checkpoint_waits_on_user(checkpoint)
+            for phase in snapshot.phases
+            for checkpoint in phase.checkpoints
+        )
+        if not waiting:
+            continue
+        store.append(
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.USER_MESSAGE_RECORDED,
+                actor="user-prompt-hook",
+                payload={"message": UserMessage(text=text).model_dump()},
+            )
+        )
+        recorded += 1
+    return recorded
+
+
+def _candidate_goal_dirs(cwd: Path) -> list[Path]:
+    repo = find_git_root(cwd) or cwd.resolve()
+    roots = [repo]
+    try:
+        roots.extend(goal_worktrees(repo))
+    except Exception:  # noqa: BLE001 - not a git repo, or git unavailable
+        pass
+    seen: set[Path] = set()
+    found: list[Path] = []
+    for root in roots:
+        goals_dir = root / ".agent-workflow" / "goals"
+        if not goals_dir.is_dir():
+            continue
+        for child in sorted(goals_dir.iterdir()):
+            key = child.resolve()
+            if (child / "goal.json").exists() and key not in seen:
+                seen.add(key)
+                found.append(child)
+    return found
