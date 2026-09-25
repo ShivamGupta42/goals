@@ -65,6 +65,50 @@ def test_load_tolerates_legacy_state(tmp_path: Path) -> None:
     assert loaded.event_count == 1
 
 
+def test_append_keeps_lines_from_a_newer_goals_byte_for_byte(tmp_path: Path) -> None:
+    """An older Goals appending to a newer log must not delete what it can't read."""
+    snapshot = GoalSnapshot(
+        goal_id="fwd",
+        objective="Forward compat",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/fwd"
+        ),
+        phases=default_phases("Forward compat"),
+        current_phase="P1",
+    )
+    created = Event(
+        goal_id="fwd", event_type=EventType.GOAL_CREATED, payload={"snapshot": snapshot.model_dump()}
+    )
+    future_type = json.dumps(
+        {
+            "event_id": "evt-future",
+            "goal_id": "fwd",
+            "event_type": "desired_property_recorded",  # not known to this version
+            "payload": {"property": {"property_id": "DP-1"}},
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    future_field = Event(
+        goal_id="fwd", event_type=EventType.PHASE_STARTED, payload={"phase_id": "P1"}
+    ).model_dump(mode="json")
+    future_field["added_by_newer_goals"] = {"keep": True}
+    future_field_line = json.dumps(future_field)
+    goal_dir = tmp_path / "goal"
+    goal_dir.mkdir()
+    events_path = goal_dir / "events.jsonl"
+    # No trailing newline: the append must still start on its own line.
+    events_path.write_text("\n".join([created.model_dump_json(), future_type, future_field_line]))
+
+    store = EventStore(goal_dir)
+    store.append(Event(goal_id="fwd", event_type=EventType.PHASE_STARTED, payload={"phase_id": "P1"}))
+
+    lines = events_path.read_text().splitlines()
+    assert lines[:3] == [created.model_dump_json(), future_type, future_field_line]
+    assert len(lines) == 4
+    assert json.loads(lines[3])["event_type"] == "phase_started"
+    assert store.snapshot().event_count == 3  # the unknown type is still skipped on replay
+
+
 def test_genuinely_corrupt_event_still_raises(tmp_path: Path) -> None:
     from goals.storage import GoalsError
 
