@@ -16,16 +16,20 @@ cheaper to fix a misunderstanding now than after it's built.
    outcome, **name what you don't yet understand** instead of assuming it, reflect
    their goal back in plain English, then lay out the approach with **honest
    pros/cons a non-technical person can weigh** (including doing nothing).
-3. Capture it durably as you go: desired properties via `goals assess assume`
-   (plain — not `--depends` at phase one; a "feel" property can't be falsified
-   until it's built), the rephrased problem and open unknowns via
-   `goals assess breakdown`, the approach via `goals decision record`, and the
-   alignment question as an `understanding` checkpoint that needs the user
+3. Capture it durably as you go, exactly as SKILL.md shows: each desired property
+   where the run is held to it (measurable → `goals assess assume --depends --phase P3`;
+   a feel only the user can judge → a pending P4 `human_validation` checkpoint — never
+   `--depends` on P1, where nothing is built to check yet), the rephrased problem and
+   open unknowns as open questions via `goals assess breakdown`, your recommended
+   approach via `goals decision record --by agent`, and the alignment question as an
+   `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
-   Write `DISCOVERY.md` in the goal worktree.
+   Write `DISCOVERY.md` next to the goal's dashboard
+   (`.agent-workflow/goals/<goal>/`, kept out of git).
 4. **Get an explicit yes before building.** Ask plainly: *"Here's what I
    understand and how I'd approach it — is this what you want to build?"* When the
-   user confirms, flip the checkpoint to `passed` and continue to Assess. If they
+   user confirms, flip the checkpoint to `passed`, record their choice with
+   `goals decision record --by user`, and continue to Assess. If they
    correct you, fold it in and re-ask — a "no" here is the most valuable feedback
    in the whole run.
 

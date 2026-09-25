@@ -14,11 +14,12 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    features), draw out the **properties and feel** of a good outcome, and **name
    what you don't yet understand** instead of assuming it. Reflect their goal back
    in plain English, lay out the approach with **honest pros/cons a non-technical
-   person can weigh** (`goals decision record`), and record the alignment question
-   as an `understanding` checkpoint that needs the user
+   person can weigh** (`goals decision record --by agent`), and record the alignment
+   question as an `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    **Don't build until the user confirms "yes, this is what I want."** Write
-   `DISCOVERY.md`. Skip only if the goal is trivial and unambiguous.
+   `DISCOVERY.md` next to the goal's dashboard. Skip only if the goal is trivial
+   and unambiguous.
 3. **Pause + Assess the goal** (PACERS — see `/goals-problem-solving`).
    Rephrase "$ARGUMENTS" into a specific, testable problem; ask *why* until it
    simplifies to the root. (Phases follow a fixed arc — Confirm → Inspect →

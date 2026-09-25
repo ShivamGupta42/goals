@@ -22,24 +22,35 @@ user before building — ships today as the `goals-discovery` skill and the
 `/goals:discover` command, wired into `/goals:create` ahead of Assess. It drives
 the dialogue (start from pain and the desired *feel*, name the unknowns, weigh the
 approach in plain pros/cons) and records its output through existing durable
-surfaces: desired properties as plain `goals assess assume` entries, the
-rephrased problem and open unknowns via `goals assess breakdown`, the approach via
-`goals decision record`, and the alignment gate as an `understanding`
-`goals checkpoint`. A plain-file `DISCOVERY.md` captures the full picture.
+surfaces: each desired property where the run is held to it (a measurable one as a
+load-bearing `goals assess assume` on the build phase, so its review needs an
+automated falsifier; a feel only the user can judge as a pending
+`human_validation` checkpoint on the last phase), the rephrased problem and open
+unknowns via `goals assess breakdown`, the approach via `goals decision record`
+(`--by agent` as a recommendation, `--by user` once confirmed), and the alignment
+gate as an `understanding` `goals checkpoint`. A plain-file `DISCOVERY.md` next to
+the goal's dashboard captures the full picture. Discovery is skipped only for
+trivial, unambiguous goals.
 
 The next step is to make pain points and desired outcome-properties **first-class
-durable state** rather than borrowing the assumption/breakdown models — so they
-get their own schema, events, and a dedicated dashboard view, and the build can
-later prove each desired property the way it proves acceptance criteria.
+durable state** rather than borrowing the assumption/breakdown/checkpoint models —
+so they get their own schema, events, and a dedicated dashboard view (today the
+dashboard lists the user's desired properties under "What the agent assumed").
 
 ### Direction
 
+- Make the alignment gate user-only. Today it runs on trust: the agent can record
+  `--status passed` itself, and nothing proves the user said yes. Options: a
+  confirm command only a person at the terminal can complete, or requiring
+  `passed` to cite (`--decision-ref`) a `--by user` decision.
 - Typed `PainPoint` and `DesiredProperty` records (plain-English, audience-framed)
   with their own event types and storage.
 - A `goals discover` CLI surface to record/show them, and a dashboard "What you
   want / What hurts today" view.
-- Link each desired property to the acceptance criteria that later prove it, so
-  "done" is measured against the *feel* the user asked for, not just features.
+- Link each desired property to the acceptance criteria that later prove it,
+  replacing today's stand-ins (a P3 load-bearing assumption or a P4 user
+  checkpoint), so "done" is measured against the *feel* the user asked for, not
+  just features.
 - Promote recurring desired-property patterns into goal-execution memory.
 
 ### Open Questions
@@ -48,8 +59,6 @@ later prove each desired property the way it proves acceptance criteria.
   when the user confirms the mapping?
 - How is the alignment checkpoint reconciled if the user's understanding shifts
   mid-goal — re-open phase one, or branch a new framing?
-- How much of Discovery should be required vs. skippable for technical users who
-  already know exactly what they want?
 
 ## Capability gap management
 
