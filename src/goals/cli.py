@@ -1594,6 +1594,11 @@ def decision_record(
         None, "--profile-claim", help="User-memory claim id used for this decision."
     ),
     confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
+    private: bool = typer.Option(
+        False,
+        "--private",
+        help="Keep --why on this goal only; don't copy it into your cross-project memory.",
+    ),
 ) -> None:
     """Record a decision the user (or agent) made, building the judgement log.
 
@@ -1614,6 +1619,7 @@ def decision_record(
             evidence_refs=evidence or [],
             profile_claim_ids=profile_claim or [],
             confidence=confidence,
+            private=private,
         )
         if report.warning:
             typer.echo(report.warning, err=True)

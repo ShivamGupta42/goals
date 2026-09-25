@@ -58,6 +58,7 @@ def record_decision(
     evidence_refs: list[str] | None = None,
     profile_claim_ids: list[str] | None = None,
     confidence: float = 0.0,
+    private: bool = False,
 ) -> DecisionRecordReport:
     snapshot = load_active_snapshot(cwd)
     record = JudgementRecord(
@@ -79,7 +80,7 @@ def record_decision(
             payload={"judgement": record.model_dump()},
         ),
     )
-    warning = _record_user_judgement_signal(snapshot.goal_id, record)
+    warning = _record_user_judgement_signal(snapshot.goal_id, record, private=private)
     return DecisionRecordReport(record=record, warning=warning)
 
 
@@ -90,13 +91,16 @@ def decision_brief_workflow(
     return build_decision_brief(load_active_snapshot(cwd), personalization)
 
 
-def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
+def _record_user_judgement_signal(
+    goal_id: str, record: JudgementRecord, *, private: bool = False
+) -> str:
     """Log the user's decision as a situated observation — context, not cause.
 
     We store *what* was decided and the observable context (the question). We do
     NOT infer or fabricate a reason; the ``--why`` note is recorded only when the
     user actually supplies one, in their own words. The observation is scoped to
-    this goal and never becomes a standing preference on its own.
+    this goal and never becomes a standing preference on its own. ``private``
+    keeps the ``--why`` on this goal only: user memory is shared across projects.
     """
     if record.decided_by != "user":
         return ""
@@ -109,7 +113,7 @@ def _record_user_judgement_signal(goal_id: str, record: JudgementRecord) -> str:
             area=infer_area(record.question),
             choice=record.choice,
             context=record.question,
-            note=record.rationale,
+            note="" if private else record.rationale,
             reversible=record.reversible,
             phase_id=record.phase_id or "",
         )

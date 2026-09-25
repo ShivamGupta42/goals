@@ -39,10 +39,12 @@ def test_alignment_checkpoint_states_status_and_gates_on_the_user() -> None:
         )
 
 
-def test_discovery_decisions_state_who_decided() -> None:
+def test_discovery_decisions_state_who_decided_and_where() -> None:
+    # --phase P1 is how DISCOVERY.md finds the approach decisions.
     for path in DISCOVERY_DOCS:
         for command in _commands(path, "goals decision record"):
             assert "--by " in command, f"{path.name}: decision record omits --by: {command}"
+            assert "--phase P1" in command, f"{path.name}: decision record omits --phase P1: {command}"
 
 
 def test_discovery_never_puts_a_load_bearing_assumption_on_confirm() -> None:

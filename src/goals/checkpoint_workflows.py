@@ -15,6 +15,7 @@ from goals.checkpoints import (
 )
 from goals.models import (
     CheckpointKind,
+    DesiredProperty,
     CheckpointStatus,
     CurrentCheckpointBrief,
     Event,
@@ -69,6 +70,32 @@ def checkpoint_provenance(snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint) -
     if checkpoint.unverified:
         return "Not verified: closed without a recorded reply from the user."
     return ""
+
+
+def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
+    """Where a desired property's proof stands, in plain words."""
+    phase = next((p for p in snapshot.phases if p.phase_id == wanted.phase_id), None)
+    if phase is None:
+        return f"bound to {wanted.phase_id}, which this goal doesn't have"
+    if wanted.proof == "auto":
+        verifications = phase.evidence.verifications if phase.evidence is not None else []
+        proven = any(
+            v.covers.strip() == wanted.property_id and v.kind == "auto" and v.ran and v.passed
+            for v in verifications
+        )
+        return (
+            f"proven by an automated check in {phase.phase_id}"
+            if proven
+            else f"to be proven by an automated check in {phase.phase_id}"
+        )
+    check = next((c for c in phase.checkpoints if c.checkpoint_id == wanted.property_id), None)
+    if check is None:
+        return f"to be confirmed by you in {phase.phase_id}"
+    if check.status in COMPLETE_CHECKPOINT_STATUSES:
+        return checkpoint_provenance(snapshot, check) or f"closed in {phase.phase_id}"
+    if checkpoint_is_asked(check):
+        return "waiting on your answer"
+    return f"you'll be asked in {phase.phase_id}, once there's something to try"
 
 
 def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
@@ -194,7 +221,36 @@ def record_checkpoint(
         asked_session=asked_session,
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
+    if closing and cited and kind == CheckpointKind.UNDERSTANDING:
+        _remember_confirmed_properties(snapshot, phase_id)
     return checkpoint
+
+
+def _remember_confirmed_properties(snapshot: GoalSnapshot, phase_id: str) -> None:
+    """Once the user confirms Discovery on their own reply, remember what they want.
+
+    Each active desired property becomes an observation in the user's memory, so
+    one that recurs across goals is offered for promotion (with their say-so) in
+    the end-of-goal digest. Pain points are never remembered. Best-effort: a
+    memory problem never undoes the confirmation.
+    """
+    if not snapshot.phases or phase_id != snapshot.phases[0].phase_id:
+        return
+    from goals.user_memory import infer_area, record_observation
+
+    for wanted in snapshot.desired_properties:
+        if wanted.status != "active":
+            continue
+        try:
+            record_observation(
+                goal_id=snapshot.goal_id,
+                choice=wanted.statement,
+                context="What good feels like (a desired property you confirmed)",
+                area=infer_area(wanted.statement),
+                phase_id=phase_id,
+            )
+        except GoalsError:
+            return
 
 
 #: Env vars through which a host tells the agent's shell its session id. The

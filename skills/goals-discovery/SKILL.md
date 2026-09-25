@@ -82,9 +82,11 @@ goal runs a custom loop, use its build phase for `--proof auto` (the dashboard
 lists the phases; an unknown phase id is rejected) — `--proof user` finds the
 last phase on its own.
 
-Pain points and desired properties stay on this machine: they're never exported
-to the goal's `.goals/` spec or copied into the user's memory, so record them in
-the user's own words.
+Pain points stay on this goal: they're never exported to the goal's `.goals/`
+spec or copied into the user's memory, so record them in the user's own words.
+Desired properties aren't exported either, but once the user confirms Discovery
+they're kept in the user's memory (so one that keeps coming back can become a
+standing preference, with their say-so) — word them without private details.
 
 **3. Name what you do NOT understand — out loud.**
 This is the heart of Discovery. Instead of quietly assuming, list the gaps: the
@@ -125,7 +127,7 @@ in the same breath. Record your recommendation so the reasoning is on the
 dashboard:
 
 ```bash
-goals decision record "How we'll approach <goal>" --choice "<the path>" --by agent \
+goals decision record "How we'll approach <goal>" --choice "<the path>" --by agent --phase P1 \
   --why "<plain reason it best fits their pain + desired feel>"
 ```
 
@@ -150,11 +152,11 @@ proceed to Assess:
 goals checkpoint record P1 alignment --kind understanding --status passed \
   --summary "User confirmed: <what they agreed to>"
 goals decision record "How we'll approach <goal>" --choice "<the path they confirmed>" \
-  --by user --why "<their reason, minus private details>"
+  --by user --phase P1 --private --why "<their reason, in their words>"
 ```
 
 A `--by user` decision is also copied into the user's memory across all their
-projects, so keep private details out of its `--why`.
+projects; `--private` keeps its `--why` on this goal only.
 
 Only the user's reply can close this checkpoint. The Goals hook records what they
 type while a checkpoint waits on them, and `--status passed` cites that reply —
@@ -168,20 +170,15 @@ Don't run `goals phase review P1` while this checkpoint is waiting: all it can
 return is "needs you", and each review counts toward the phase's attempt cap.
 Record P1's evidence and review after the yes.
 
-## Write `DISCOVERY.md`
+## `DISCOVERY.md`
 
-Leave a plain-file record next to the goal's dashboard, at
+Goals writes it for you, next to the goal's dashboard at
 `.agent-workflow/goals/<goal>/DISCOVERY.md` (the folder `goals check` prints as
-*Dashboard*) — yours to read and edit. That folder stays out of git, so the notes
-never land in the project's commits, and each goal keeps its own. Five short
-sections:
-
-- **What hurts today** — the pain points and friction, in the user's words.
-- **What good feels like** — the desired properties of the outcome (not features).
-- **What I don't understand yet** — the open questions, honestly listed.
-- **How I'd approach it** — the options with plain-English pros and cons.
-- **What the user confirmed** — exactly what they said yes to (and any "no"s that
-  reshaped the plan).
+*Dashboard*), and rewrites it whenever the goal changes: what hurts today, what
+good feels like (and where each property's proof stands), what's not understood
+yet, how you'll approach it (the `--phase P1` decisions), and what the user
+confirmed, in their words. That folder stays out of git, so it never lands in the
+project's commits. Don't edit it by hand — record through the commands above.
 
 ## Quality bar
 
@@ -192,9 +189,9 @@ sections:
   — an automated check where one can fail, the user's judgement where only they
   can tell. A property recorded nowhere enforceable is a wish.
 - Keep private details out of open questions (`goals assess breakdown`, exported
-  to `.goals/`) and the `--why` of a `--by user` decision (copied into the user's
-  memory). Pain points, desired properties, `DISCOVERY.md`, and checkpoint
-  summaries stay local.
+  to `.goals/`) and desired properties (kept in the user's memory once confirmed).
+  Pain points, `DISCOVERY.md`, checkpoint summaries, and a `--private` decision's
+  `--why` stay on this goal.
 - Plain English throughout — a non-technical user must be able to weigh the
   pros and cons and answer the alignment question without decoding jargon.
 - Do not start building until the alignment checkpoint is `passed`.

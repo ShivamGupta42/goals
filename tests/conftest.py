@@ -13,3 +13,13 @@ def _no_host_session(monkeypatch) -> None:
     """
     for name in HOST_SESSION_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _private_goals_home(tmp_path_factory, monkeypatch) -> None:
+    """Never write the real ~/.goals user memory from a test.
+
+    Tests that care about the location set GOALS_HOME themselves (monkeypatch
+    applies theirs after this one).
+    """
+    monkeypatch.setenv("GOALS_HOME", str(tmp_path_factory.mktemp("goals-home")))

@@ -303,7 +303,14 @@ def append_event(cwd: Path, event: Event) -> GoalSnapshot:
     store.append(event)
     snapshot = store.snapshot()
     _refresh_portable_export(snapshot)
+    _refresh_discovery_notes(snapshot)
     return snapshot
+
+
+def _refresh_discovery_notes(snapshot: GoalSnapshot) -> None:
+    from goals.discovery_notes import refresh_discovery_notes
+
+    refresh_discovery_notes(snapshot)
 
 
 def _refresh_portable_export(snapshot: GoalSnapshot) -> None:
