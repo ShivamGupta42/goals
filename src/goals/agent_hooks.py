@@ -214,9 +214,11 @@ def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
 
     Scoped so a reply meant for one goal can't close another's checkpoint:
 
-    - If the session's checkout holds goal state (an in-place goal, or the
-      session runs inside a goal's worktree), only those goals are considered.
-    - From a base checkout whose goals live in worktrees, a reply is recorded
+    - A checkpoint asked from a known host session only takes replies typed in
+      that same session, so chat in another session never lands in it.
+    - For checkpoints with no known session: if the session's checkout holds an
+      active goal waiting on the user (in place, or the session runs inside its
+      worktree), only that; from a base checkout whose goals live in worktrees,
       only when exactly one goal is waiting — with two, it's ambiguous, so none.
 
     Only active goals with a checkpoint put to the user record anything, and
@@ -228,26 +230,41 @@ def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
         return 0
     if len(text) > MAX_USER_MESSAGE_CHARS:
         text = text[: MAX_USER_MESSAGE_CHARS - 1] + "…"
-    goal_dirs, own_checkout = _candidate_goal_dirs(cwd)
-    waiting: list[tuple[EventStore, str]] = []
-    for goal_dir in goal_dirs:
-        store = EventStore(goal_dir)
-        try:
-            snapshot = store.snapshot()
-        except Exception:  # noqa: BLE001 - one unreadable goal must not stop the rest
-            continue
-        if snapshot.status not in _RECORDING_STATUSES:
-            continue
-        if any(
-            checkpoint_is_asked(checkpoint)
-            for phase in snapshot.phases
-            for checkpoint in phase.checkpoints
-        ):
-            waiting.append((store, snapshot.goal_id))
-    if not own_checkout and len(waiting) > 1:
-        return 0
+    matched: list[tuple[EventStore, str]] = []
+    unstamped_tiers: list[tuple[list[tuple[EventStore, str]], bool]] = []
+    for goal_dirs, own in _candidate_goal_dirs(cwd):
+        unstamped: list[tuple[EventStore, str]] = []
+        for goal_dir in goal_dirs:
+            store = EventStore(goal_dir)
+            try:
+                snapshot = store.snapshot()
+            except Exception:  # noqa: BLE001 - one unreadable goal must not stop the rest
+                continue
+            if snapshot.status not in _RECORDING_STATUSES:
+                continue
+            asked = [
+                checkpoint
+                for phase in snapshot.phases
+                for checkpoint in phase.checkpoints
+                if checkpoint_is_asked(checkpoint)
+            ]
+            if session_id and any(c.asked_session == session_id for c in asked):
+                matched.append((store, snapshot.goal_id))
+            elif any(not c.asked_session for c in asked):
+                unstamped.append((store, snapshot.goal_id))
+        unstamped_tiers.append((unstamped, own))
+    # A session match is unambiguous wherever it is. Otherwise the nearest tier
+    # with anything waiting decides: all of the session's own checkout, or a
+    # lone waiting worktree goal.
+    targets = matched
+    if not targets:
+        for unstamped, own in unstamped_tiers:
+            if unstamped:
+                if own or len(unstamped) == 1:
+                    targets = unstamped
+                break
     recorded = 0
-    for store, goal_id in waiting:
+    for store, goal_id in targets:
         try:
             store.append(
                 Event(
@@ -269,12 +286,14 @@ def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
 _RECORDING_STATUSES = (GoalStatus.ACTIVE, GoalStatus.BLOCKED)
 
 
-def _candidate_goal_dirs(cwd: Path) -> tuple[list[Path], bool]:
-    """Goal dirs this session could be answering, and whether they're its own checkout's."""
+def _candidate_goal_dirs(cwd: Path) -> list[tuple[list[Path], bool]]:
+    """Goal dirs this session could be answering, nearest first.
+
+    First the session's own checkout (flagged ``True``), then the repo's goal
+    worktrees — consulted only when the own checkout has nothing waiting.
+    """
     root = find_git_root(cwd) or cwd.resolve()
-    own = _goal_dirs_under(root)
-    if own:
-        return own, True
+    tiers: list[tuple[list[Path], bool]] = [(_goal_dirs_under(root), True)]
     try:
         worktrees = goal_worktrees(root)
     except Exception:  # noqa: BLE001 - not a git repo, or git unavailable
@@ -283,7 +302,8 @@ def _candidate_goal_dirs(cwd: Path) -> tuple[list[Path], bool]:
     for worktree in worktrees:
         if worktree.resolve() != root.resolve():
             found.extend(_goal_dirs_under(worktree))
-    return found, False
+    tiers.append((found, False))
+    return tiers
 
 
 def _goal_dirs_under(root: Path) -> list[Path]:

@@ -148,6 +148,10 @@ class PhaseCheckpoint(BaseModel):
     # Sticky: once a checkpoint is the user's to answer it stays that way, so no
     # later update (kind, status, needs_user) can turn it into an agent-closable one.
     user_owned: bool = False
+    # When (and from which host session) it was last put to the user: only a
+    # reply after asked_at — from that session, when known — can close it.
+    asked_at: str = ""
+    asked_session: str = ""
 
 
 class PhaseProtocol(BaseModel):

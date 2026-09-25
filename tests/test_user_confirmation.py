@@ -416,3 +416,82 @@ def test_codex_setup_dry_run_changes_nothing(tmp_path: Path) -> None:
     codex_home.mkdir()
     setup_agents(["codex"], codex_home=codex_home, dry_run=True)
     assert not (codex_home / "hooks.json").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Re-review fixes: optional downgrade, session binding, scoping, edits
+# --------------------------------------------------------------------------- #
+def test_an_open_user_checkpoint_cannot_be_made_optional(repo: Path) -> None:
+    _ask(repo, "appr", kind=CheckpointKind.APPROVAL)
+    refused = CliRunner().invoke(app, ["checkpoint", "record", "P1", "appr", "--optional"])
+    assert refused.exit_code == 1 and "can't be made optional" in refused.stdout
+    assert _checkpoint(repo, "appr").required
+
+
+def test_a_reply_only_counts_from_the_session_that_asked(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "asking-session")
+    _ask(repo, "prod", kind=CheckpointKind.APPROVAL)
+    assert _checkpoint(repo, "prod").asked_session == "asking-session"
+    # Chat typed in another session doesn't land in this goal at all.
+    assert record_user_prompt(repo, "can you fix the README typo", session_id="other") == 0
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "prod", status=CheckpointStatus.PASSED)
+    assert record_user_prompt(repo, "yes, ship it", session_id="asking-session") == 1
+    closed = record_checkpoint(repo, "P1", "prod", status=CheckpointStatus.PASSED)
+    assert load_active_snapshot(repo).user_messages[-1].message_id == closed.user_message_id
+
+
+def test_a_session_match_in_a_worktree_beats_the_ambiguity_rule(tmp_path: Path, monkeypatch) -> None:
+    base = _git_repo(tmp_path / "base")
+    alpha = Path(create_goal("alpha goal", base, workspace="worktree").topology.worktree_path)
+    beta = Path(create_goal("beta goal", base, workspace="worktree").topology.worktree_path)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "session-a")
+    monkeypatch.chdir(alpha)
+    _ask(alpha, kind=CheckpointKind.APPROVAL)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "session-b")
+    monkeypatch.chdir(beta)
+    _ask(beta, kind=CheckpointKind.APPROVAL)
+    # Both wait, from the base checkout — but the session says whose question it is.
+    assert record_user_prompt(base, "yes", session_id="session-a") == 1
+    assert [m.text for m in load_active_snapshot(alpha).user_messages] == ["yes"]
+    assert load_active_snapshot(beta).user_messages == []
+
+
+def test_a_leftover_goal_in_the_base_checkout_does_not_hide_worktree_goals(
+    tmp_path: Path, monkeypatch
+) -> None:
+    base = _git_repo(tmp_path / "base")
+    create_goal("old in-place goal", base, workspace="in_place")  # nothing waiting
+    worktree = Path(create_goal("new goal", base, workspace="worktree").topology.worktree_path)
+    monkeypatch.chdir(worktree)
+    _ask(worktree)
+    assert record_user_prompt(base, "yes") == 1
+    assert load_active_snapshot(worktree).user_messages[-1].text == "yes"
+
+
+def test_editing_an_asked_checkpoint_keeps_the_users_reply(repo: Path) -> None:
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)
+    _say(repo, "approved")
+    record_checkpoint(repo, "P1", "plan", summary="tidied wording")  # an edit, not a re-ask
+    closed = record_checkpoint(repo, "P1", "plan", status=CheckpointStatus.PASSED)
+    assert closed.user_message_id
+
+
+def test_an_optional_question_still_shows_as_waiting_on_the_user(repo: Path) -> None:
+    _ask(repo, "redis", kind=CheckpointKind.APPROVAL, required=False, title="Use Redis?")
+    check = CliRunner().invoke(app, ["check"]).stdout
+    assert "Waiting on: you" in check
+    assert "optional question waiting on the user: Use Redis?" in check
+
+
+def test_a_stamped_question_ignores_replies_from_other_sessions(repo: Path, monkeypatch) -> None:
+    # An unstamped question in the same goal lets another session's message in;
+    # the stamped question must still refuse to close on it.
+    _ask(repo, "legacy", kind=CheckpointKind.APPROVAL)  # no host session known
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "asking-session")
+    _ask(repo, "stamped", kind=CheckpointKind.APPROVAL)
+    assert record_user_prompt(repo, "yes to legacy", session_id="other") == 1
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "stamped", status=CheckpointStatus.PASSED)
+    closed = record_checkpoint(repo, "P1", "legacy", status=CheckpointStatus.PASSED)
+    assert closed.user_message_id

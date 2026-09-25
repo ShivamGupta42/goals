@@ -55,13 +55,15 @@ def replies_since_asked(
 ) -> list[UserMessage]:
     """User messages recorded after this checkpoint was last put to the user.
 
-    A checkpoint counts as asked only while it is open and put to the user; its
-    ``updated_at`` is then the moment it was (re)asked. Anything else — never
-    asked, or asked and since changed — has no valid reply yet. A reply already
-    cited by another checkpoint doesn't count: one answer closes one question.
+    A checkpoint counts as asked only while it is open and put to the user;
+    ``asked_at`` is the moment it was (re)asked (``updated_at`` for checkpoints
+    recorded before that field). If the asking host session is known, only its
+    replies count. A reply already cited by another checkpoint doesn't count:
+    one answer closes one question.
     """
     if checkpoint is None or not checkpoint_is_asked(checkpoint):
         return []
+    asked_at = checkpoint.asked_at or checkpoint.updated_at
     cited = {
         other.user_message_id
         for phase in snapshot.phases
@@ -71,7 +73,9 @@ def replies_since_asked(
     return [
         m
         for m in snapshot.user_messages
-        if m.recorded_at > checkpoint.updated_at and m.message_id not in cited
+        if m.recorded_at > asked_at
+        and m.message_id not in cited
+        and (not checkpoint.asked_session or m.session_id == checkpoint.asked_session)
     ]
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from goals.checkpoints import (
@@ -117,11 +118,24 @@ def record_checkpoint(
     existing = _checkpoint_or_none(phase, checkpoint_id)
     if kind is None:
         kind = existing.kind if existing else CheckpointKind.CUSTOM
+    asked_status_given = status is not None
     if status is None:
         status = existing.status if existing else CheckpointStatus.PASSED
     if required is None:
         required = existing.required if existing else True
     closing = status in COMPLETE_CHECKPOINT_STATUSES
+    if (
+        existing is not None
+        and is_user_checkpoint(existing)
+        and existing.required
+        and not required
+        and not closing
+    ):
+        raise GoalsError(
+            f"{phase_id} checkpoint {checkpoint_id} is the user's to answer; it can't be made "
+            "optional. Waive it on their reply instead (or --unverified, shown as not verified)."
+        )
+    explicitly_asked = status == CheckpointStatus.NEEDS_USER and asked_status_given
     if closing:
         needs_user = False
     elif status == CheckpointStatus.NEEDS_USER:
@@ -143,6 +157,17 @@ def record_checkpoint(
         user_message_id=user_message_id,
         unverified=unverified,
     )
+    # Asking starts the reply window. An edit to an already-asked checkpoint keeps
+    # it (so the user's answer still counts); an explicit --status needs_user
+    # re-asks. The asking host session, when known, is the one whose replies count.
+    now_asked = not closing and needs_user
+    was_asked = existing is not None and checkpoint_is_asked(existing)
+    if now_asked and (explicitly_asked or not was_asked):
+        asked_at, asked_session = utc_now(), current_host_session()
+    elif now_asked and existing is not None:
+        asked_at, asked_session = existing.asked_at, existing.asked_session
+    else:
+        asked_at, asked_session = "", ""
     checkpoint = PhaseCheckpoint(
         checkpoint_id=checkpoint_id,
         kind=kind,
@@ -163,9 +188,25 @@ def record_checkpoint(
         user_message_id=cited,
         unverified=unverified,
         user_owned=user_owned,
+        asked_at=asked_at,
+        asked_session=asked_session,
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
     return checkpoint
+
+
+#: Env vars through which a host tells the agent's shell its session id. The
+#: user-prompt hook receives the same id, so a reply can be tied to the session
+#: that asked. Unknown host → no stamp → any reply after asking counts.
+HOST_SESSION_ENV_VARS = ("CLAUDE_CODE_SESSION_ID",)
+
+
+def current_host_session() -> str:
+    for name in HOST_SESSION_ENV_VARS:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def waive_checkpoint(

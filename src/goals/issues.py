@@ -5,7 +5,7 @@ from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
-from goals.checkpoints import checkpoint_waits_on_user
+from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user
 from goals.decisions import should_surface_decision
 from goals.gates import proof_targets, review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -270,6 +270,23 @@ def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[Goal
     issues: list[GoalIssue] = []
     for checkpoint in checkpoints:
         if not checkpoint.required:
+            if checkpoint_is_asked(checkpoint):
+                # Optional, but put to the user: they should see it's waiting,
+                # since their next message is what answers it.
+                label = checkpoint.title or checkpoint.checkpoint_id
+                issues.append(
+                    GoalIssue(
+                        severity="p1",
+                        area="checkpoint",
+                        summary=f"{phase_id} optional question waiting on the user: {label}.",
+                        detail=checkpoint.summary,
+                        suggested_action=(
+                            f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+                        ),
+                        needs_user=True,
+                        evidence_refs=[*refs, *checkpoint.evidence_refs],
+                    )
+                )
             continue
         if checkpoint.status in {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}:
             continue
