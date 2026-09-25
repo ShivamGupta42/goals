@@ -91,7 +91,8 @@ def _setup_codex(codex_home: Path, *, dry_run: bool) -> list[SetupAction]:
     return actions
 
 
-CODEX_USER_PROMPT_COMMAND = "goals hooks user-prompt"
+# `|| true`: a hook must never block the prompt (an older CLI without it exits 2).
+CODEX_USER_PROMPT_COMMAND = "goals hooks user-prompt || true"
 
 
 def _install_codex_user_prompt_hook(codex_home: Path, *, dry_run: bool) -> list[SetupAction]:
@@ -102,7 +103,13 @@ def _install_codex_user_prompt_hook(codex_home: Path, *, dry_run: bool) -> list[
     """
     hooks_path = codex_home / "hooks.json"
     data = _load_json(hooks_path)
-    groups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+    hooks = data.setdefault("hooks", {})
+    groups = hooks.setdefault("UserPromptSubmit", []) if isinstance(hooks, dict) else None
+    if not isinstance(groups, list):
+        raise GoalsError(
+            f"{hooks_path} has an unexpected shape (\"hooks\" must be an object and "
+            "\"UserPromptSubmit\" a list). Fix it by hand, then re-run `goals setup --agent codex`."
+        )
     present = any(
         isinstance(hook, dict) and str(hook.get("command", "")).strip() == CODEX_USER_PROMPT_COMMAND
         for group in groups
@@ -120,7 +127,10 @@ def _install_codex_user_prompt_hook(codex_home: Path, *, dry_run: bool) -> list[
     return [
         SetupAction(
             target="codex",
-            detail=f"added the user-prompt hook to {hooks_path} (Codex asks you to trust it on next start)",
+            detail=(
+                f"added a hook to {hooks_path}: while a goal waits on your answer, Goals saves "
+                "what you type, on this machine only (Codex asks you to trust the hook on next start)"
+            ),
             changed=True,
         )
     ]

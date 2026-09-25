@@ -143,6 +143,9 @@ class PhaseCheckpoint(BaseModel):
     # explicit agent claim with no recorded reply (shown as "not verified").
     user_message_id: str = ""
     unverified: bool = False
+    # Sticky: once a checkpoint is the user's to answer it stays that way, so no
+    # later update (kind, status, needs_user) can turn it into an agent-closable one.
+    user_owned: bool = False
 
 
 class PhaseProtocol(BaseModel):
@@ -627,6 +630,7 @@ class UserMessage(BaseModel):
     text: str
     recorded_at: str = Field(default_factory=utc_now)
     source: str = "user-prompt-hook"
+    session_id: str = ""
 
 
 class ProblemBreakdown(BaseModel):

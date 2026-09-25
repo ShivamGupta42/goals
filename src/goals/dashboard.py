@@ -561,17 +561,17 @@ def _waiting_label(value: str) -> str:
 
 
 def _confirmations_html(snapshot: GoalSnapshot) -> str:
-    """What the user confirmed, and on whose word: their recorded reply, or the
-    agent's unverified claim. Hidden until a user checkpoint has been closed."""
+    """Each closed user checkpoint and the reply it was closed on — or a note that
+    the agent closed it with no recorded reply. Hidden until one has been closed."""
     lines = confirmation_lines(snapshot)
     if not lines:
         return ""
     items = "".join(f"<li>{escape(line)}</li>" for line in lines)
     return (
-        '<section aria-label="What you confirmed">'
-        '<h3 class="subsec">What you confirmed</h3>'
-        '<p class="secap">Each answer only you can give, with the words that counted as your '
-        "answer — or a note that the agent closed it without a recorded reply.</p>"
+        '<section aria-label="Your replies on record">'
+        '<h3 class="subsec">Your replies on record</h3>'
+        '<p class="secap">Questions only you can answer, and the words you typed that closed '
+        "each one — or a note that the agent closed it without a recorded reply.</p>"
         f"<ul>{items}</ul>"
         "</section>"
     )

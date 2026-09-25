@@ -142,9 +142,15 @@ def lock_file(path: Path, timeout_seconds: float = 5.0) -> Iterator[None]:
     while True:
         try:
             fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
             os.close(fd)
             break
         except FileExistsError:
+            if _lock_is_stale(lock_path):
+                # The holder died without releasing it (killed hook, crash):
+                # break it rather than wedging every later write to this goal.
+                lock_path.unlink(missing_ok=True)
+                continue
             if time.monotonic() - start > timeout_seconds:
                 raise GoalsError(f"Timed out waiting for lock: {lock_path}") from None
             time.sleep(0.05)
@@ -152,6 +158,30 @@ def lock_file(path: Path, timeout_seconds: float = 5.0) -> Iterator[None]:
         yield
     finally:
         lock_path.unlink(missing_ok=True)
+
+
+def _lock_is_stale(lock_path: Path) -> bool:
+    """True when the lock names a process that no longer exists.
+
+    A lock with no readable pid (written by an older Goals, or caught mid-write)
+    is left alone and waited out as before. POSIX only: on Windows
+    ``os.kill(pid, 0)`` would terminate the holder, not probe it.
+    """
+    if os.name != "posix":
+        return False
+    try:
+        pid = int(lock_path.read_text().strip())
+    except (OSError, ValueError):
+        return False
+    if pid <= 0 or pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False  # alive, owned by another user
+    return False
 
 
 class EventStore:
@@ -211,6 +241,7 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
         _drop_unknown_fields(first.payload["snapshot"], GoalSnapshot)
     )
     snapshot.event_count = len(events)
+    seen_messages = {m.message_id for m in snapshot.user_messages}
     for event in events[1:]:
         snapshot.last_updated = event.timestamp
         payload = event.payload
@@ -318,7 +349,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             message = UserMessage.model_validate(
                 _drop_unknown_fields(payload["message"], UserMessage)
             )
-            if all(m.message_id != message.message_id for m in snapshot.user_messages):
+            if message.message_id not in seen_messages:
+                seen_messages.add(message.message_id)
                 snapshot.user_messages.append(message)
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(

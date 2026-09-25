@@ -35,8 +35,19 @@ def checkpoint_waits_on_user(checkpoint: PhaseCheckpoint) -> bool:
 
 
 def is_user_checkpoint(checkpoint: PhaseCheckpoint) -> bool:
-    """A checkpoint only the user can close: a user kind, or one waiting on them."""
-    return checkpoint.kind in USER_CHECKPOINT_KINDS or checkpoint_waits_on_user(checkpoint)
+    """A checkpoint only the user can close: owned by them, a user kind, or asked."""
+    return (
+        checkpoint.user_owned
+        or checkpoint.kind in USER_CHECKPOINT_KINDS
+        or checkpoint_is_asked(checkpoint)
+    )
+
+
+def checkpoint_is_asked(checkpoint: PhaseCheckpoint) -> bool:
+    """Open and put to the user — whether or not it is required."""
+    if checkpoint.status in COMPLETE_CHECKPOINT_STATUSES:
+        return False
+    return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
 
 
 def replies_since_asked(
@@ -44,13 +55,24 @@ def replies_since_asked(
 ) -> list[UserMessage]:
     """User messages recorded after this checkpoint was last put to the user.
 
-    A checkpoint counts as asked only while it waits on the user; its
+    A checkpoint counts as asked only while it is open and put to the user; its
     ``updated_at`` is then the moment it was (re)asked. Anything else — never
-    asked, or asked and since changed — has no valid reply yet.
+    asked, or asked and since changed — has no valid reply yet. A reply already
+    cited by another checkpoint doesn't count: one answer closes one question.
     """
-    if checkpoint is None or not checkpoint_waits_on_user(checkpoint):
+    if checkpoint is None or not checkpoint_is_asked(checkpoint):
         return []
-    return [m for m in snapshot.user_messages if m.recorded_at > checkpoint.updated_at]
+    cited = {
+        other.user_message_id
+        for phase in snapshot.phases
+        for other in phase.checkpoints
+        if other.user_message_id and other is not checkpoint
+    }
+    return [
+        m
+        for m in snapshot.user_messages
+        if m.recorded_at > checkpoint.updated_at and m.message_id not in cited
+    ]
 
 
 def user_message_by_id(snapshot: GoalSnapshot, message_id: str) -> UserMessage | None:

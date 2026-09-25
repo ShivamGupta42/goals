@@ -1,14 +1,16 @@
 """A user checkpoint closes on the user's recorded reply, not the agent's word.
 
-The UserPromptSubmit hook records the user's own typed message while a goal waits
-on them. Passing or waiving a user checkpoint must cite such a reply — recorded
-after the checkpoint was put to the user — or say --unverified, which every view
-shows as not verified. (Roadmap: Discovery build step 2.)
+The UserPromptSubmit hook records the user's own typed message in the goal that
+is waiting on them. Passing or waiving a user checkpoint must cite such a reply —
+recorded after the checkpoint was put to the user, and not already used to close
+another — or say --unverified, which every view shows as not verified.
+(Roadmap: Discovery build step 2.)
 """
 
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -17,12 +19,13 @@ from typer.testing import CliRunner
 from goals.agent_hooks import MAX_USER_MESSAGE_CHARS, record_user_prompt
 from goals.checkpoint_workflows import record_checkpoint, waive_checkpoint
 from goals.cli import app
-from goals.models import CheckpointKind, CheckpointStatus
+from goals.models import CheckpointKind, CheckpointStatus, GoalStatus
 from goals.runtime import create_goal, load_active_snapshot
 from goals.setup import CODEX_USER_PROMPT_COMMAND, setup_agents
-from goals.storage import GoalsError
+from goals.storage import EventStore, GoalsError, lock_file
 
 ASK = ["checkpoint", "record", "P1", "alignment", "--kind", "understanding"]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _git_repo(path: Path) -> Path:
@@ -47,17 +50,36 @@ def repo(tmp_path: Path, monkeypatch) -> Path:
     return repo
 
 
-def _say(repo: Path, text: str) -> None:
-    result = CliRunner().invoke(
-        app, ["hooks", "user-prompt"], input=json.dumps({"prompt": text, "cwd": str(repo)})
+def _payload(text: str, cwd: Path) -> str:
+    return json.dumps(
+        {"hook_event_name": "UserPromptSubmit", "prompt": text, "cwd": str(cwd), "session_id": "s-1"}
     )
+
+
+def _say(cwd: Path, text: str) -> None:
+    result = CliRunner().invoke(app, ["hooks", "user-prompt"], input=_payload(text, cwd))
     assert result.exit_code == 0 and result.stdout == ""
 
 
-def _alignment(repo: Path):
-    return next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.checkpoint_id == "alignment")
+def _ask(cwd: Path, checkpoint_id: str = "alignment", **kwargs) -> None:
+    record_checkpoint(
+        cwd,
+        kwargs.pop("phase", "P1"),
+        checkpoint_id,
+        kind=kwargs.pop("kind", CheckpointKind.UNDERSTANDING),
+        status=CheckpointStatus.NEEDS_USER,
+        **kwargs,
+    )
 
 
+def _checkpoint(cwd: Path, checkpoint_id: str = "alignment", phase: int = 0):
+    phases = load_active_snapshot(cwd).phases
+    return next(c for c in phases[phase].checkpoints if c.checkpoint_id == checkpoint_id)
+
+
+# --------------------------------------------------------------------------- #
+# Closing rules
+# --------------------------------------------------------------------------- #
 def test_passing_a_waiting_checkpoint_needs_a_recorded_reply(repo: Path) -> None:
     runner = CliRunner()
     assert runner.invoke(app, [*ASK, "--status", "needs_user"]).exit_code == 0
@@ -67,38 +89,54 @@ def test_passing_a_waiting_checkpoint_needs_a_recorded_reply(repo: Path) -> None
     assert "no reply from them has been recorded" in refused.stdout
 
     _say(repo, "Yes — that's exactly it.")
-    assert runner.invoke(app, [*ASK, "--status", "passed"]).exit_code == 0
-    checkpoint = _alignment(repo)
-    assert checkpoint.status == CheckpointStatus.PASSED
+    closed = runner.invoke(app, [*ASK, "--status", "passed"])
+    assert closed.exit_code == 0
+    assert "Closed on the user's reply: \"Yes — that's exactly it.\"" in closed.stdout
+    checkpoint = _checkpoint(repo)
     message = load_active_snapshot(repo).user_messages[-1]
+    assert checkpoint.status == CheckpointStatus.PASSED
     assert checkpoint.user_message_id == message.message_id
-    assert message.text == "Yes — that's exactly it."
-    listed = runner.invoke(app, ["checkpoint", "list"]).stdout
-    assert 'User said: "Yes — that\'s exactly it."' in listed
+    assert message.session_id == "s-1"
 
 
 def test_a_reply_from_before_the_question_does_not_count(repo: Path) -> None:
-    runner = CliRunner()
-    assert runner.invoke(app, [*ASK, "--status", "needs_user"]).exit_code == 0
+    _ask(repo)
     _say(repo, "sure")
+    early = load_active_snapshot(repo).user_messages[-1]
     # Re-asking (e.g. after a correction) resets the clock: the old "sure" no longer answers it.
-    assert runner.invoke(app, [*ASK, "--status", "needs_user", "--summary", "revised"]).exit_code == 0
-    assert runner.invoke(app, [*ASK, "--status", "passed"]).exit_code == 1
+    _ask(repo, summary="revised")
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
+    with pytest.raises(GoalsError, match="isn't an unused reply"):
+        record_checkpoint(
+            repo, "P1", "alignment", status=CheckpointStatus.PASSED, user_message_id=early.message_id
+        )
     _say(repo, "yes, the revised one")
-    assert runner.invoke(app, [*ASK, "--status", "passed"]).exit_code == 0
-    assert load_active_snapshot(repo).user_messages[-1].text == "yes, the revised one"
+    closed = record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
+    assert closed.user_message_id == load_active_snapshot(repo).user_messages[-1].message_id
+
+
+def test_one_reply_closes_one_question(repo: Path) -> None:
+    _ask(repo, "first")
+    _ask(repo, "second", kind=CheckpointKind.APPROVAL)
+    _say(repo, "yes")
+    record_checkpoint(repo, "P1", "first", status=CheckpointStatus.PASSED)
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "second", status=CheckpointStatus.PASSED)
 
 
 def test_unverified_closes_it_but_says_so_everywhere(repo: Path) -> None:
     runner = CliRunner()
     assert runner.invoke(app, [*ASK, "--status", "needs_user"]).exit_code == 0
-    assert runner.invoke(app, [*ASK, "--status", "passed", "--unverified"]).exit_code == 0
-    checkpoint = _alignment(repo)
-    assert checkpoint.unverified is True and checkpoint.user_message_id == ""
+    closed = runner.invoke(app, [*ASK, "--status", "passed", "--unverified"])
+    assert closed.exit_code == 0
     note = "Not verified: closed without a recorded reply from the user."
+    assert note in closed.stdout
+    checkpoint = _checkpoint(repo)
+    assert checkpoint.unverified is True and checkpoint.user_message_id == ""
     assert note in runner.invoke(app, ["checkpoint", "list"]).stdout
     check = runner.invoke(app, ["check"]).stdout
-    assert "## What You Confirmed" in check and note in check
+    assert "## Your Replies On Record" in check and note in check
 
 
 def test_waive_is_held_to_the_same_rule(repo: Path) -> None:
@@ -108,8 +146,12 @@ def test_waive_is_held_to_the_same_rule(repo: Path) -> None:
     assert runner.invoke(app, waive).exit_code == 1
     _say(repo, "skip it, just build")
     assert runner.invoke(app, waive).exit_code == 0
-    assert _alignment(repo).status == CheckpointStatus.WAIVED
-    assert _alignment(repo).user_message_id
+    assert _checkpoint(repo).status == CheckpointStatus.WAIVED
+    assert _checkpoint(repo).user_message_id
+    with pytest.raises(GoalsError):
+        _ask(repo, "other")
+        waive_checkpoint(repo, "P1", "other", "skip")
+    assert waive_checkpoint(repo, "P1", "other", "skip", unverified=True).unverified
 
 
 def test_a_user_check_never_put_to_the_user_cannot_be_closed_quietly(repo: Path) -> None:
@@ -120,80 +162,157 @@ def test_a_user_check_never_put_to_the_user_cannot_be_closed_quietly(repo: Path)
     assert refused.exit_code == 1 and "hasn't been put to them yet" in refused.stdout
     waived = runner.invoke(app, ["checkpoint", "waive", "P4", "feel", "--reason", "n/a"])
     assert waived.exit_code == 1
-    # A brand-new user checkpoint recorded straight as passed is refused too.
     fresh = runner.invoke(
         app, ["checkpoint", "record", "P2", "ok", "--kind", "approval", "--status", "passed"]
     )
     assert fresh.exit_code == 1
 
 
+# --------------------------------------------------------------------------- #
+# Updates can't shed the user's ownership (review cycle: defaults overwrote state)
+# --------------------------------------------------------------------------- #
 def test_omitting_kind_on_update_keeps_the_user_kind(repo: Path) -> None:
-    runner = CliRunner()
-    assert runner.invoke(app, [*ASK, "--status", "needs_user"]).exit_code == 0
-    bare = ["checkpoint", "record", "P1", "alignment", "--status", "passed"]
-    assert runner.invoke(app, bare).exit_code == 1
-    assert _alignment(repo).kind == CheckpointKind.UNDERSTANDING
+    _ask(repo)
+    _say(repo, "yes")
+    closed = record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
+    assert closed.kind == CheckpointKind.UNDERSTANDING and closed.user_message_id
+
+
+def test_a_bare_update_keeps_status_instead_of_closing_on_a_question(repo: Path) -> None:
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)
+    _say(repo, "wait, what does step 3 mean?")
+    result = CliRunner().invoke(app, ["checkpoint", "record", "P1", "plan", "--summary", "clarified"])
+    assert result.exit_code == 0
+    kept = _checkpoint(repo, "plan")
+    assert kept.status == CheckpointStatus.NEEDS_USER and kept.needs_user and kept.required
+
+
+def test_unasking_or_relabelling_cannot_shed_ownership(repo: Path) -> None:
+    # A custom checkpoint put to the user stays the user's after "--status pending".
+    record_checkpoint(repo, "P1", "custom", status=CheckpointStatus.NEEDS_USER)
+    record_checkpoint(repo, "P1", "custom", status=CheckpointStatus.PENDING, needs_user=False)
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "custom", status=CheckpointStatus.PASSED)
+    # A user kind swapped to custom stays the user's too.
+    _ask(repo, "approve", kind=CheckpointKind.APPROVAL)
+    record_checkpoint(
+        repo, "P1", "approve", kind=CheckpointKind.CUSTOM, status=CheckpointStatus.PENDING
+    )
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "approve", status=CheckpointStatus.PASSED)
+    assert _checkpoint(repo, "approve").user_owned
+
+
+def test_relabelling_a_closed_agent_checkpoint_as_the_users_is_refused(repo: Path) -> None:
+    record_checkpoint(repo, "P1", "sneaky", status=CheckpointStatus.PASSED)
+    with pytest.raises(GoalsError, match="hasn't been put to them yet"):
+        record_checkpoint(
+            repo, "P1", "sneaky", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.PASSED
+        )
+
+
+def test_an_optional_user_checkpoint_closes_on_a_real_reply(repo: Path) -> None:
+    _ask(repo, "nice-to-have", required=False)
+    _say(repo, "yes please")
+    closed = record_checkpoint(repo, "P1", "nice-to-have", status=CheckpointStatus.PASSED)
+    assert closed.user_message_id and not closed.required
+
+
+def test_already_closed_user_checkpoint_keeps_its_provenance(repo: Path) -> None:
+    _ask(repo)
+    _say(repo, "yes")
+    first = record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
+    again = record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED, summary="tidy")
+    assert again.user_message_id == first.user_message_id
 
 
 def test_agent_checkpoints_still_close_freely(repo: Path) -> None:
-    runner = CliRunner()
-    result = runner.invoke(app, ["checkpoint", "record", "P1", "lint", "--status", "passed"])
+    result = CliRunner().invoke(app, ["checkpoint", "record", "P1", "lint", "--status", "passed"])
     assert result.exit_code == 0
-    lint = next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.checkpoint_id == "lint")
-    assert lint.kind == CheckpointKind.CUSTOM and not lint.unverified
+    lint = _checkpoint(repo, "lint")
+    assert lint.kind == CheckpointKind.CUSTOM and not lint.unverified and not lint.user_owned
 
 
-def test_cited_message_must_be_a_reply_to_this_question(repo: Path) -> None:
-    _say(repo, "unrelated earlier chat")  # nothing waits: not recorded
-    assert load_active_snapshot(repo).user_messages == []
-    record_checkpoint(repo, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
-    _say(repo, "first answer")
-    _say(repo, "second answer")
-    first = load_active_snapshot(repo).user_messages[0]
-    with pytest.raises(GoalsError, match="is not a reply recorded after"):
-        record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED, user_message_id="UM-bogus")
-    closed = record_checkpoint(
-        repo, "P1", "alignment", status=CheckpointStatus.PASSED, user_message_id=first.message_id
-    )
-    assert closed.user_message_id == first.message_id
-    # Re-recording an already-closed checkpoint keeps its original provenance.
-    again = record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED, summary="tidy")
-    assert again.user_message_id == first.message_id
-
-
-def test_hook_is_silent_and_fail_open(repo: Path, tmp_path: Path) -> None:
+# --------------------------------------------------------------------------- #
+# The hook: silent, scoped, host-shaped
+# --------------------------------------------------------------------------- #
+def test_hook_is_silent_fail_open_and_hidden(repo: Path, tmp_path: Path) -> None:
     runner = CliRunner()
     for stdin in ("", "not json", "[1, 2]", json.dumps({"prompt": 42})):
         result = runner.invoke(app, ["hooks", "user-prompt"], input=stdin)
         assert result.exit_code == 0 and result.stdout == ""
+    assert "user-prompt" not in runner.invoke(app, ["hooks", "--help"]).stdout
     elsewhere = tmp_path / "no-goal-here"
     elsewhere.mkdir()
     assert record_user_prompt(elsewhere, "hello") == 0
 
 
-def test_hook_records_only_while_waiting_and_clips_long_text(repo: Path) -> None:
+def test_hook_needs_the_hosts_event_shape(repo: Path) -> None:
+    _ask(repo)
+    bare = json.dumps({"prompt": "yes", "cwd": str(repo)})
+    assert CliRunner().invoke(app, ["hooks", "user-prompt"], input=bare).exit_code == 0
+    assert load_active_snapshot(repo).user_messages == []
+    _say(repo, "yes")
+    assert len(load_active_snapshot(repo).user_messages) == 1
+
+
+def test_hook_records_only_while_asked_and_clips_long_text(repo: Path) -> None:
     assert record_user_prompt(repo, "just chatting") == 0
-    record_checkpoint(repo, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
+    _ask(repo)
     assert record_user_prompt(repo, "   ") == 0
+    assert record_user_prompt(repo, "/goals:next") == 0  # a command, not an answer
     assert record_user_prompt(repo, "x" * (MAX_USER_MESSAGE_CHARS + 50)) == 1
     text = load_active_snapshot(repo).user_messages[-1].text
     assert len(text) == MAX_USER_MESSAGE_CHARS and text.endswith("…")
 
 
+def test_hook_skips_goals_that_are_not_active(repo: Path, monkeypatch) -> None:
+    _ask(repo)
+    real = EventStore.snapshot
+
+    def paused(self):
+        snapshot = real(self)
+        snapshot.status = GoalStatus.PAUSED
+        return snapshot
+
+    monkeypatch.setattr(EventStore, "snapshot", paused)
+    assert record_user_prompt(repo, "yes") == 0
+
+
 def test_hook_finds_a_worktree_goal_from_the_base_checkout(tmp_path: Path, monkeypatch) -> None:
     base = _git_repo(tmp_path / "base")
-    snapshot = create_goal("parallel goal", base, workspace="worktree")
-    worktree = Path(snapshot.topology.worktree_path)
+    worktree = Path(create_goal("parallel goal", base, workspace="worktree").topology.worktree_path)
     assert worktree != base
     monkeypatch.chdir(worktree)
-    record_checkpoint(worktree, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
+    _ask(worktree)
     # The session's cwd is the base checkout; the goal lives in the worktree.
     assert record_user_prompt(base, "yes from the base checkout") == 1
     assert load_active_snapshot(worktree).user_messages[-1].text == "yes from the base checkout"
 
 
+def test_a_reply_for_one_goal_never_lands_in_another(tmp_path: Path, monkeypatch) -> None:
+    base = _git_repo(tmp_path / "base")
+    alpha = Path(create_goal("alpha goal", base, workspace="worktree").topology.worktree_path)
+    beta = Path(create_goal("beta goal", base, workspace="worktree").topology.worktree_path)
+    for worktree in (alpha, beta):
+        monkeypatch.chdir(worktree)
+        _ask(worktree, kind=CheckpointKind.APPROVAL)
+    # From inside alpha's worktree, only alpha records the reply.
+    assert record_user_prompt(alpha, "yes, go ahead") == 1
+    assert [m.text for m in load_active_snapshot(alpha).user_messages] == ["yes, go ahead"]
+    assert load_active_snapshot(beta).user_messages == []
+    # From the base checkout, two waiting goals make it ambiguous: nobody records it.
+    assert record_user_prompt(base, "yes") == 0
+    monkeypatch.chdir(beta)
+    with pytest.raises(GoalsError):
+        record_checkpoint(beta, "P1", "alignment", status=CheckpointStatus.PASSED)
+
+
+# --------------------------------------------------------------------------- #
+# Privacy and views
+# --------------------------------------------------------------------------- #
 def test_user_words_stay_local(repo: Path) -> None:
-    record_checkpoint(repo, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
+    _ask(repo)
     _say(repo, "my private reply 7f3a")
     record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
     exported = "".join(p.read_text() for p in (repo / ".goals").rglob("*") if p.is_file())
@@ -201,23 +320,56 @@ def test_user_words_stay_local(repo: Path) -> None:
 
 
 def test_dashboard_shows_the_reply_escaped(repo: Path) -> None:
-    record_checkpoint(repo, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
+    _ask(repo)
     _say(repo, "yes <script>alert(1)</script>")
     record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
     assert CliRunner().invoke(app, ["dashboard"]).exit_code == 0
     html = next((repo / ".agent-workflow" / "goals").glob("*/dashboard.html")).read_text()
-    assert "What you confirmed" in html
+    assert "Your replies on record" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html and "<script>alert(1)" not in html
 
 
-def test_waive_function_matches_cli(repo: Path) -> None:
-    record_checkpoint(repo, "P1", "alignment", kind=CheckpointKind.UNDERSTANDING, status=CheckpointStatus.NEEDS_USER)
-    with pytest.raises(GoalsError):
-        waive_checkpoint(repo, "P1", "alignment", "skip")
-    waived = waive_checkpoint(repo, "P1", "alignment", "skip", unverified=True)
-    assert waived.unverified and waived.status == CheckpointStatus.WAIVED
+# --------------------------------------------------------------------------- #
+# Reliability: locks and the hook wrapper
+# --------------------------------------------------------------------------- #
+def test_a_lock_left_by_a_dead_process_is_broken(repo: Path) -> None:
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    goal_dir = next((repo / ".agent-workflow" / "goals").iterdir())
+    (goal_dir / "events.jsonl.lock").write_text(str(dead.pid))
+    _ask(repo)
+    started = time.monotonic()
+    assert record_user_prompt(repo, "yes") == 1
+    assert time.monotonic() - started < 2
 
 
+def test_a_live_lock_is_still_respected(tmp_path: Path) -> None:
+    target = tmp_path / "events.jsonl"
+    (tmp_path / "events.jsonl.lock").write_text(str(os.getpid()))
+    with pytest.raises(GoalsError, match="Timed out"):
+        with lock_file(target, timeout_seconds=0.2):
+            pass
+
+
+def test_bootstrap_never_lets_a_hook_block_the_session(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake = fake_bin / "goals"
+    fake.write_text('#!/bin/sh\necho "from goals"\nexit 2\n')
+    fake.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake_bin}:/usr/bin:/bin"}
+    bootstrap = str(REPO_ROOT / "scripts" / "plugin-bootstrap.sh")
+    hook = subprocess.run(
+        ["sh", bootstrap, "hooks", "user-prompt"], env=env, capture_output=True, text=True
+    )
+    assert hook.returncode == 0 and "from goals" in hook.stdout
+    other = subprocess.run(["sh", bootstrap, "status"], env=env, capture_output=True, text=True)
+    assert other.returncode == 2  # non-hook commands still report failure
+
+
+# --------------------------------------------------------------------------- #
+# Codex wiring
+# --------------------------------------------------------------------------- #
 def test_codex_setup_adds_the_hook_once_and_keeps_other_hooks(tmp_path: Path) -> None:
     codex_home = tmp_path / "codex"
     codex_home.mkdir()
@@ -229,11 +381,11 @@ def test_codex_setup_adds_the_hook_once_and_keeps_other_hooks(tmp_path: Path) ->
     assert data["hooks"]["Stop"] == other["hooks"]["Stop"]
     commands = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
     assert commands == [CODEX_USER_PROMPT_COMMAND]
-    assert any("user-prompt hook" in a.detail and a.changed for a in first.actions)
+    assert CODEX_USER_PROMPT_COMMAND.endswith("|| true")
+    assert any("saves what you type" in a.detail and a.changed for a in first.actions)
 
     second = setup_agents(["codex"], codex_home=codex_home)
-    again = json.loads((codex_home / "hooks.json").read_text())
-    assert again == data
+    assert json.loads((codex_home / "hooks.json").read_text()) == data
     assert any(a.detail == "user-prompt hook already configured" for a in second.actions)
 
 
@@ -249,6 +401,14 @@ def test_codex_setup_writes_through_a_symlinked_hooks_file(tmp_path: Path) -> No
     setup_agents(["codex"], codex_home=codex_home)
     assert (codex_home / "hooks.json").is_symlink()
     assert "UserPromptSubmit" in json.loads(real.read_text())["hooks"]
+
+
+def test_codex_setup_refuses_an_unexpected_hooks_shape(tmp_path: Path) -> None:
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    (codex_home / "hooks.json").write_text(json.dumps({"hooks": {"UserPromptSubmit": {}}}))
+    with pytest.raises(GoalsError, match="unexpected shape"):
+        setup_agents(["codex"], codex_home=codex_home)
 
 
 def test_codex_setup_dry_run_changes_nothing(tmp_path: Path) -> None:

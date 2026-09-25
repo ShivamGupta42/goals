@@ -431,14 +431,21 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
     subprocess.run(
         ["python", "-m", "goals.cli", "hooks", "user-prompt"],
         cwd=worktree,
-        input=json.dumps({"prompt": "Yes, that plan is right.", "cwd": str(worktree)}),
+        input=json.dumps(
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Yes, that plan is right.",
+                "cwd": str(worktree),
+                "session_id": "s-1",
+            }
+        ),
         text=True,
         stdout=subprocess.PIPE,
         check=True,
     )
     run(waive, worktree)
     listed = run(["python", "-m", "goals.cli", "checkpoint", "list"], worktree)
-    assert 'User said: "Yes, that plan is right."' in listed.stdout
+    assert 'Closed on the user\'s reply: "Yes, that plan is right."' in listed.stdout
     evidence_file = worktree / "evidence.json"
     evidence_file.write_text(
         json.dumps(

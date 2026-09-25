@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.checkpoints import checkpoint_waits_on_user
+from goals.checkpoints import checkpoint_is_asked
 from goals.git_ops import find_git_root, goal_worktrees
 from goals.models import Event, EventType, GateVerdict, GoalStatus, Phase, UserMessage
 from goals.portability import render_context_block
@@ -209,62 +209,85 @@ def _max_tokens() -> int | None:
     return value if value >= 1 else None
 
 
-def record_user_prompt(cwd: Path, prompt: str) -> int:
-    """UserPromptSubmit backend: record the user's words where a goal waits on them.
+def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
+    """UserPromptSubmit backend: record the user's words in the goal waiting on them.
 
-    Looks at every goal in this repo and its goal worktrees (the session usually
-    runs in the base checkout while the goal lives in a worktree) and appends a
-    ``USER_MESSAGE_RECORDED`` event to each goal with a checkpoint waiting on the
-    user. Nothing is recorded otherwise, so ordinary chat never lands in a goal.
-    Returns how many goals recorded it.
+    Scoped so a reply meant for one goal can't close another's checkpoint:
+
+    - If the session's checkout holds goal state (an in-place goal, or the
+      session runs inside a goal's worktree), only those goals are considered.
+    - From a base checkout whose goals live in worktrees, a reply is recorded
+      only when exactly one goal is waiting — with two, it's ambiguous, so none.
+
+    Only active goals with a checkpoint put to the user record anything, and
+    slash commands (``/goals:next``) are commands, not answers. Returns how many
+    goals recorded it.
     """
     text = prompt.strip()
-    if not text:
+    if not text or text.startswith("/"):
         return 0
     if len(text) > MAX_USER_MESSAGE_CHARS:
         text = text[: MAX_USER_MESSAGE_CHARS - 1] + "…"
-    recorded = 0
-    for goal_dir in _candidate_goal_dirs(cwd):
+    goal_dirs, own_checkout = _candidate_goal_dirs(cwd)
+    waiting: list[tuple[EventStore, str]] = []
+    for goal_dir in goal_dirs:
         store = EventStore(goal_dir)
         try:
             snapshot = store.snapshot()
         except Exception:  # noqa: BLE001 - one unreadable goal must not stop the rest
             continue
-        waiting = any(
-            checkpoint_waits_on_user(checkpoint)
+        if snapshot.status not in _RECORDING_STATUSES:
+            continue
+        if any(
+            checkpoint_is_asked(checkpoint)
             for phase in snapshot.phases
             for checkpoint in phase.checkpoints
-        )
-        if not waiting:
-            continue
-        store.append(
-            Event(
-                goal_id=snapshot.goal_id,
-                event_type=EventType.USER_MESSAGE_RECORDED,
-                actor="user-prompt-hook",
-                payload={"message": UserMessage(text=text).model_dump()},
+        ):
+            waiting.append((store, snapshot.goal_id))
+    if not own_checkout and len(waiting) > 1:
+        return 0
+    recorded = 0
+    for store, goal_id in waiting:
+        try:
+            store.append(
+                Event(
+                    goal_id=goal_id,
+                    event_type=EventType.USER_MESSAGE_RECORDED,
+                    actor="user-prompt-hook",
+                    payload={
+                        "message": UserMessage(text=text, session_id=session_id).model_dump()
+                    },
+                )
             )
-        )
+        except Exception:  # noqa: BLE001 - e.g. a lock timeout: skip this goal, keep going
+            continue
         recorded += 1
     return recorded
 
 
-def _candidate_goal_dirs(cwd: Path) -> list[Path]:
-    repo = find_git_root(cwd) or cwd.resolve()
-    roots = [repo]
+#: Goals that can still be waiting on the user (BLOCKED means waiting on them).
+_RECORDING_STATUSES = (GoalStatus.ACTIVE, GoalStatus.BLOCKED)
+
+
+def _candidate_goal_dirs(cwd: Path) -> tuple[list[Path], bool]:
+    """Goal dirs this session could be answering, and whether they're its own checkout's."""
+    root = find_git_root(cwd) or cwd.resolve()
+    own = _goal_dirs_under(root)
+    if own:
+        return own, True
     try:
-        roots.extend(goal_worktrees(repo))
+        worktrees = goal_worktrees(root)
     except Exception:  # noqa: BLE001 - not a git repo, or git unavailable
-        pass
-    seen: set[Path] = set()
+        worktrees = []
     found: list[Path] = []
-    for root in roots:
-        goals_dir = root / ".agent-workflow" / "goals"
-        if not goals_dir.is_dir():
-            continue
-        for child in sorted(goals_dir.iterdir()):
-            key = child.resolve()
-            if (child / "goal.json").exists() and key not in seen:
-                seen.add(key)
-                found.append(child)
-    return found
+    for worktree in worktrees:
+        if worktree.resolve() != root.resolve():
+            found.extend(_goal_dirs_under(worktree))
+    return found, False
+
+
+def _goal_dirs_under(root: Path) -> list[Path]:
+    goals_dir = root / ".agent-workflow" / "goals"
+    if not goals_dir.is_dir():
+        return []
+    return [child for child in sorted(goals_dir.iterdir()) if (child / "goal.json").exists()]

@@ -358,7 +358,7 @@ def _confirmation_section(snapshot: GoalSnapshot) -> list[str]:
     lines = confirmation_lines(snapshot)
     if not lines:
         return []
-    return ["", "## What You Confirmed", _bullets(lines, empty="")]
+    return ["", "## Your Replies On Record", _bullets(lines, empty="")]
 
 
 def _issue_lines(report: GoalIssueReport) -> list[str]:
