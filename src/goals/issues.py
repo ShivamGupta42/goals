@@ -5,6 +5,7 @@ from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
+from goals.checkpoints import checkpoint_waits_on_user
 from goals.decisions import should_surface_decision
 from goals.gates import review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -215,7 +216,29 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
         if phase.reviews:
             latest = phase.reviews[-1]
             category = representative_category(latest.findings)
-            if latest.verdict in {GateVerdict.BLOCKED, GateVerdict.NEEDS_HUMAN, GateVerdict.UNSAFE}:
+            if latest.verdict == GateVerdict.NEEDS_HUMAN and not any(
+                checkpoint_waits_on_user(checkpoint) for checkpoint in phase.checkpoints
+            ):
+                # The gate only says needs_human while a checkpoint waits on the
+                # user. Once they've answered, that verdict is stale: don't keep
+                # reporting "waiting on you" (the agent would re-ask them).
+                issues.append(
+                    GoalIssue(
+                        severity="p1",
+                        area="gate",
+                        summary=(
+                            f"{phase.phase_id} latest review was waiting on a checkpoint "
+                            "that no longer needs the user."
+                        ),
+                        suggested_action=(
+                            f"Run `goals phase review {phase.phase_id}` again once its "
+                            "evidence is ready."
+                        ),
+                        evidence_refs=refs,
+                        category=category,
+                    )
+                )
+            elif latest.verdict in {GateVerdict.BLOCKED, GateVerdict.NEEDS_HUMAN, GateVerdict.UNSAFE}:
                 # Escalation case (cap reached or human gate): keep the "ask for help"
                 # action, but still carry the rubric tag.
                 issues.append(
