@@ -8,6 +8,7 @@ from goals.checkpoints import (
     USER_CHECKPOINT_KINDS,
     build_current_checkpoint_brief,
     checkpoint_is_asked,
+    is_future_phase,
     is_user_checkpoint,
     replies_since_asked,
     user_message_by_id,
@@ -135,6 +136,7 @@ def record_checkpoint(
             f"{phase_id} checkpoint {checkpoint_id} is the user's to answer; it can't be made "
             "optional. Waive it on their reply instead (or --unverified, shown as not verified)."
         )
+    _refuse_early_property_check(snapshot, phase_id, checkpoint_id, asking=needs_user is True or status == CheckpointStatus.NEEDS_USER, closing=closing)
     explicitly_asked = status == CheckpointStatus.NEEDS_USER and asked_status_given
     if closing:
         needs_user = False
@@ -224,6 +226,7 @@ def waive_checkpoint(
     if existing is None:
         raise GoalsError(f"Unknown checkpoint id for {phase_id}: {checkpoint_id}")
     user_owned = is_user_checkpoint(existing)
+    _refuse_early_property_check(snapshot, phase_id, checkpoint_id, asking=False, closing=True)
     cited, unverified = _closing_provenance(
         snapshot,
         phase_id,
@@ -248,6 +251,27 @@ def waive_checkpoint(
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
     return checkpoint
+
+
+def _refuse_early_property_check(
+    snapshot: GoalSnapshot, phase_id: str, checkpoint_id: str, *, asking: bool, closing: bool
+) -> None:
+    """A desired property the user judges is asked in its own phase, not before.
+
+    Asking during Discovery would let "yes, that's what I want" count as "yes, it
+    feels right" before anything exists to try.
+    """
+    if not (asking or closing):
+        return
+    is_property_check = any(
+        wanted.property_id == checkpoint_id and wanted.proof == "user" and wanted.status == "active"
+        for wanted in snapshot.desired_properties
+    )
+    if is_property_check and is_future_phase(snapshot, phase_id):
+        raise GoalsError(
+            f"{checkpoint_id} is a desired property the user judges once there's something to "
+            f"try; ask it when {phase_id} is the current phase (now {snapshot.current_phase})."
+        )
 
 
 def _closing_provenance(

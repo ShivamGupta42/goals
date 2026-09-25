@@ -5,7 +5,7 @@ from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
-from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user
+from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
 from goals.decisions import should_surface_decision
 from goals.gates import proof_targets, review_phase
 from goals.merge_readiness import analyze_merge_readiness
@@ -161,8 +161,15 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     current_phase = snapshot.current_phase
     for phase in snapshot.phases:
         refs = [f"phase:{phase.phase_id}"]
-        issues.extend(_checkpoint_issues(phase.phase_id, phase.checkpoints, refs))
+        checkpoints = phase.checkpoints
+        if is_future_phase(snapshot, phase.phase_id):
+            # Not reached yet: its pending checks aren't actionable now (listing them
+            # as "complete or waive" only invites closing them early). Anything
+            # already put to the user still shows.
+            checkpoints = [c for c in checkpoints if checkpoint_is_asked(c)]
+        issues.extend(_checkpoint_issues(phase.phase_id, checkpoints, refs))
         if phase.status == PhaseStatus.ACCEPTED:
+            issues.extend(_unproven_property_issues(snapshot, phase, refs))
             if not phase.reviews or phase.reviews[-1].verdict != GateVerdict.PASS:
                 issues.append(
                     GoalIssue(
@@ -263,6 +270,41 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         category=category,
                     )
                 )
+    return issues
+
+
+def _unproven_property_issues(snapshot: GoalSnapshot, phase, refs: list[str]) -> list[GoalIssue]:
+    """An accepted phase whose auto-proven desired property has no passing check.
+
+    The gate enforces these, but a phase accepted by an older Goals (which didn't
+    know about desired properties) or before the property was recorded slipped
+    past it; the evidence is still in the log, so say so.
+    """
+    _, desired = proof_targets(snapshot, phase.phase_id)
+    verifications = phase.evidence.verifications if phase.evidence is not None else []
+    issues: list[GoalIssue] = []
+    for property_id, statement in desired:
+        if any(
+            v.covers.strip() == property_id and v.kind == "auto" and v.ran and v.passed
+            for v in verifications
+        ):
+            continue
+        issues.append(
+            GoalIssue(
+                severity="p1",
+                area="gate",
+                summary=(
+                    f"{phase.phase_id} was accepted without proving desired property "
+                    f"{property_id}: {statement}."
+                ),
+                suggested_action=(
+                    f"Add an automated check covering {property_id} to {phase.phase_id}'s "
+                    f"evidence, run `goals phase verify {phase.phase_id}`, then review and "
+                    "accept it again."
+                ),
+                evidence_refs=refs,
+            )
+        )
     return issues
 
 

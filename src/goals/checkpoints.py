@@ -34,6 +34,14 @@ def checkpoint_waits_on_user(checkpoint: PhaseCheckpoint) -> bool:
     return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
 
 
+def is_future_phase(snapshot: GoalSnapshot, phase_id: str) -> bool:
+    """True for a phase after the current one — work that hasn't been reached yet."""
+    ids = [phase.phase_id for phase in snapshot.phases]
+    if snapshot.current_phase not in ids or phase_id not in ids:
+        return False
+    return ids.index(phase_id) > ids.index(snapshot.current_phase)
+
+
 def is_user_checkpoint(checkpoint: PhaseCheckpoint) -> bool:
     """A checkpoint only the user can close: owned by them, a user kind, or asked."""
     return (

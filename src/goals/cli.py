@@ -26,7 +26,7 @@ from goals.audit import (
 )
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.capabilities import analyze_capabilities, render_capability_report
-from goals.checkpoints import render_current_checkpoint_brief
+from goals.checkpoints import checkpoint_is_asked, render_current_checkpoint_brief
 from goals.checkpoint_workflows import (
     current_checkpoint,
     checkpoint_provenance,
@@ -97,6 +97,7 @@ from goals.models import (
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
+    PhaseStatus,
     ProblemBreakdown,
     SelfEvolutionEntry,
     SourceClaim,
@@ -1786,7 +1787,7 @@ def assess_want(
     phase: Optional[str] = typer.Option(
         None,
         "--phase",
-        help="Phase that proves it. Required for auto; user defaults to the last phase.",
+        help="Phase that proves it. Required for auto; for user it defaults to the last phase.",
     ),
     property_id: Optional[str] = typer.Option(
         None, "--id", help="Reuse an id to reword an existing desired property."
@@ -1794,10 +1795,13 @@ def assess_want(
 ) -> None:
     """Record a desired property — how the result should feel — and how it's proven.
 
-    ``--proof auto``: the named phase's review needs an automated check, run by
-    `goals phase verify`, whose `covers` is this property's id. ``--proof user``:
-    adds a user checkpoint (same id) to the last phase, which can only be closed
-    on the user's reply once there's something for them to try.
+    --proof auto: that phase's review needs an automated check, run by
+    goals phase verify, whose covers is this property's id. --proof user: adds a
+    user checkpoint (same id) to that phase — the last one unless --phase says
+    otherwise — asked once there's something to try and closed on the user's
+    reply (or --unverified, shown as not verified). A property can't be bound to
+    a phase that's already accepted, and to change what the user wants after
+    they've confirmed it, revise Discovery with them.
     """
 
     def run():
@@ -1822,8 +1826,15 @@ def assess_want(
                 "of changing how an existing one is proven."
             )
         valid_phases = [p.phase_id for p in snapshot.phases]
+        if not valid_phases:
+            raise GoalsError("This goal has no phases to prove a desired property in.")
+        if prior is not None and phase is not None and phase != prior.phase_id:
+            raise GoalsError(
+                f"{prior.property_id} is proven in {prior.phase_id}; record a new property to "
+                "prove it elsewhere."
+            )
         bound = phase if phase is not None else (prior.phase_id if prior else None)
-        if bound is None and chosen == "user" and valid_phases:
+        if bound is None and chosen == "user":
             bound = valid_phases[-1]
         if bound is None:
             raise GoalsError(
@@ -1832,12 +1843,13 @@ def assess_want(
             )
         if bound not in valid_phases:
             raise GoalsError(
-                f"Unknown phase id: {bound}. Valid phases: {', '.join(valid_phases) or 'none'}."
+                f"Unknown phase id: {bound}. Valid phases: {', '.join(valid_phases)}."
             )
-        if prior is not None and chosen == "user" and bound != prior.phase_id:
+        bound_phase = next(p for p in snapshot.phases if p.phase_id == bound)
+        if bound_phase.status == PhaseStatus.ACCEPTED:
             raise GoalsError(
-                f"{prior.property_id}'s user check lives on {prior.phase_id}; record a new "
-                "property to check it elsewhere."
+                f"{bound} is already accepted, so nothing would ever check this property. "
+                "Bind it to a phase that's still ahead."
             )
         wanted = DesiredProperty(
             statement=statement,
@@ -1848,7 +1860,7 @@ def assess_want(
         if chosen == "user":
             # The checkpoint goes first: if the second write fails, the goal is
             # blocked on a check with no property, never a property with no check.
-            _record_property_check(snapshot, wanted)
+            _record_property_check(snapshot, wanted, reworded=prior is not None and prior.statement != statement)
         append_event(
             Path.cwd(),
             Event(
@@ -1867,17 +1879,27 @@ def assess_want(
     _handle(run)
 
 
-def _record_property_check(snapshot: GoalSnapshot, wanted: DesiredProperty) -> None:
+def _record_property_check(
+    snapshot: GoalSnapshot, wanted: DesiredProperty, *, reworded: bool = False
+) -> None:
     phase = next(p for p in snapshot.phases if p.phase_id == wanted.phase_id)
     existing = next((c for c in phase.checkpoints if c.checkpoint_id == wanted.property_id), None)
     if existing is not None and existing.status in (CheckpointStatus.PASSED, CheckpointStatus.WAIVED):
-        return  # already answered — rewording the property doesn't reopen it
+        if reworded:
+            raise GoalsError(
+                f"The user already answered {wanted.property_id} as worded; record a new property "
+                "(and ask them) instead of changing what they agreed to."
+            )
+        return
+    status = None if existing is not None else CheckpointStatus.PENDING
+    if reworded and existing is not None and checkpoint_is_asked(existing):
+        status = CheckpointStatus.NEEDS_USER  # a changed question needs a fresh answer
     record_checkpoint_workflow(
         Path.cwd(),
         wanted.phase_id,
         wanted.property_id,
         kind=CheckpointKind.HUMAN_VALIDATION,
-        status=None if existing is not None else CheckpointStatus.PENDING,
+        status=status,
         title=f"Ask the user: {wanted.statement}",
         summary="A desired property only the user can judge. Ask once there's something "
         "to try, then close it on their reply.",

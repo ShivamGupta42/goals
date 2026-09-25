@@ -155,4 +155,84 @@ def test_rewording_keeps_proof_and_phase_and_refreshes_an_open_check(repo: Path)
     assert check.title == "Ask the user: Simple enough for a non-technical relative"
     assert check.status == CheckpointStatus.PENDING
     assert "record a new property" in _fails("assess", "want", "x", "--id", dp.property_id, "--proof", "auto")
-    assert "user check lives on P4" in _fails("assess", "want", "x", "--id", dp.property_id, "--phase", "P2")
+    assert "is proven in P4" in _fails("assess", "want", "x", "--id", dp.property_id, "--phase", "P2")
+
+
+# --------------------------------------------------------------------------- #
+# Review fixes (phase 3): no escaping via accepted phases, rewording, or asking early
+# --------------------------------------------------------------------------- #
+def _accept(repo: Path, phase_id: str) -> None:
+    _evidence(repo, phase_id, [])
+    assert run_gate(repo, phase_id).verdict == GateVerdict.PASS
+    _invoke("phase", "accept", phase_id)
+
+
+def test_a_property_cannot_be_bound_or_moved_to_an_accepted_phase(repo: Path) -> None:
+    out = _invoke("assess", "want", "Works offline", "--proof", "auto", "--phase", "P3")
+    dp = load_active_snapshot(repo).desired_properties[0].property_id
+    assert dp in out
+    _accept(repo, "P1")
+    assert "already accepted" in _fails("assess", "want", "Fast", "--proof", "auto", "--phase", "P1")
+    assert "is proven in P3" in _fails("assess", "want", "Works offline", "--id", dp, "--phase", "P1")
+
+
+def test_rewording_a_question_the_user_already_answered_is_refused(two_phase_repo: Path) -> None:
+    repo = two_phase_repo
+    _invoke("assess", "want", "Simple enough for my mum", "--proof", "user")
+    dp = load_active_snapshot(repo).desired_properties[0].property_id
+    _accept(repo, "P1")
+    _invoke("checkpoint", "record", "P2", dp, "--status", "needs_user")
+    _say(repo, "Yes, mum could use it.")
+    # Rewording while it's asked re-asks: the old answer no longer closes it.
+    _invoke("assess", "want", "Needs no setup at all", "--id", dp)
+    _fails("checkpoint", "record", "P2", dp, "--status", "passed")
+    _say(repo, "Yes, no setup needed.")
+    _invoke("checkpoint", "record", "P2", dp, "--status", "passed")
+    # Once answered, the wording they agreed to is frozen.
+    assert "already answered" in _fails("assess", "want", "Something else", "--id", dp)
+
+
+def test_a_property_check_is_asked_in_its_own_phase_not_during_discovery(two_phase_repo: Path) -> None:
+    repo = two_phase_repo
+    _invoke("assess", "want", "I trust the number", "--proof", "user")
+    dp = load_active_snapshot(repo).desired_properties[0].property_id
+    early = _fails("checkpoint", "record", "P2", dp, "--status", "needs_user")
+    assert "once there's something to try" in early
+    _fails("checkpoint", "record", "P2", dp, "--status", "passed", "--unverified")
+    _fails("checkpoint", "waive", "P2", dp, "--reason", "n/a", "--unverified")
+    # Not actionable yet, so `goals issues` doesn't nag the agent to close or waive it.
+    assert dp not in _invoke("issues")
+    _accept(repo, "P1")
+    _invoke("checkpoint", "record", "P2", dp, "--status", "needs_user")
+    assert "Waiting on: you" in _invoke("check")
+
+
+def test_an_accepted_phase_missing_its_property_proof_is_flagged(repo: Path) -> None:
+    # e.g. accepted by an older Goals that didn't know about desired properties.
+    from goals.models import DesiredProperty, Event, EventType
+    from goals.storage import EventStore
+
+    _accept(repo, "P1")
+    snapshot = load_active_snapshot(repo)
+    wanted = DesiredProperty(statement="Logs in under 5 seconds", proof="auto", phase_id="P1")
+    goal_dir = next((repo / ".agent-workflow" / "goals").iterdir())
+    EventStore(goal_dir).append(
+        Event(
+            goal_id=snapshot.goal_id,
+            event_type=EventType.DESIRED_PROPERTY_RECORDED,
+            payload={"property": wanted.model_dump()},
+        )
+    )
+    issues = _invoke("issues")
+    assert f"P1 was accepted without proving desired property {wanted.property_id}" in issues
+
+
+def test_properties_show_in_goals_next_and_the_journey(repo: Path) -> None:
+    _invoke("assess", "pain", "Logging takes too many taps")
+    _invoke("assess", "want", "Logs in under 5 seconds", "--proof", "auto", "--phase", "P1")
+    dp = load_active_snapshot(repo).desired_properties[0].property_id
+    nxt = _invoke("next", "--agent", "claude")
+    assert "What the user asked for, proven in this phase:" in nxt and dp in nxt
+    journey = _invoke("assess", "journey")
+    assert "## What hurts today" in journey and "Logging takes too many taps" in journey
+    assert "## What the user wants" in journey and dp in journey

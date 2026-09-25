@@ -70,10 +70,12 @@ These are the success targets, so each one says how the run will be held to it:
   ```
 
   This adds a user checkpoint with the property's id to the last phase (P4,
-  Review, in the default arc). That phase can't be accepted until it's closed,
-  and only the user's reply can close it. Don't ask before there's something to
-  judge: in the last phase, set it to `--status needs_user`, ask, and close it
-  with `--status passed` once they answer.
+  Review, in the default arc). That phase can't be accepted until it's closed on
+  the user's reply (`--unverified` also closes it, shown as not verified). It
+  can't be asked before its phase — there's nothing to judge yet — so when that
+  phase is current, set it to `--status needs_user`, ask, and close it with
+  `--status passed` once they answer. To change a property after the user has
+  answered it, record a new one and ask them.
 
 Never bind a property to P1 (Confirm): there's nothing built to check yet. If the
 goal runs a custom loop, use its build phase for `--proof auto` (the dashboard

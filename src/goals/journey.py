@@ -42,6 +42,20 @@ def render_journey_text(snapshot: GoalSnapshot, audience: Audience = "high_schoo
     """Plain-language journey for the terminal — assumptions, open questions, calls."""
     lines = ["# The building journey", ""]
 
+    pains = [p for p in snapshot.pain_points if p.status == "active"]
+    if pains:
+        lines.append("## What hurts today")
+        lines.extend(f"- {pain.statement}" for pain in pains)
+        lines.append("")
+
+    wanted = [w for w in snapshot.desired_properties if w.status == "active"]
+    if wanted:
+        lines.append("## What the user wants")
+        for w in wanted:
+            how = "automated check" if w.proof == "auto" else "the user's judgement"
+            lines.append(f"- {w.property_id} {w.statement} ({how}, in {w.phase_id})")
+        lines.append("")
+
     if snapshot.breakdowns:
         lines.append("## How the agent broke the problem down")
         for breakdown in snapshot.breakdowns:
