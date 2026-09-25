@@ -388,3 +388,45 @@ def test_depends_assumption_without_phase_is_still_gated(tmp_path: Path, monkeyp
     blocked = run_gate(repo, "P1")
     assert blocked.verdict == GateVerdict.FAIL
     assert any(assumption.assumption_id in issue for issue in blocked.p0)
+
+
+def test_assumption_on_an_unknown_phase_errors_instead_of_escaping_the_gate(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # A --phase that names no phase would match no gate, so a load-bearing
+    # assumption on it would never be enforced (e.g. P3 on a two-phase loop).
+    repo = _repo_with_goal(tmp_path)
+    monkeypatch.chdir(repo)
+    phase_ids = [p.phase_id for p in load_active_snapshot(repo).phases]
+
+    result = CliRunner().invoke(app, ["assess", "assume", "fast", "--depends", "--phase", "P9"])
+    assert result.exit_code == 1
+    assert "Unknown phase id: P9" in result.stdout
+    assert ", ".join(phase_ids) in result.stdout
+    assert load_active_snapshot(repo).assumptions == []
+
+    later = phase_ids[-1]
+    result = CliRunner().invoke(app, ["assess", "assume", "fast", "--depends", "--phase", later])
+    assert result.exit_code == 0, result.stdout
+    assert load_active_snapshot(repo).assumptions[0].phase_id == later
+
+
+def test_answered_user_checkpoint_does_not_leave_goal_waiting_on_user(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Reviewing while a checkpoint needs the user records needs_human. Once the
+    # user answers, `goals check` must stop saying "Waiting on: you" — otherwise
+    # the agent re-asks a question that was already answered.
+    repo = _repo_with_goal(tmp_path)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+    record = ["checkpoint", "record", "P1", "alignment", "--kind", "understanding"]
+
+    assert runner.invoke(app, [*record, "--status", "needs_user"]).exit_code == 0
+    assert run_gate(repo, "P1").verdict == GateVerdict.NEEDS_HUMAN
+    assert "Waiting on: you" in runner.invoke(app, ["check"]).stdout
+
+    assert runner.invoke(app, [*record, "--status", "passed"]).exit_code == 0
+    checked = runner.invoke(app, ["check"]).stdout
+    assert "Waiting on: you" not in checked
+    assert "no longer needs the user" in checked
