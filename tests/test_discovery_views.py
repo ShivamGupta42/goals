@@ -250,3 +250,21 @@ def _accept_quick(repo: Path, phase_id: str) -> None:
     _invoke("phase", "verify", phase_id)
     run_gate(repo, phase_id)
     _invoke("phase", "accept", phase_id)
+
+
+def test_a_stand_in_goal_renders_without_duplicates_in_the_new_view(repo: Path) -> None:
+    # Goals from before typed records carried properties as assumptions and
+    # hand-made P4 checks; they keep rendering where they were, not twice.
+    _invoke("assess", "assume", "The result has to feel instant", "--building", "logger")
+    _invoke("checkpoint", "record", "P4", "feel-instant", "--kind", "human_validation", "--status", "pending")
+    _invoke("dashboard")
+    html = (_goal_dir(repo) / "dashboard.html").read_text()
+    assert html.count("The result has to feel instant") == 1
+    assert "What you want" not in html
+    assert not (_goal_dir(repo) / "DISCOVERY.md").exists()
+
+
+def test_discovery_commands_live_under_assess_not_a_top_level_discover() -> None:
+    assert runner.invoke(app, ["assess", "pain", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["assess", "want", "--help"]).exit_code == 0
+    assert runner.invoke(app, ["discover", "--help"]).exit_code != 0
