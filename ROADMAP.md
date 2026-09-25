@@ -32,13 +32,17 @@ gate as an `understanding` `goals checkpoint`. A plain-file `DISCOVERY.md` next 
 the goal's dashboard captures the full picture. Discovery is skipped only for
 trivial, unambiguous goals.
 
-**Known gaps in the stand-in** (critique cycle 1): every "user" signal is a label
-the agent writes itself, and the agent can also `goals checkpoint waive` the
-alignment gate. The user's desired properties and open questions are exported
-verbatim to the committable `.goals/` spec. A `--by user` decision's `--why` is
-copied into global user memory, which other projects' dashboards display. On a
-custom loop with no `P3`, a `--depends --phase P3` assumption silently escapes
-every gate.
+**Known gaps in the stand-in** (critique cycle 1):
+- *Open:* every "user" signal is a label the agent writes itself, and the agent
+  can also `goals checkpoint waive` the alignment gate. Fixed by step 2.
+- *Mitigated in the prompt:* desired properties and open questions are exported
+  verbatim to the committable `.goals/` spec, and a `--by user` decision's
+  `--why` is copied into cross-project user memory. The skill now keeps private
+  details out of both; step 4 removes the exposure structurally.
+- *Fixed:* an assumption on a phase that doesn't exist (e.g. `--phase P3` on a
+  two-phase loop) silently escaped every gate — now rejected. A review taken
+  while a checkpoint waited on the user kept `goals check` on "Waiting on: you"
+  after they answered — now reported as a stale review the agent can re-run.
 
 The next step is to make pain points and desired outcome-properties **first-class
 durable state** rather than borrowing the assumption/breakdown/checkpoint models —
@@ -58,11 +62,11 @@ catch one.
 
 Each step ships and meets its criteria before the next starts.
 
-1. **Forward-compatible event log** — ships at least one release before step 3
-   writes new event types.
-   - `EventStore.append` keeps lines it can't parse byte-for-byte. Today it
-     rewrites the log from parsed events, so an older CLI permanently deletes
-     event types it doesn't know.
+1. **Forward-compatible event log** — *implemented (2026-09-26); it must ship in
+   a release before steps 2 and 3 write new event types.*
+   - `EventStore.append` never rewrites existing lines; it appends. It used to
+     rewrite the log from parsed events, so an older CLI permanently deleted
+     event types and fields it didn't know.
    - New concepts get new event types, never new values in existing enums
      (`CheckpointKind`, `Assumption.status`) — an older CLI crashes on those.
    - `assess assume --phase` must name a phase that exists, as checkpoints
@@ -123,7 +127,7 @@ Each step ships and meets its criteria before the next starts.
 ### Validation criteria
 
 P0 — block release:
-- [ ] (auto) An older CLI appending to a log that contains an unknown event
+- [x] (auto) An older CLI appending to a log that contains an unknown event
   type leaves that line byte-identical.
 - [ ] (auto) `checkpoint record P1 alignment --status passed` and
   `checkpoint waive P1 alignment` both fail while it is `needs_user` with no
@@ -138,7 +142,7 @@ P0 — block release:
   `~/.goals/user/observations.md`.
 
 P1:
-- [ ] (auto) `assess assume --depends --phase P9` on a four-phase goal errors.
+- [x] (auto) `assess assume --depends --phase P9` on a four-phase goal errors.
 - [ ] (auto) A stand-in goal replays and renders with no duplicate entries in
   the new view.
 - [ ] (auto) `DISCOVERY_REVISED` clears P1's reviews and flags accepted later

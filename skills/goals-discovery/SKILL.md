@@ -43,10 +43,13 @@ Turn the pain into the properties of a good outcome. Ask how they'll know it
 worked, what "good" feels like, what would make them *not* trust or use it. You're
 collecting things like *"fast enough that I never wait,"* *"I can hand it to my
 mum,"* *"I trust the number without checking it,"* — not screens and buttons.
-Record each as a property the solution must have, in their words where you can,
-at a high-school reading level — no jargon. These are the success targets, so
-record each one where the run will actually be held to it. Sort each property
-into one of two kinds:
+Record each as a property the solution must have, at a high-school reading
+level — no jargon — and **without private details** (health, family, money,
+names): property statements and open questions are copied into the goal's
+`.goals/` spec, which is meant to be committed with the project. Keep the user's
+own words in `DISCOVERY.md` and checkpoint summaries, which stay local. These are
+the success targets, so record each one where the run will actually be held to
+it. Sort each property into one of two kinds:
 
 - **Measurable** — a check could fail if it's wrong (*"logging takes under 5
   seconds,"* *"works with no internet"*). Record it as load-bearing on the phase
@@ -81,7 +84,7 @@ into one of two kinds:
 Never tag a property `--depends` on P1 (Confirm): the gate would demand an
 automated check before Confirm can pass, and there's nothing built to check yet.
 If the goal runs a custom loop, use its build phase and its last phase instead
-(the dashboard lists them).
+(the dashboard lists them; an unknown phase id is rejected).
 
 **3. Name what you do NOT understand — out loud.**
 This is the heart of Discovery. Instead of quietly assuming, list the gaps: the
@@ -145,17 +148,18 @@ proceed to Assess:
 goals checkpoint record P1 alignment --kind understanding --status passed \
   --summary "User confirmed: <what they agreed to>"
 goals decision record "How we'll approach <goal>" --choice "<the path they confirmed>" \
-  --by user --why "<their reason, in their words>"
+  --by user --why "<their reason, minus private details>"
 ```
+
+A `--by user` decision is also copied into the user's memory across all their
+projects, so keep private details out of its `--why`.
 
 If they correct you, fold the correction back in (steps 2–5) and re-ask. A "no"
 here is the cheapest, most valuable feedback in the whole run.
 
-Don't run `goals phase review P1` while this checkpoint is waiting. All it can
-return is "needs you", that result sticks — `goals check` keeps saying *Waiting on:
-you* even after the yes, until the next review — and each review counts toward the
-phase's attempt cap. If it already happened, don't re-ask the user: carry on with
-P1's evidence, and the next real review replaces it.
+Don't run `goals phase review P1` while this checkpoint is waiting: all it can
+return is "needs you", and each review counts toward the phase's attempt cap.
+Record P1's evidence and review after the yes.
 
 ## Write `DISCOVERY.md`
 
@@ -179,6 +183,9 @@ sections:
 - Make every unknown **explicit**. An unsurfaced assumption is the bug.
 - Put every desired property where the run is **held to it** — a P3 load-bearing
   assumption or a P4 user check. A property recorded nowhere enforceable is a wish.
+- Keep private details out of anything recorded with `goals assess` or
+  `goals decision record --by user` — those leave this goal. `DISCOVERY.md` and
+  checkpoint summaries stay local.
 - Plain English throughout — a non-technical user must be able to weigh the
   pros and cons and answer the alignment question without decoding jargon.
 - Do not start building until the alignment checkpoint is `passed`.
