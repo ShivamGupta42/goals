@@ -46,7 +46,14 @@ record"; `DISCOVERY.md` is generated from the log next to the dashboard.
 - The plugin runs whatever `goals` is on PATH and never upgrades it, so a new
   skill can meet an old CLI (`No such command 'want'`). Hooks fail open. Deferred.
 - Each prompt pays ~180ms to start the CLI for the hook, even in repos with no
-  goal. Deferred (a lighter hook entry point).
+  goal (goals that aren't waiting are skipped without a replay). Deferred (a
+  lighter hook entry point).
+- A nested, non-interactive session that reuses the host session id (e.g.
+  `claude -p --resume "$CLAUDE_CODE_SESSION_ID" ...`) — or, on Codex, any subtask
+  prompt — can be recorded as a reply. Replies show verbatim for the user to
+  catch; one reply answers one question.
+- On a single-phase goal, a property only the user can judge is checked in that
+  same phase, so it can be asked during Discovery.
 - `goals user forget` matches preferences, not observations, so a remembered
   desired property is removed by editing `observations.md`. Remembering is
   opt-in (`--remember`) for this reason.

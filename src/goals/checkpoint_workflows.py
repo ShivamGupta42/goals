@@ -207,7 +207,12 @@ def record_checkpoint(
     now_asked = not closing and needs_user
     was_asked = existing is not None and checkpoint_is_asked(existing)
     if now_asked and (explicitly_asked or not was_asked):
-        asked_at, asked_session = utc_now(), current_host_session()
+        # Keep a known asking session when this shell can't tell us its own, so
+        # re-asking from an unknown session never widens who can answer.
+        asked_at = utc_now()
+        asked_session = current_host_session() or (
+            existing.asked_session if existing is not None and was_asked else ""
+        )
     elif now_asked and existing is not None:
         asked_at, asked_session = existing.asked_at, existing.asked_session
     else:
@@ -402,6 +407,13 @@ def _closing_provenance(
             "put to them yet. Record it with --status needs_user, ask them, and close it after "
             "they reply — or pass --unverified on a host without the Goals hook (it will show "
             "as not verified)."
+        )
+    here = current_host_session()
+    if existing.asked_session and here and existing.asked_session != here:
+        raise GoalsError(
+            f"{phase_id} checkpoint {checkpoint_id} was asked in another session, and only "
+            "replies typed there count. Re-ask it here with `--status needs_user`, ask the "
+            "user, and close it after they answer."
         )
     raise GoalsError(
         f"{phase_id} checkpoint {checkpoint_id} waits on the user, and no reply from them has "

@@ -495,3 +495,56 @@ def test_a_stamped_question_ignores_replies_from_other_sessions(repo: Path, monk
         record_checkpoint(repo, "P1", "stamped", status=CheckpointStatus.PASSED)
     closed = record_checkpoint(repo, "P1", "legacy", status=CheckpointStatus.PASSED)
     assert closed.user_message_id
+
+
+# --------------------------------------------------------------------------- #
+# Final-review fixes
+# --------------------------------------------------------------------------- #
+def test_a_reply_used_once_never_answers_another_question(repo: Path) -> None:
+    _ask(repo, "alignment")
+    _ask(repo, "scope", kind=CheckpointKind.APPROVAL)
+    _say(repo, "yes to the plan, but NOT the scope yet")
+    record_checkpoint(repo, "P1", "alignment", status=CheckpointStatus.PASSED)
+    _ask(repo, "alignment")  # reopened: its old citation is gone from current state
+    with pytest.raises(GoalsError):
+        record_checkpoint(repo, "P1", "scope", status=CheckpointStatus.PASSED)
+
+
+def test_a_reply_in_a_new_session_gets_a_clear_re_ask_hint(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "old-session")
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "new-session")
+    record_user_prompt(repo, "yes", session_id="new-session")  # not recorded for old-session's question
+    with pytest.raises(GoalsError, match="asked in another session"):
+        record_checkpoint(repo, "P1", "plan", status=CheckpointStatus.PASSED)
+    assert "re-ask it here" in CliRunner().invoke(app, ["check"]).stdout
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)  # re-ask here
+    assert record_user_prompt(repo, "yes", session_id="new-session") == 1
+    assert record_checkpoint(repo, "P1", "plan", status=CheckpointStatus.PASSED).user_message_id
+
+
+def test_re_asking_from_an_unknown_session_keeps_the_stamp(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "asking-session")
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    _ask(repo, "plan", kind=CheckpointKind.APPROVAL)
+    assert _checkpoint(repo, "plan").asked_session == "asking-session"
+    assert record_user_prompt(repo, "ship the migration", session_id="other") == 0
+
+
+def test_recording_says_what_status_the_checkpoint_ended_up_in(repo: Path) -> None:
+    CliRunner().invoke(app, ["checkpoint", "record", "P1", "pend", "--status", "pending"])
+    out = CliRunner().invoke(app, ["checkpoint", "record", "P1", "pend", "--summary", "done"]).stdout
+    assert "Recorded checkpoint pend for P1 (pending)" in out
+
+
+def test_the_hook_skips_idle_goals_without_replaying_them(repo: Path, monkeypatch) -> None:
+    calls = []
+    real = EventStore.snapshot
+    monkeypatch.setattr(EventStore, "snapshot", lambda self: calls.append(1) or real(self))
+    assert record_user_prompt(repo, "hello") == 0
+    assert calls == []  # nothing waiting per goal.json: no replay
+    _ask(repo)
+    calls.clear()
+    assert record_user_prompt(repo, "yes") == 1
+    assert calls  # a waiting goal is replayed before recording

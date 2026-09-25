@@ -23,29 +23,32 @@ def has_discovery_record(snapshot: GoalSnapshot) -> bool:
 
 def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
     first_phase = snapshot.phases[0].phase_id if snapshot.phases else None
-    pains = [p.statement for p in snapshot.pain_points if p.status == "active"]
+    latest = snapshot.discovery_revisions[-1] if snapshot.discovery_revisions else None
+    older_breakdowns = set(latest.earlier_breakdowns) if latest else set()
+    pains = [_flat(p.statement) for p in snapshot.pain_points if p.status == "active"]
     wants = [
-        f"{w.statement} — {property_state(snapshot, w)}"
+        f"{_flat(w.statement)} — {property_state(snapshot, w)}"
         for w in snapshot.desired_properties
         if w.status == "active"
     ]
     questions = list(
         dict.fromkeys(
-            question
+            _flat(question)
             for breakdown in snapshot.breakdowns
+            if breakdown.breakdown_id not in older_breakdowns
             for sub in breakdown.subproblems
             for question in sub.open_questions
         )
     )
     approach = [
-        f"{j.question} → {j.choice} "
+        f"{_flat(j.question)} → {_flat(j.choice)} "
         f"({'recommended by the agent' if j.decided_by == 'agent' else 'chosen by you'})"
-        + (f": {j.rationale}" if j.rationale else "")
+        + (f": {_flat(j.rationale)}" if j.rationale else "")
         for j in snapshot.judgements
-        if j.phase_id == first_phase
+        if j.phase_id == first_phase and (latest is None or j.recorded_at > latest.revised_at)
     ]
     lines = [
-        f"# Discovery — {snapshot.objective}",
+        f"# Discovery — {_flat(snapshot.objective)}",
         "",
         f"{GENERATED_MARKER}; edits here are overwritten. Change it "
         "with `goals assess pain`, `goals assess want`, `goals assess breakdown`, and "
@@ -64,20 +67,28 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
         *_bullets(approach),
         "",
         "## What the user confirmed",
-        *_bullets(confirmation_lines(snapshot)),
+        *_bullets([_flat(line) for line in confirmation_lines(snapshot)]),
     ]
     if snapshot.discovery_revisions:
-        set_aside = [p.statement for p in snapshot.pain_points if p.status == "superseded"]
-        set_aside += [w.statement for w in snapshot.desired_properties if w.status == "superseded"]
+        set_aside = [_flat(p.statement) for p in snapshot.pain_points if p.status == "superseded"]
+        set_aside += [
+            _flat(w.statement) for w in snapshot.desired_properties if w.status == "superseded"
+        ]
         lines += [
             "",
             "## Revisions",
-            *[f"- {r.revised_at[:10]}: {r.reason}" for r in snapshot.discovery_revisions],
+            *[f"- {r.revised_at[:10]}: {_flat(r.reason)}" for r in snapshot.discovery_revisions],
             "",
             "## Set aside by revisions",
             *_bullets(set_aside),
         ]
     return "\n".join(lines) + "\n"
+
+
+def _flat(text: str) -> str:
+    """One line, and never a Markdown heading: user text can't fake a section."""
+    flat = " ".join(text.split())
+    return "\\" + flat if flat.startswith("#") else flat
 
 
 GENERATED_MARKER = "_Written by Goals from this goal's record"

@@ -66,7 +66,19 @@ def _fails(*args: str) -> str:
     return result.stdout
 
 
+def _confirm_alignment_if_asked_for(repo: Path, phase_id: str) -> None:
+    """Discovery records add a pending alignment check; confirm it the real way."""
+    first = load_active_snapshot(repo).phases[0]
+    alignment = next((c for c in first.checkpoints if c.checkpoint_id == "alignment"), None)
+    if phase_id != first.phase_id or alignment is None or alignment.status == CheckpointStatus.PASSED:
+        return
+    _invoke("checkpoint", "record", phase_id, "alignment", "--status", "needs_user")
+    _say(repo, "yes, that's what I want")
+    _invoke("checkpoint", "record", phase_id, "alignment", "--status", "passed")
+
+
 def _evidence(repo: Path, phase_id: str, extra: list[dict]) -> None:
+    _confirm_alignment_if_asked_for(repo, phase_id)
     phase = next(p for p in load_active_snapshot(repo).phases if p.phase_id == phase_id)
     verifications = [
         {"covers": f"{phase_id}.C{i + 1}", "kind": "auto", "command": "true"}
@@ -176,20 +188,19 @@ def test_a_property_cannot_be_bound_or_moved_to_an_accepted_phase(repo: Path) ->
     assert "is proven in P3" in _fails("assess", "want", "Works offline", "--id", dp, "--phase", "P1")
 
 
-def test_rewording_a_question_the_user_already_answered_is_refused(two_phase_repo: Path) -> None:
+def test_rewording_after_the_users_yes_goes_through_a_revision(two_phase_repo: Path) -> None:
     repo = two_phase_repo
     _invoke("assess", "want", "Simple enough for my mum", "--proof", "user")
     dp = load_active_snapshot(repo).desired_properties[0].property_id
-    _accept(repo, "P1")
+    # Before the user's yes to Discovery, wording can still be tuned.
+    _invoke("assess", "want", "Simple enough for my mum to use", "--id", dp)
+    _accept(repo, "P1")  # confirms Discovery on the user's reply
+    out = _fails("assess", "want", "Needs no setup at all", "--id", dp)
+    assert "confirmed Discovery" in out and "goals assess revise" in out
     _invoke("checkpoint", "record", "P2", dp, "--status", "needs_user")
     _say(repo, "Yes, mum could use it.")
-    # Rewording while it's asked re-asks: the old answer no longer closes it.
-    _invoke("assess", "want", "Needs no setup at all", "--id", dp)
-    _fails("checkpoint", "record", "P2", dp, "--status", "passed")
-    _say(repo, "Yes, no setup needed.")
     _invoke("checkpoint", "record", "P2", dp, "--status", "passed")
-    # Once answered, the wording they agreed to is frozen.
-    assert "already answered" in _fails("assess", "want", "Something else", "--id", dp)
+    assert "confirmed Discovery" in _fails("assess", "want", "Something else", "--id", dp)
 
 
 def test_a_property_check_is_asked_in_its_own_phase_not_during_discovery(two_phase_repo: Path) -> None:
@@ -236,3 +247,45 @@ def test_properties_show_in_goals_next_and_the_journey(repo: Path) -> None:
     journey = _invoke("assess", "journey")
     assert "## What hurts today" in journey and "Logging takes too many taps" in journey
     assert "## What the user wants" in journey and dp in journey
+
+
+# --------------------------------------------------------------------------- #
+# Final-review fixes
+# --------------------------------------------------------------------------- #
+def test_the_first_discovery_record_asks_for_the_users_yes(repo: Path) -> None:
+    # An agent can't skip the alignment gate by never recording it...
+    _invoke("assess", "pain", "Logging takes too many taps")
+    alignment = next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.checkpoint_id == "alignment")
+    assert alignment.kind == CheckpointKind.UNDERSTANDING and alignment.status == CheckpointStatus.PENDING
+    assert alignment.required and alignment.user_owned
+    # ...or by recording over it: it stays pending, and passing it needs the user's reply.
+    assert "(pending)" in _invoke("checkpoint", "record", "P1", "alignment", "--title", "User agreed")
+    _fails("checkpoint", "record", "P1", "alignment", "--status", "passed")
+    _evidence(repo, "P1", [])  # confirms it the real way first
+    assert run_gate(repo, "P1").verdict == GateVerdict.PASS
+
+
+def test_a_custom_alignment_recorded_early_is_converted_and_reopened(repo: Path) -> None:
+    _invoke("checkpoint", "record", "P1", "alignment", "--title", "User agreed", "--status", "passed")
+    _invoke("assess", "pain", "Logging takes too many taps")
+    alignment = next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.checkpoint_id == "alignment")
+    assert alignment.kind == CheckpointKind.UNDERSTANDING and alignment.status == CheckpointStatus.PENDING
+
+
+def test_a_user_judged_property_is_not_checked_in_the_first_phase(repo: Path) -> None:
+    out = _fails("assess", "want", "feels calm", "--proof", "user", "--phase", "P1")
+    assert "Leave --phase off" in out
+
+
+def test_a_property_added_after_a_passing_review_must_still_be_proven(repo: Path) -> None:
+    _evidence(repo, "P1", [])
+    _accept(repo, "P1")
+    _evidence(repo, "P2", [])
+    assert run_gate(repo, "P2").verdict == GateVerdict.PASS
+    _invoke("assess", "want", "Works offline", "--proof", "auto", "--phase", "P2")
+    dp = next(w for w in load_active_snapshot(repo).desired_properties if w.status == "active")
+    out = _fails("phase", "accept", "P2")
+    assert dp.property_id in out and "last review passed before" in out
+    _evidence(repo, "P2", [{"covers": dp.property_id, "kind": "auto", "command": "true"}])
+    assert run_gate(repo, "P2").verdict == GateVerdict.PASS
+    _invoke("phase", "accept", "P2")

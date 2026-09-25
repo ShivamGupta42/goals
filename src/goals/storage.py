@@ -11,6 +11,8 @@ from typing import Iterator, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
+from goals.checkpoints import phase_checkpoint_blockers
+
 from goals.models import (
     Assumption,
     CheckpointKind,
@@ -319,25 +321,41 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )
-            if phase.reviews[-1].verdict == GateVerdict.PASS:
+            if phase.reviews[-1].verdict == GateVerdict.PASS and (
+                phase is snapshot.phases[0] or not _revision_open(snapshot)
+            ):
+                # A later phase's pass only counts once the user has re-confirmed
+                # the first phase against the new framing.
                 unreviewed_since_revision.discard(phase.phase_id)
             snapshot.current_phase = phase.phase_id
             _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             phase = _phase(snapshot, payload["phase_id"])
-            checkpoint = PhaseCheckpoint.model_validate(
-                _drop_unknown_fields(payload["checkpoint"], PhaseCheckpoint)
-            )
+            raw = payload["checkpoint"]
+            checkpoint = PhaseCheckpoint.model_validate(_drop_unknown_fields(raw, PhaseCheckpoint))
+            if isinstance(raw, dict) and "user_owned" not in raw:
+                # Written by an older Goals that doesn't know ownership (and
+                # defaulted --kind to custom): a user checkpoint stays the user's.
+                prior = next(
+                    (c for c in phase.checkpoints if c.checkpoint_id == checkpoint.checkpoint_id),
+                    None,
+                )
+                if prior is not None and prior.user_owned:
+                    checkpoint.user_owned = True
+                    if checkpoint.kind == CheckpointKind.CUSTOM:
+                        checkpoint.kind = prior.kind
+            if checkpoint.user_message_id and checkpoint.user_message_id not in snapshot.cited_message_ids:
+                snapshot.cited_message_ids.append(checkpoint.user_message_id)
             _upsert_checkpoint(phase.checkpoints, checkpoint)
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
             first = snapshot.phases[0]
-            if phase.phase_id in unreviewed_since_revision or (
-                snapshot.discovery_revisions
-                and phase is not first
-                and first.status != PhaseStatus.ACCEPTED
-            ):
+            if phase.phase_id in unreviewed_since_revision:
                 continue
+            if _revision_open(snapshot):
+                if phase is not first or phase_checkpoint_blockers(first):
+                    continue  # the accept command would refuse this; so does replay
+                snapshot.discovery_revisions[-1].settled = True
             phase.status = PhaseStatus.ACCEPTED
             snapshot.current_phase = _next_pending_phase_id(snapshot)
             if snapshot.current_phase is None:
@@ -384,6 +402,8 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             revision = DiscoveryRevision.model_validate(
                 _drop_unknown_fields(payload["revision"], DiscoveryRevision)
             )
+            revision.settled = False
+            revision.earlier_breakdowns = [b.breakdown_id for b in snapshot.breakdowns]
             _apply_discovery_revision(snapshot, revision)
             unreviewed_since_revision = {phase.phase_id for phase in snapshot.phases}
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
@@ -526,6 +546,11 @@ def _upsert_breakdown(breakdowns: list[ProblemBreakdown], breakdown: ProblemBrea
             breakdowns[index] = breakdown
             return
     breakdowns.append(breakdown)
+
+
+def _revision_open(snapshot: GoalSnapshot) -> bool:
+    """A Discovery revision the user hasn't re-confirmed the first phase for yet."""
+    return bool(snapshot.discovery_revisions) and not snapshot.discovery_revisions[-1].settled
 
 
 def _apply_discovery_revision(snapshot: GoalSnapshot, revision: DiscoveryRevision) -> None:

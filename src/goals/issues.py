@@ -7,7 +7,7 @@ from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
 from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
 from goals.decisions import should_surface_decision
-from goals.gates import proof_targets, review_phase
+from goals.gates import proof_targets, review_phase, revision_blocks
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     ArchitectureCheckReport,
@@ -207,7 +207,10 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         evidence_refs=refs,
                     )
                 )
-        if phase.status == PhaseStatus.NEEDS_REVIEW and not phase.reviews:
+        if phase.status == PhaseStatus.NEEDS_REVIEW and not phase.reviews and not revision_blocks(
+            snapshot, phase.phase_id
+        ):
+            # (While a revision is open, the revision issue says what to do first.)
             issues.append(
                 GoalIssue(
                     severity="p1",
@@ -278,9 +281,9 @@ def _revision_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     """After a Discovery revision, say what has to be redone until it is."""
     if not snapshot.discovery_revisions or not snapshot.phases:
         return []
-    first = snapshot.phases[0]
-    if first.status == PhaseStatus.ACCEPTED:
+    if snapshot.discovery_revisions[-1].settled:
         return []
+    first = snapshot.phases[0]
     revision = snapshot.discovery_revisions[-1]
     rereview = [p.phase_id for p in snapshot.phases[1:] if p.status == PhaseStatus.NEEDS_REVIEW]
     return [
@@ -332,6 +335,18 @@ def _unproven_property_issues(snapshot: GoalSnapshot, phase, refs: list[str]) ->
     return issues
 
 
+def _ask_action(phase_id: str, checkpoint, label: str) -> str:
+    from goals.checkpoint_workflows import current_host_session
+
+    here = current_host_session()
+    if checkpoint.asked_session and here and checkpoint.asked_session != here:
+        return (
+            f"It was asked in another session; re-ask it here with `goals checkpoint record "
+            f"{phase_id} {checkpoint.checkpoint_id} --status needs_user`, then ask the user."
+        )
+    return f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+
+
 def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[GoalIssue]:
     issues: list[GoalIssue] = []
     for checkpoint in checkpoints:
@@ -366,7 +381,7 @@ def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[Goal
                 detail=checkpoint.summary
                 or "A required checkpoint must pass or be waived before this phase can be accepted.",
                 suggested_action=(
-                    f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+                    _ask_action(phase_id, checkpoint, label)
                     if needs_user
                     else f"Complete or waive checkpoint {checkpoint.checkpoint_id} before review."
                 ),

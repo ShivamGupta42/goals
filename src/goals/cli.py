@@ -839,7 +839,7 @@ def checkpoint_record(
             user_message_id=user_message,
             unverified=unverified,
         )
-        typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id}")
+        typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id} ({checkpoint.status})")
         _echo_provenance(checkpoint)
 
     _handle(run)
@@ -847,6 +847,8 @@ def checkpoint_record(
 
 def _echo_provenance(checkpoint) -> None:
     """Say which reply closed a user checkpoint, so a wrong citation is caught now."""
+    if not (checkpoint.user_message_id or checkpoint.unverified):
+        return
     snapshot = load_active_snapshot(Path.cwd())
     line = checkpoint_provenance(snapshot, checkpoint)
     if line and checkpoint.user_message_id:
@@ -1765,8 +1767,12 @@ def assess_pain(
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        if pain_id is not None and all(p.pain_id != pain_id for p in snapshot.pain_points):
+        prior = next((p for p in snapshot.pain_points if p.pain_id == pain_id), None)
+        if pain_id is not None and prior is None:
             raise GoalsError(f"Unknown pain point id: {pain_id}.")
+        if prior is not None and prior.statement != statement:
+            _refuse_reword_after_yes(snapshot, pain_id)
+        _ensure_alignment_check(snapshot)
         pain = PainPoint(statement=statement, **({"pain_id": pain_id} if pain_id else {}))
         append_event(
             Path.cwd(),
@@ -1831,6 +1837,8 @@ def assess_want(
                     f"{property_id} was set aside when Discovery was revised; record it as a new "
                     "property (and ask the user about it) instead of reviving the old one."
                 )
+            if prior.statement != statement:
+                _refuse_reword_after_yes(snapshot, property_id)
         chosen = proof if proof is not None else (prior.proof if prior else None)
         if chosen is None:
             raise GoalsError(
@@ -1864,6 +1872,12 @@ def assess_want(
                 f"Unknown phase id: {bound}. Valid phases: {', '.join(valid_phases)}."
             )
         bound_phase = next(p for p in snapshot.phases if p.phase_id == bound)
+        if chosen == "user" and bound == valid_phases[0] and len(valid_phases) > 1:
+            raise GoalsError(
+                f"A property only the user can judge is checked once there's something to try, "
+                f"not in {bound} while Discovery is still settling what to build. Leave --phase "
+                "off to check it in the last phase."
+            )
         if bound_phase.status == PhaseStatus.ACCEPTED:
             raise GoalsError(
                 f"{bound} is already accepted, so nothing would ever check this property. "
@@ -1876,6 +1890,7 @@ def assess_want(
             remember=remember if remember is not None else (prior.remember if prior else False),
             **({"property_id": property_id} if property_id else {}),
         )
+        _ensure_alignment_check(snapshot)
         if chosen == "user":
             # The checkpoint goes first: if the second write fails, the goal is
             # blocked on a check with no property, never a property with no check.
@@ -1896,6 +1911,50 @@ def assess_want(
         typer.echo(f"Recorded desired property: {wanted.property_id} — {how}")
 
     _handle(run)
+
+
+def _discovery_confirmed(snapshot: GoalSnapshot) -> bool:
+    """Has the user closed the first phase's understanding check (said yes, or skipped)?"""
+    if not snapshot.phases:
+        return False
+    return any(
+        c.kind == CheckpointKind.UNDERSTANDING
+        and c.status in (CheckpointStatus.PASSED, CheckpointStatus.WAIVED)
+        for c in snapshot.phases[0].checkpoints
+    )
+
+
+def _refuse_reword_after_yes(snapshot: GoalSnapshot, record_id: str) -> None:
+    if _discovery_confirmed(snapshot):
+        raise GoalsError(
+            f"The user confirmed Discovery with {record_id} worded as it is. To change what "
+            "they want, run `goals assess revise --reason ...` and ask them again."
+        )
+
+
+def _ensure_alignment_check(snapshot: GoalSnapshot) -> None:
+    """Discovery records need the user's yes: make sure the first phase asks for it.
+
+    Created pending (and user-owned) on the first Discovery record, so the first
+    phase can't be accepted until the user answers — an agent can't skip the
+    alignment gate by never recording it, or by recording it as a custom check.
+    """
+    if not snapshot.phases:
+        return
+    first = snapshot.phases[0]
+    if first.status == PhaseStatus.ACCEPTED:
+        return
+    if any(c.kind == CheckpointKind.UNDERSTANDING for c in first.checkpoints):
+        return
+    record_checkpoint_workflow(
+        Path.cwd(),
+        first.phase_id,
+        "alignment",
+        kind=CheckpointKind.UNDERSTANDING,
+        status=CheckpointStatus.PENDING,
+        title="Does this match what you want to build?",
+        summary="Discovery's yes: ask once the pain, wants, and approach are recorded.",
+    )
 
 
 def _record_property_check(

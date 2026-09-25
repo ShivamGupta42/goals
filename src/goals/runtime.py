@@ -19,7 +19,7 @@ from goals.git_ops import (
     require_clean_repo,
     slugify,
 )
-from goals.gates import proof_targets, review_phase
+from goals.gates import proof_targets, review_phase, revision_blocks
 from goals.models import (
     Evidence,
     EvidenceArtifact,
@@ -27,7 +27,6 @@ from goals.models import (
     EventType,
     GateResult,
     GateVerdict,
-    PhaseStatus,
     GoalSnapshot,
     Phase,
     WorktreeLease,
@@ -341,6 +340,25 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
                 f"Record evidence, then run `goals phase review {phase_id}` and fix "
                 "any findings first."
             )
+        # Something to prove may have been bound to this phase after that review
+        # passed (a desired property or load-bearing assumption): it needs its own
+        # executed check before the phase counts as done.
+        load_bearing, desired = proof_targets(snapshot, phase_id)
+        verifications = phase.evidence.verifications if phase.evidence is not None else []
+        unproven = [
+            target_id
+            for target_id, _ in [*load_bearing, *desired]
+            if not any(
+                v.covers.strip() == target_id and v.kind == "auto" and v.ran and v.passed
+                for v in verifications
+            )
+        ]
+        if unproven:
+            raise GoalsError(
+                f"{phase_id}'s last review passed before {', '.join(unproven)} had to be proven "
+                "here. Add an automated check covering each, run "
+                f"`goals phase verify {phase_id}`, then `goals phase review {phase_id}` again."
+            )
         event_type = EventType.PHASE_ACCEPTED
     else:
         raise GoalsError(f"Unsupported phase transition: {action}")
@@ -369,24 +387,6 @@ def claim_worktree(cwd: Path) -> WorktreeLease:
             f"`git switch {lease.branch}` (or cd into the goal's worktree)."
         )
     return lease
-
-
-def revision_blocks(snapshot: GoalSnapshot, phase_id: str) -> str | None:
-    """Why a phase can't be reviewed or accepted yet after a Discovery revision.
-
-    Until the user re-confirms the first phase, later phases would only be
-    re-approved against the old framing on their old evidence.
-    """
-    if not snapshot.discovery_revisions or not snapshot.phases:
-        return None
-    first = snapshot.phases[0]
-    if first.status == PhaseStatus.ACCEPTED or phase_id == first.phase_id:
-        return None
-    return (
-        f"Discovery was revised, so {phase_id} waits until {first.phase_id} is re-confirmed "
-        f"with the user and accepted. Record what they want now (`goals assess pain`/`want`), "
-        f"re-confirm {first.phase_id}, then review {phase_id} against the new framing."
-    )
 
 
 def run_gate(cwd: Path, phase_id: str, *, max_attempts: int | None = None) -> GateResult:

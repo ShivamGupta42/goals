@@ -37,6 +37,24 @@ def proof_targets(
     return load_bearing, desired
 
 
+def revision_blocks(snapshot: GoalSnapshot, phase_id: str) -> str | None:
+    """Why a phase can't be reviewed or accepted yet after a Discovery revision.
+
+    Until the user re-confirms the first phase, later phases would only be
+    re-approved against the old framing on their old evidence.
+    """
+    if not snapshot.discovery_revisions or snapshot.discovery_revisions[-1].settled:
+        return None
+    if not snapshot.phases or phase_id == snapshot.phases[0].phase_id:
+        return None
+    first = snapshot.phases[0].phase_id
+    return (
+        f"Discovery was revised, so {phase_id} waits until {first} is re-confirmed "
+        f"with the user and accepted. Record what they want now (`goals assess pain`/`want`), "
+        f"re-confirm {first}, then review {phase_id} against the new framing."
+    )
+
+
 def review_phase(
     phase: Phase,
     *,

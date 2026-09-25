@@ -80,7 +80,15 @@ def record_decision(
             payload={"judgement": record.model_dump()},
         ),
     )
-    warning = _record_user_judgement_signal(snapshot.goal_id, record, private=private)
+    first_phase = snapshot.phases[0].phase_id if snapshot.phases else None
+    warning = _record_user_judgement_signal(
+        snapshot.goal_id,
+        record,
+        private=private,
+        # Discovery's decisions (first phase) are about the user's own situation:
+        # their why never leaves this goal, even without --private.
+        keep_why_local=record.phase_id is not None and record.phase_id == first_phase,
+    )
     return DecisionRecordReport(record=record, warning=warning)
 
 
@@ -92,7 +100,7 @@ def decision_brief_workflow(
 
 
 def _record_user_judgement_signal(
-    goal_id: str, record: JudgementRecord, *, private: bool = False
+    goal_id: str, record: JudgementRecord, *, private: bool = False, keep_why_local: bool = False
 ) -> str:
     """Log the user's decision as a situated observation — context, not cause.
 
@@ -113,7 +121,7 @@ def _record_user_judgement_signal(
             area=infer_area(record.question),
             choice=record.choice,
             context=record.question,
-            note=record.rationale,
+            note="" if keep_why_local else record.rationale,
             reversible=record.reversible,
             phase_id=record.phase_id or "",
         )

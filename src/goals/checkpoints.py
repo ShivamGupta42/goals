@@ -72,7 +72,7 @@ def replies_since_asked(
     if checkpoint is None or not checkpoint_is_asked(checkpoint):
         return []
     asked_at = checkpoint.asked_at or checkpoint.updated_at
-    cited = {
+    cited = set(snapshot.cited_message_ids) | {
         other.user_message_id
         for phase in snapshot.phases
         for other in phase.checkpoints

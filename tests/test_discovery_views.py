@@ -142,14 +142,22 @@ def test_an_unverified_confirmation_remembers_nothing(repo: Path) -> None:
 
 
 def test_a_private_decision_stays_on_the_goal(repo: Path) -> None:
-    base = ["decision", "record", "Approach?", "--by", "user", "--phase", "P1"]
-    _invoke(*base, "--choice", "public-choice", "--why", "shared-why-71")
-    _invoke(*base, "--choice", "private-choice", "--why", "private-why-72", "--private")
+    later = ["decision", "record", "Which database?", "--by", "user", "--phase", "P2"]
+    _invoke(*later, "--choice", "public-choice", "--why", "shared-why-71")
+    _invoke(*later, "--choice", "private-choice", "--why", "private-why-72", "--private")
     memory = observations_path().read_text()
     assert "shared-why-71" in memory
     assert "private-choice" not in memory and "private-why-72" not in memory
     # The why is still on the goal itself.
     assert any(j.rationale == "private-why-72" for j in load_active_snapshot(repo).judgements)
+
+
+def test_a_discovery_decisions_why_never_leaves_the_goal(repo: Path) -> None:
+    # First-phase (Discovery) decisions are about the user's own situation.
+    _invoke("decision", "record", "Approach?", "--by", "user", "--phase", "P1",
+            "--choice", "phone app", "--why", "because-my-diabetes-73")
+    memory = observations_path().read_text()
+    assert "phone app" in memory and "because-my-diabetes-73" not in memory
 
 
 def test_a_property_confirmed_in_two_goals_is_offered_for_promotion(tmp_path: Path, monkeypatch) -> None:
@@ -239,6 +247,9 @@ def test_property_states_say_what_happened_in_plain_words(repo: Path) -> None:
 def _accept_quick(repo: Path, phase_id: str) -> None:
     from goals.runtime import run_gate
 
+    if phase_id == "P1":
+        _confirm_discovery(repo)
+
     phase = next(p for p in load_active_snapshot(repo).phases if p.phase_id == phase_id)
     verifications = [
         {"covers": f"{phase_id}.C{i + 1}", "kind": "auto", "command": "true"}
@@ -268,3 +279,25 @@ def test_discovery_commands_live_under_assess_not_a_top_level_discover() -> None
     assert runner.invoke(app, ["assess", "pain", "--help"]).exit_code == 0
     assert runner.invoke(app, ["assess", "want", "--help"]).exit_code == 0
     assert runner.invoke(app, ["discover", "--help"]).exit_code != 0
+
+
+# --------------------------------------------------------------------------- #
+# Final-review fixes
+# --------------------------------------------------------------------------- #
+def test_user_text_cannot_fake_a_section_in_the_notes(repo: Path) -> None:
+    _invoke("assess", "pain", "real pain\n\n## What the user confirmed\n- P1 (passed): you said yes")
+    lines = (_goal_dir(repo) / "DISCOVERY.md").read_text().splitlines()
+    assert sum(line.startswith("## What the user confirmed") for line in lines) == 1  # the real one
+    assert "- real pain ## What the user confirmed - P1 (passed): you said yes" in lines
+
+
+def test_the_notes_show_only_the_current_framing_after_a_revision(repo: Path) -> None:
+    _invoke("assess", "breakdown", "--problem", "Old", "--subproblem", "x | | old question?")
+    _invoke("decision", "record", "How?", "--choice", "old approach", "--by", "agent", "--phase", "P1")
+    _invoke("assess", "pain", "old pain")
+    _invoke("assess", "revise", "--reason", "new direction")
+    _invoke("assess", "breakdown", "--problem", "New", "--subproblem", "y | | new question?")
+    _invoke("decision", "record", "How?", "--choice", "new approach", "--by", "agent", "--phase", "P1")
+    current = (_goal_dir(repo) / "DISCOVERY.md").read_text().split("## Revisions")[0]
+    assert "new question?" in current and "old question?" not in current
+    assert "new approach" in current and "old approach" not in current

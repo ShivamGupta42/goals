@@ -689,6 +689,10 @@ class DiscoveryRevision(BaseModel):
 
     reason: str
     revised_at: str = Field(default_factory=utc_now)
+    # Derived on replay, never authored: whether the user has re-confirmed the
+    # first phase since, and which breakdowns belong to the old framing.
+    settled: bool = False
+    earlier_breakdowns: list[str] = Field(default_factory=list)
 
 
 class ProblemBreakdown(BaseModel):
@@ -1210,6 +1214,9 @@ class GoalSnapshot(BaseModel):
     pain_points: list[PainPoint] = Field(default_factory=list)
     desired_properties: list[DesiredProperty] = Field(default_factory=list)
     discovery_revisions: list[DiscoveryRevision] = Field(default_factory=list)
+    # Every user reply any checkpoint has ever been closed on (derived on replay):
+    # a reply answers one question, even after that checkpoint is reopened.
+    cited_message_ids: list[str] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

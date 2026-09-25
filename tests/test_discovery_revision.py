@@ -124,7 +124,8 @@ def test_check_names_what_to_redo(repo: Path) -> None:
     check = _invoke("check")
     assert "Discovery was revised: Different audience" in check
     assert "re-review P2" in check
-    assert "P2 has evidence but no review" in check
+    # No advice the engine would refuse: P2's review waits for P1.
+    assert "Run `goals phase review P2`" not in check
 
 
 def _reconfirm_p1(repo: Path) -> None:
@@ -212,3 +213,55 @@ def test_the_notes_keep_the_history(repo: Path) -> None:
     current, set_aside = text.split("## Set aside by revisions")
     assert "Logging takes too many taps" not in current  # no longer what hurts today...
     assert "Logging takes too many taps" in set_aside  # ...but what was dropped is on record
+
+
+# --------------------------------------------------------------------------- #
+# Final-review fixes
+# --------------------------------------------------------------------------- #
+def test_the_revision_block_lifts_once_the_user_reconfirms(repo: Path) -> None:
+    _discovery_then_two_phases(repo)
+    _invoke("assess", "revise", "--reason", "Different audience")
+    _reconfirm_p1(repo)
+    assert load_active_snapshot(repo).discovery_revisions[-1].settled
+    # Reopening P1 later for an unrelated reason doesn't re-trigger the revision block.
+    _invoke("phase", "start", "P1")
+    assert "Discovery was revised" not in _invoke("check")
+
+
+def test_an_older_goals_reviewing_on_its_own_cannot_undo_a_revision(repo: Path) -> None:
+    # An older binary skips DISCOVERY_REVISED, so its own review of P1 passes on
+    # the stale alignment; replay still won't accept P1 while it's blocked, nor
+    # count a later phase's pass before P1 is re-confirmed.
+    from goals.models import Event, EventType, GateResult
+    from goals.storage import EventStore
+
+    _discovery_then_two_phases(repo)
+    _invoke("assess", "revise", "--reason", "Different audience")
+    snapshot = load_active_snapshot(repo)
+    store = EventStore(next((repo / ".agent-workflow" / "goals").iterdir()))
+    passed = GateResult(gate_id="phase-review", verdict=GateVerdict.PASS, summary="ok").model_dump()
+    for phase_id in ("P1", "P2"):
+        store.append(Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_REVIEWED,
+                           payload={"phase_id": phase_id, "gate_result": passed}))
+        store.append(Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_ACCEPTED,
+                           payload={"phase_id": phase_id}))
+    after = load_active_snapshot(repo)
+    assert after.phases[0].status != PhaseStatus.ACCEPTED
+    assert after.phases[1].status != PhaseStatus.ACCEPTED
+    assert not after.discovery_revisions[-1].settled
+
+
+def test_an_older_goals_rerecording_alignment_keeps_it_the_users(repo: Path) -> None:
+    from goals.models import Event, EventType
+    from goals.storage import EventStore
+
+    _discovery_then_two_phases(repo)
+    _invoke("assess", "revise", "--reason", "Different audience")
+    snapshot = load_active_snapshot(repo)
+    old_style = {"checkpoint_id": "alignment", "kind": "custom", "title": "Does this match?",
+                 "status": "passed", "required": True, "needs_user": False}
+    EventStore(next((repo / ".agent-workflow" / "goals").iterdir())).append(
+        Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+              payload={"phase_id": "P1", "checkpoint": old_style}))
+    alignment = next(c for c in load_active_snapshot(repo).phases[0].checkpoints if c.checkpoint_id == "alignment")
+    assert alignment.user_owned and alignment.kind.value == "understanding"

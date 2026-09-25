@@ -235,6 +235,8 @@ def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
     for goal_dirs, own in _candidate_goal_dirs(cwd):
         unstamped: list[tuple[EventStore, str]] = []
         for goal_dir in goal_dirs:
+            if not _might_be_waiting(goal_dir):
+                continue
             store = EventStore(goal_dir)
             try:
                 snapshot = store.snapshot()
@@ -304,6 +306,27 @@ def _candidate_goal_dirs(cwd: Path) -> list[tuple[list[Path], bool]]:
             found.extend(_goal_dirs_under(worktree))
     tiers.append((found, False))
     return tiers
+
+
+def _might_be_waiting(goal_dir: Path) -> bool:
+    """Cheap pre-check on the saved snapshot before replaying a goal's whole log.
+
+    Runs on every prompt for every goal in the repo, so finished or idle goals
+    are skipped without a replay. Anything unreadable is replayed to be safe.
+    """
+    try:
+        state = json.loads((goal_dir / "goal.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if state.get("status") not in {status.value for status in _RECORDING_STATUSES}:
+        return False
+    for phase in state.get("phases", []):
+        for checkpoint in phase.get("checkpoints", []):
+            if checkpoint.get("status") in {"passed", "waived"}:
+                continue
+            if checkpoint.get("needs_user") or checkpoint.get("status") == "needs_user":
+                return True
+    return False
 
 
 def _goal_dirs_under(root: Path) -> list[Path]:
