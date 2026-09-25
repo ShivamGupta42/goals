@@ -86,11 +86,14 @@ from goals.models import (
     CheckpointKind,
     CheckpointStatus,
     Decision,
+    DesiredProperty,
     Event,
     EventType,
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    GoalSnapshot,
+    PainPoint,
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
@@ -1735,6 +1738,150 @@ def assess_assume(
         typer.echo(f"Recorded assumption: {assumption.assumption_id} ({assumption.status})")
 
     _handle(run)
+
+
+@assess_app.command("pain")
+def assess_pain(
+    statement: str = typer.Argument(
+        ..., help="What's hard or annoying for the user today, in plain words."
+    ),
+    pain_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to reword an existing pain point."
+    ),
+) -> None:
+    """Record a pain point — what hurts the user today (Discovery).
+
+    The *why* behind the goal, captured before any solution. Stays on this
+    machine: never exported to `.goals/` or copied into user memory.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        if pain_id is not None and all(p.pain_id != pain_id for p in snapshot.pain_points):
+            raise GoalsError(f"Unknown pain point id: {pain_id}.")
+        pain = PainPoint(statement=statement, **({"pain_id": pain_id} if pain_id else {}))
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.PAIN_POINT_RECORDED,
+                payload={"pain_point": pain.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded pain point: {pain.pain_id}")
+
+    _handle(run)
+
+
+@assess_app.command("want")
+def assess_want(
+    statement: str = typer.Argument(
+        ..., help="How the finished thing should feel or behave, in plain words."
+    ),
+    proof: Optional[str] = typer.Option(
+        None,
+        "--proof",
+        help="auto (an automated check can prove it) or user (only the user can judge it).",
+    ),
+    phase: Optional[str] = typer.Option(
+        None,
+        "--phase",
+        help="Phase that proves it. Required for auto; user defaults to the last phase.",
+    ),
+    property_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to reword an existing desired property."
+    ),
+) -> None:
+    """Record a desired property — how the result should feel — and how it's proven.
+
+    ``--proof auto``: the named phase's review needs an automated check, run by
+    `goals phase verify`, whose `covers` is this property's id. ``--proof user``:
+    adds a user checkpoint (same id) to the last phase, which can only be closed
+    on the user's reply once there's something for them to try.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        prior = None
+        if property_id is not None:
+            prior = next(
+                (w for w in snapshot.desired_properties if w.property_id == property_id), None
+            )
+            if prior is None:
+                raise GoalsError(f"Unknown desired property id: {property_id}.")
+        chosen = proof if proof is not None else (prior.proof if prior else None)
+        if chosen is None:
+            raise GoalsError(
+                "Say how it's proven: --proof auto (an automated check can show it) or "
+                "--proof user (only the user can judge it)."
+            )
+        chosen = _validate_choice(chosen, {"auto", "user"}, "proof")
+        if prior is not None and chosen != prior.proof:
+            raise GoalsError(
+                f"{prior.property_id} is proven by {prior.proof}; record a new property instead "
+                "of changing how an existing one is proven."
+            )
+        valid_phases = [p.phase_id for p in snapshot.phases]
+        bound = phase if phase is not None else (prior.phase_id if prior else None)
+        if bound is None and chosen == "user" and valid_phases:
+            bound = valid_phases[-1]
+        if bound is None:
+            raise GoalsError(
+                "An auto-proven property needs --phase: the phase whose automated checks prove "
+                "it (P3, Execute, in the default Confirm → Inspect → Execute → Review arc)."
+            )
+        if bound not in valid_phases:
+            raise GoalsError(
+                f"Unknown phase id: {bound}. Valid phases: {', '.join(valid_phases) or 'none'}."
+            )
+        if prior is not None and chosen == "user" and bound != prior.phase_id:
+            raise GoalsError(
+                f"{prior.property_id}'s user check lives on {prior.phase_id}; record a new "
+                "property to check it elsewhere."
+            )
+        wanted = DesiredProperty(
+            statement=statement,
+            proof=chosen,
+            phase_id=bound,
+            **({"property_id": property_id} if property_id else {}),
+        )
+        if chosen == "user":
+            # The checkpoint goes first: if the second write fails, the goal is
+            # blocked on a check with no property, never a property with no check.
+            _record_property_check(snapshot, wanted)
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.DESIRED_PROPERTY_RECORDED,
+                payload={"property": wanted.model_dump()},
+            ),
+        )
+        how = (
+            f"proven by an automated check in {bound}"
+            if chosen == "auto"
+            else f"the user confirms it in {bound} (checkpoint {wanted.property_id})"
+        )
+        typer.echo(f"Recorded desired property: {wanted.property_id} — {how}")
+
+    _handle(run)
+
+
+def _record_property_check(snapshot: GoalSnapshot, wanted: DesiredProperty) -> None:
+    phase = next(p for p in snapshot.phases if p.phase_id == wanted.phase_id)
+    existing = next((c for c in phase.checkpoints if c.checkpoint_id == wanted.property_id), None)
+    if existing is not None and existing.status in (CheckpointStatus.PASSED, CheckpointStatus.WAIVED):
+        return  # already answered — rewording the property doesn't reopen it
+    record_checkpoint_workflow(
+        Path.cwd(),
+        wanted.phase_id,
+        wanted.property_id,
+        kind=CheckpointKind.HUMAN_VALIDATION,
+        status=None if existing is not None else CheckpointStatus.PENDING,
+        title=f"Ask the user: {wanted.statement}",
+        summary="A desired property only the user can judge. Ask once there's something "
+        "to try, then close it on their reply.",
+    )
 
 
 @assess_app.command("breakdown")

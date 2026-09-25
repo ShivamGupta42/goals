@@ -19,7 +19,7 @@ from goals.git_ops import (
     require_clean_repo,
     slugify,
 )
-from goals.gates import review_phase
+from goals.gates import proof_targets, review_phase
 from goals.models import (
     Evidence,
     EvidenceArtifact,
@@ -366,13 +366,13 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int | None = None) -> Ga
     snapshot = load_active_snapshot(cwd)
     phase = _find_phase(snapshot, phase_id)
     attempt = len([review for review in phase.reviews if review.gate_id == "phase-review"]) + 1
-    load_bearing = [
-        (assumption.assumption_id, assumption.statement)
-        for assumption in snapshot.assumptions
-        if assumption.depends_on and assumption.phase_id == phase_id
-    ]
+    load_bearing, desired = proof_targets(snapshot, phase_id)
     result = review_phase(
-        phase, load_bearing=load_bearing, attempt=attempt, max_attempts=max_attempts
+        phase,
+        load_bearing=load_bearing,
+        desired=desired,
+        attempt=attempt,
+        max_attempts=max_attempts,
     )
     append_event(
         cwd,

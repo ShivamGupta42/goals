@@ -83,8 +83,8 @@ def test_append_keeps_lines_from_a_newer_goals_byte_for_byte(tmp_path: Path) -> 
         {
             "event_id": "evt-future",
             "goal_id": "fwd",
-            "event_type": "desired_property_recorded",  # not known to this version
-            "payload": {"property": {"property_id": "DP-1"}},
+            "event_type": "recorded_by_a_newer_goals",  # not known to this version
+            "payload": {"thing": {"thing_id": "X-1"}},
             "timestamp": "2026-01-01T00:00:00+00:00",
         }
     )

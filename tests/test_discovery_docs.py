@@ -18,7 +18,9 @@ DISCOVERY_DOCS = [
     REPO / "commands" / "discover.md",
     REPO / "skills" / "goals-discovery" / "SKILL.md",
 ]
-COMMAND_RE = re.compile(r"goals (?:checkpoint record|decision record|assess assume)[^`\n]*")
+COMMAND_RE = re.compile(
+    r"goals (?:checkpoint record|decision record|assess assume|assess want)[^`\n]*"
+)
 
 
 def _commands(path: Path, prefix: str) -> list[str]:
@@ -54,7 +56,24 @@ def test_discovery_never_puts_a_load_bearing_assumption_on_confirm() -> None:
             )
 
 
+def test_discovery_never_binds_a_desired_property_to_confirm() -> None:
+    for path in DISCOVERY_DOCS:
+        for command in _commands(path, "goals assess want"):
+            assert "--phase P1" not in command, f"{path.name}: property bound to P1: {command}"
+            if "--proof auto" in command:
+                assert "--phase " in command, f"{path.name}: auto proof needs --phase: {command}"
+
+
+def test_discovery_uses_typed_properties_not_stand_ins() -> None:
+    # Never dual-write: the stand-ins (assumptions + hand-made P4 feel-* checkpoints)
+    # were replaced by `goals assess want` in the same release.
+    for path in DISCOVERY_DOCS:
+        text = path.read_text(encoding="utf-8")
+        assert "feel-" not in text, f"{path.name} still documents feel-* checkpoints"
+        assert not any("--depends" in c for c in _commands(path, "goals assess assume")), path.name
+
+
 def test_command_extraction_sees_multiline_and_inline_forms() -> None:
     skill = DISCOVERY_DOCS[2]
-    assert any("--depends --phase P3" in c for c in _commands(skill, "goals assess assume"))
+    assert any("--proof auto --phase P3" in c for c in _commands(skill, "goals assess want"))
     assert any("--by agent" in c for c in _commands(skill, "goals decision record"))

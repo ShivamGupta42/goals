@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from goals.models import (
     Assumption,
     Decision,
+    DesiredProperty,
     Evidence,
     EvidenceArtifact,
     Event,
@@ -23,6 +24,7 @@ from goals.models import (
     GoalSnapshot,
     GoalStatus,
     JudgementRecord,
+    PainPoint,
     PhaseCheckpoint,
     PhaseStatus,
     ToolHealthCheck,
@@ -352,6 +354,14 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             if message.message_id not in seen_messages:
                 seen_messages.add(message.message_id)
                 snapshot.user_messages.append(message)
+        elif event.event_type == EventType.PAIN_POINT_RECORDED:
+            pain = PainPoint.model_validate(_drop_unknown_fields(payload["pain_point"], PainPoint))
+            _upsert_by(snapshot.pain_points, pain, "pain_id")
+        elif event.event_type == EventType.DESIRED_PROPERTY_RECORDED:
+            wanted = DesiredProperty.model_validate(
+                _drop_unknown_fields(payload["property"], DesiredProperty)
+            )
+            _upsert_by(snapshot.desired_properties, wanted, "property_id")
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(
                 _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)
@@ -465,6 +475,15 @@ def _upsert_checkpoint(checkpoints: list[PhaseCheckpoint], checkpoint: PhaseChec
             checkpoints[index] = checkpoint
             return
     checkpoints.append(checkpoint)
+
+
+def _upsert_by(items: list, item: BaseModel, key: str) -> None:
+    """Replace the record with the same id (a later event updates it), else append."""
+    for index, existing in enumerate(items):
+        if getattr(existing, key) == getattr(item, key):
+            items[index] = item
+            return
+    items.append(item)
 
 
 def _upsert_assumption(assumptions: list[Assumption], assumption: Assumption) -> None:

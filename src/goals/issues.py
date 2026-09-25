@@ -7,7 +7,7 @@ from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
 from goals.checkpoints import checkpoint_waits_on_user
 from goals.decisions import should_surface_decision
-from goals.gates import review_phase
+from goals.gates import proof_targets, review_phase
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     ArchitectureCheckReport,
@@ -186,12 +186,8 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             )
         if phase.evidence is not None:
             issues.extend(_evidence_issues(phase.phase_id, phase.evidence, refs))
-            load_bearing = [
-                (assumption.assumption_id, assumption.statement)
-                for assumption in snapshot.assumptions
-                if assumption.depends_on and assumption.phase_id == phase.phase_id
-            ]
-            synthetic_review = review_phase(phase, load_bearing=load_bearing)
+            load_bearing, desired = proof_targets(snapshot, phase.phase_id)
+            synthetic_review = review_phase(phase, load_bearing=load_bearing, desired=desired)
             if synthetic_review.verdict != GateVerdict.PASS and not phase.reviews:
                 issues.append(
                     GoalIssue(

@@ -90,6 +90,8 @@ class EventType(StrEnum):
     LEARNING_CAPTURED = "learning_captured"
     TOOL_HEALTH_RECORDED = "tool_health_recorded"
     USER_MESSAGE_RECORDED = "user_message_recorded"
+    PAIN_POINT_RECORDED = "pain_point_recorded"
+    DESIRED_PROPERTY_RECORDED = "desired_property_recorded"
 
 
 class Event(BaseModel):
@@ -633,6 +635,40 @@ class UserMessage(BaseModel):
     session_id: str = ""
 
 
+class PainPoint(BaseModel):
+    """Something that hurts the user today, in plain words — the *why* behind a goal.
+
+    Recorded in Discovery before any solution is proposed. Kept local: never
+    exported to the portable spec or copied into cross-project user memory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pain_id: str = Field(default_factory=lambda: f"PP-{uuid4().hex[:8]}")
+    statement: str
+    status: Literal["active", "superseded"] = "active"
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+class DesiredProperty(BaseModel):
+    """How the finished thing should feel or behave, and how the run proves it.
+
+    ``proof="auto"``: the bound phase's review needs an engine-run automated check
+    whose ``covers`` is this id. ``proof="user"``: only the user can judge it, so a
+    user checkpoint with this id on the bound phase (by default the last) must be
+    closed on their reply before that phase can be accepted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    property_id: str = Field(default_factory=lambda: f"DP-{uuid4().hex[:8]}")
+    statement: str
+    proof: Literal["auto", "user"]
+    phase_id: str
+    status: Literal["active", "superseded"] = "active"
+    recorded_at: str = Field(default_factory=utc_now)
+
+
 class ProblemBreakdown(BaseModel):
     """The Assess output: how the agent broke a goal or phase into sub-problems.
 
@@ -1149,6 +1185,8 @@ class GoalSnapshot(BaseModel):
     assumptions: list[Assumption] = Field(default_factory=list)
     breakdowns: list[ProblemBreakdown] = Field(default_factory=list)
     user_messages: list[UserMessage] = Field(default_factory=list)
+    pain_points: list[PainPoint] = Field(default_factory=list)
+    desired_properties: list[DesiredProperty] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

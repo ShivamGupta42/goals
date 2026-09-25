@@ -10,24 +10,48 @@ from goals.models import (
     GateFinding,
     GateResult,
     GateVerdict,
+    GoalSnapshot,
     Phase,
     Verification,
 )
+
+
+def proof_targets(
+    snapshot: GoalSnapshot, phase_id: str
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """The ``(id, statement)`` pairs a phase must prove with executed checks.
+
+    Returns (load-bearing assumptions, auto-proof desired properties) bound to the
+    phase. Both need an engine-run ``auto`` verification whose ``covers`` is the id.
+    """
+    load_bearing = [
+        (assumption.assumption_id, assumption.statement)
+        for assumption in snapshot.assumptions
+        if assumption.depends_on and assumption.phase_id == phase_id
+    ]
+    desired = [
+        (wanted.property_id, wanted.statement)
+        for wanted in snapshot.desired_properties
+        if wanted.proof == "auto" and wanted.status == "active" and wanted.phase_id == phase_id
+    ]
+    return load_bearing, desired
 
 
 def review_phase(
     phase: Phase,
     *,
     load_bearing: Sequence[tuple[str, str]] = (),
+    desired: Sequence[tuple[str, str]] = (),
     attempt: int = 1,
     max_attempts: int = 3,
 ) -> GateResult:
     """Gate a phase on *executed* proof, not narrated proof.
 
-    ``load_bearing`` is the phase's load-bearing assumptions as ``(id, statement)``
-    pairs (supplied by the caller, which has the snapshot). A phase passes only when
-    its acceptance criteria and load-bearing assumptions are each backed by a
-    verification the engine actually ran and that passed — see ``_evidence_issues``.
+    ``load_bearing`` and ``desired`` are the phase's load-bearing assumptions and
+    auto-proof desired properties as ``(id, statement)`` pairs (from
+    ``proof_targets``). A phase passes only when its acceptance criteria and each
+    of those are backed by a verification the engine actually ran and that
+    passed — see ``_evidence_findings``.
     """
     capped_attempt = max(1, min(attempt, max_attempts))
     checkpoint_issues = phase_checkpoint_blockers(phase)
@@ -60,7 +84,7 @@ def review_phase(
             findings=[no_evidence],
             attempts=capped_attempt,
         )
-    findings = _evidence_findings(phase, evidence, load_bearing)
+    findings = _evidence_findings(phase, evidence, load_bearing, desired)
     if findings:
         return GateResult(
             gate_id="phase-review",
@@ -84,6 +108,7 @@ def _evidence_findings(
     phase: Phase,
     evidence: Evidence,
     load_bearing: Sequence[tuple[str, str]],
+    desired: Sequence[tuple[str, str]] = (),
 ) -> list[GateFinding]:
     """Block unless the claims are backed by checks the engine ran and passed.
 
@@ -180,6 +205,24 @@ def _evidence_findings(
                         f"phase, move it there with --phase."
                     ),
                     ref=assumption_id,
+                )
+            )
+
+    for property_id, statement in desired:
+        if not any(
+            v.covers.strip() == property_id and v.kind == "auto" and v.ran and v.passed
+            for v in verifications
+        ):
+            findings.append(
+                GateFinding(
+                    fact_type=GateFactType.MISSING_FALSIFIER,
+                    message=(
+                        f"Desired property needs an automated check that ran and passed "
+                        f"({property_id}): {statement}. Add a verification whose `covers` is "
+                        f"this id with kind=auto and let `goals phase verify` run it — the user "
+                        f"asked for this outcome, so a manual or waived check does not count."
+                    ),
+                    ref=property_id,
                 )
             )
 
