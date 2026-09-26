@@ -215,7 +215,10 @@ P1:
   2026-09-26 after reading a demo goal's dashboard with one verified and one
   `--unverified` answer)*
 - [x] (manual, Codex) The gate reads "not verified" rather than implying proof.
-  *(automated for `--unverified`; not run inside Codex itself)*
+  *(wording signed off by the user on 2026-09-26 from `goals phase review`,
+  `phase accept`, and `goals check` output in Claude Code; whether Codex's hook
+  payload matches is still to be tried in a Codex session — see Known
+  limitations)*
 
 P2:
 - [x] (auto) `goals assess pain` and `goals assess want` exist; there is no
