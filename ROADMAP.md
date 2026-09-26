@@ -211,9 +211,9 @@ P1:
 - [x] (auto) `DISCOVERY_REVISED` clears P1's reviews and flags accepted later
   phases; `goals check` names what needs re-review. *(test_discovery_revision.py)*
 - [x] (manual) A non-technical reader can tell from the dashboard alone what
-  they said yes to and whether that yes was verified. *(checked in an end-to-end
-  scratch run: "you said yes: …", "Your replies on record", "not verified"; a
-  human read-through is still worth doing)*
+  they said yes to and whether that yes was verified. *(signed off by the user on
+  2026-09-26 after reading a demo goal's dashboard with one verified and one
+  `--unverified` answer)*
 - [x] (manual, Codex) The gate reads "not verified" rather than implying proof.
   *(automated for `--unverified`; not run inside Codex itself)*
 
