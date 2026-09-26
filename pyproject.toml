@@ -1,6 +1,6 @@
 [project]
 name = "goals"
-version = "0.1.0"
+version = "0.2.0"
 description = "A no-nonsense goal workflow engine: plain-English goals to tracked steps, with plain-language decisions and evidence-based done."
 readme = "README.md"
 requires-python = ">=3.11"
