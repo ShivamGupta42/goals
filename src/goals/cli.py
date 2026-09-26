@@ -9,7 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from goals.adapters import adapter_check
-from goals.agent_hooks import session_start_payload, stop_payload
+from goals.agent_hooks import record_user_prompt, session_start_payload, stop_payload
 from goals.architecture import (
     analyze_code_architecture,
     architecture_for_snapshot,
@@ -26,10 +26,12 @@ from goals.audit import (
 )
 from goals.brief import build_goal_brief, render_goal_brief
 from goals.capabilities import analyze_capabilities, render_capability_report
-from goals.checkpoints import render_current_checkpoint_brief
+from goals.checkpoints import checkpoint_is_asked, render_current_checkpoint_brief
 from goals.checkpoint_workflows import (
     current_checkpoint,
+    checkpoint_provenance,
     record_checkpoint as record_checkpoint_workflow,
+    unverified_closes,
     render_checkpoint_list,
     waive_checkpoint as waive_checkpoint_workflow,
 )
@@ -85,14 +87,19 @@ from goals.models import (
     CheckpointKind,
     CheckpointStatus,
     Decision,
+    DesiredProperty,
+    DiscoveryRevision,
     Event,
     EventType,
     Evidence,
     GateVerdict,
     GoalArchitectureMap,
+    GoalSnapshot,
+    PainPoint,
     Phase,
     PermissionPolicyReport,
     PhaseCheckpoint,
+    PhaseStatus,
     ProblemBreakdown,
     SelfEvolutionEntry,
     SourceClaim,
@@ -771,17 +778,24 @@ def checkpoint_record(
     phase_id: str,
     checkpoint_id: str,
     title: str = typer.Option("", "--title", help="Plain-language checkpoint title."),
-    kind: CheckpointKind = typer.Option(CheckpointKind.CUSTOM, "--kind", help="Checkpoint kind."),
-    status: CheckpointStatus = typer.Option(
-        CheckpointStatus.PASSED, "--status", help="pending, passed, blocked, needs_user, or waived."
+    kind: Optional[CheckpointKind] = typer.Option(
+        None, "--kind", help="Checkpoint kind (default: keep the recorded kind, else custom)."
     ),
-    required: bool = typer.Option(
-        True, "--required/--optional", help="Whether this checkpoint blocks acceptance."
+    status: Optional[CheckpointStatus] = typer.Option(
+        None,
+        "--status",
+        help="pending, passed, blocked, needs_user, or waived "
+        "(default: keep the recorded status, else passed).",
     ),
-    needs_user: bool = typer.Option(
-        False,
+    required: Optional[bool] = typer.Option(
+        None,
+        "--required/--optional",
+        help="Whether this checkpoint blocks acceptance (default: keep, else required).",
+    ),
+    needs_user: Optional[bool] = typer.Option(
+        None,
         "--needs-user/--agent-can-complete",
-        help="Whether this checkpoint needs a user answer.",
+        help="Whether this checkpoint needs a user answer (default: keep, else no).",
     ),
     summary: str = typer.Option("", "--summary", help="Plain-language checkpoint summary."),
     evidence_refs: Optional[list[str]] = typer.Option(
@@ -791,11 +805,26 @@ def checkpoint_record(
         None, "--decision-ref", help="Decision reference. Repeat for multiple refs."
     ),
     notes: str = typer.Option("", "--notes", help="What changed or why this checkpoint exists."),
+    user_message: Optional[str] = typer.Option(
+        None, "--user-message", help="Cite this recorded user reply (default: the latest one)."
+    ),
+    unverified: bool = typer.Option(
+        False,
+        "--unverified",
+        help="Close a user checkpoint with no recorded reply (hosts without the Goals hook). "
+        "Shown as not verified.",
+    ),
 ) -> None:
-    """Record or update a phase checkpoint."""
+    """Record or update a phase checkpoint.
+
+    Passing or waiving a user checkpoint (kind understanding, human_validation,
+    or approval, or one ever put to the user) needs the user's reply, recorded
+    by Goals after it was asked — or --unverified, which is shown as such.
+    Options you leave out keep their recorded values.
+    """
 
     def run():
-        record_checkpoint_workflow(
+        checkpoint = record_checkpoint_workflow(
             Path.cwd(),
             phase_id,
             checkpoint_id,
@@ -803,15 +832,30 @@ def checkpoint_record(
             title=title,
             status=status,
             required=required,
-            needs_user=needs_user or status == CheckpointStatus.NEEDS_USER,
+            needs_user=needs_user,
             summary=summary,
             evidence_refs=evidence_refs,
             decision_refs=decision_refs,
             notes=notes,
+            user_message_id=user_message,
+            unverified=unverified,
         )
-        typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id}")
+        typer.echo(f"Recorded checkpoint {checkpoint_id} for {phase_id} ({checkpoint.status})")
+        _echo_provenance(checkpoint)
 
     _handle(run)
+
+
+def _echo_provenance(checkpoint) -> None:
+    """Say which reply closed a user checkpoint, so a wrong citation is caught now."""
+    if not (checkpoint.user_message_id or checkpoint.unverified):
+        return
+    snapshot = load_active_snapshot(Path.cwd())
+    line = checkpoint_provenance(snapshot, checkpoint)
+    if line and checkpoint.user_message_id:
+        typer.echo(f"{line} ({checkpoint.user_message_id})")
+    elif line:
+        typer.echo(line)
 
 
 @checkpoint_app.command("waive")
@@ -819,12 +863,26 @@ def checkpoint_waive(
     phase_id: str,
     checkpoint_id: str,
     reason: str = typer.Option(..., "--reason", help="Why it is safe to waive this checkpoint."),
+    user_message: Optional[str] = typer.Option(
+        None, "--user-message", help="Cite this recorded user reply (default: the latest one)."
+    ),
+    unverified: bool = typer.Option(
+        False, "--unverified", help="Waive a user checkpoint with no recorded reply (not verified)."
+    ),
 ) -> None:
     """Waive an existing required checkpoint with a reason."""
 
     def run():
-        waive_checkpoint_workflow(Path.cwd(), phase_id, checkpoint_id, reason)
+        checkpoint = waive_checkpoint_workflow(
+            Path.cwd(),
+            phase_id,
+            checkpoint_id,
+            reason,
+            user_message_id=user_message,
+            unverified=unverified,
+        )
         typer.echo(f"Waived checkpoint {checkpoint_id} for {phase_id}")
+        _echo_provenance(checkpoint)
 
     _handle(run)
 
@@ -1540,6 +1598,11 @@ def decision_record(
         None, "--profile-claim", help="User-memory claim id used for this decision."
     ),
     confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
+    private: bool = typer.Option(
+        False,
+        "--private",
+        help="Keep this decision on this goal only; don't copy it into your cross-project memory.",
+    ),
 ) -> None:
     """Record a decision the user (or agent) made, building the judgement log.
 
@@ -1560,6 +1623,7 @@ def decision_record(
             evidence_refs=evidence or [],
             profile_claim_ids=profile_claim or [],
             confidence=confidence,
+            private=private,
         )
         if report.warning:
             typer.echo(report.warning, err=True)
@@ -1587,47 +1651,66 @@ def decision_brief(
 @assess_app.command("assume")
 def assess_assume(
     statement: str = typer.Argument(..., help="Plain-English assumption: 'I'm assuming X'."),
-    building: str = typer.Option("", "--building", help="What's being built (the X)."),
-    toward: str = typer.Option("", "--toward", help="The sub-problem this works toward (the Y)."),
-    depends: bool = typer.Option(
-        False,
+    building: Optional[str] = typer.Option(None, "--building", help="What's being built (the X)."),
+    toward: Optional[str] = typer.Option(
+        None, "--toward", help="The sub-problem this works toward (the Y)."
+    ),
+    depends: Optional[bool] = typer.Option(
+        None,
         "--depends/--no-depends",
         help="Mark load-bearing: the solution depends on this assumption holding.",
     ),
-    status: str = typer.Option(
-        "holding", "--status", help="holding, validated, or broken."
+    status: Optional[str] = typer.Option(
+        None, "--status", help="holding, validated, or broken (default: holding)."
     ),
     phase: Optional[str] = typer.Option(None, "--phase", help="Phase this belongs to (e.g. P2)."),
-    college: str = typer.Option("", "--college", help="Optional richer framing for a college reader."),
-    hobbyist: str = typer.Option("", "--hobbyist", help="Optional framing for a hobbyist/tinkerer."),
-    reversible: bool = typer.Option(
-        True, "--reversible/--irreversible", help="Whether the assumption is cheap to revisit."
+    college: Optional[str] = typer.Option(
+        None, "--college", help="Optional richer framing for a college reader."
+    ),
+    hobbyist: Optional[str] = typer.Option(
+        None, "--hobbyist", help="Optional framing for a hobbyist/tinkerer."
+    ),
+    reversible: Optional[bool] = typer.Option(
+        None, "--reversible/--irreversible", help="Whether the assumption is cheap to revisit."
     ),
     assumption_id: Optional[str] = typer.Option(
         None, "--id", help="Reuse an id to update an existing assumption (e.g. flip to broken)."
     ),
-    confidence: float = typer.Option(0.0, "--confidence", min=0.0, max=1.0),
+    confidence: Optional[float] = typer.Option(None, "--confidence", min=0.0, max=1.0),
 ) -> None:
     """Record (or update) an assumption the agent is leaning on while building.
 
     This is PACERS' *Assess* — hunting the assumptions a plan depends on. The
     ``statement`` should read at a high-school level; ``--college``/``--hobbyist``
     only add framing for those readers. Re-run with the same ``--id`` to update an
-    assumption's status (e.g. ``--status broken``) without duplicating it.
+    assumption (e.g. ``--status broken``) without duplicating it — options you
+    leave out keep their recorded values, so an update can't quietly drop
+    ``--depends`` or move the assumption to another phase.
     """
 
     def run():
         snapshot = load_active_snapshot(Path.cwd())
-        notes = {}
-        if college:
+        prior = next(
+            (a for a in snapshot.assumptions if a.assumption_id == assumption_id), None
+        )
+
+        def keep(value, field: str, default):
+            if value is not None:
+                return value
+            return getattr(prior, field) if prior is not None else default
+
+        notes = dict(prior.audience_notes) if prior is not None else {}
+        if college is not None:
             notes["college"] = college
-        if hobbyist:
+        if hobbyist is not None:
             notes["hobbyist"] = hobbyist
+        notes = {key: value for key, value in notes.items() if value}
+        depends_on = keep(depends, "depends_on", False)
         # Attribute to a phase so the review gate can require a falsifier for a
         # load-bearing assumption. Without this, a `--depends` assumption recorded
         # with no `--phase` would have phase_id=None, match no phase, and silently
         # escape the gate entirely.
-        phase_id = phase if phase is not None else snapshot.current_phase
+        phase_id = keep(phase, "phase_id", snapshot.current_phase)
         # An unknown --phase would match no gate, so a load-bearing assumption
         # tagged to it would silently never be enforced (e.g. P3 on a 2-phase loop).
         valid_phases = [p.phase_id for p in snapshot.phases]
@@ -1635,7 +1718,7 @@ def assess_assume(
             raise GoalsError(
                 f"Unknown phase id: {phase}. Valid phases: {', '.join(valid_phases) or 'none'}."
             )
-        if depends and phase_id is None:
+        if depends_on and phase_id is None:
             raise GoalsError(
                 "A load-bearing (--depends) assumption must belong to a phase so the gate "
                 "can require a falsifier for it. Pass --phase, or record it while a phase is "
@@ -1643,12 +1726,12 @@ def assess_assume(
             )
         fields = dict(
             statement=statement,
-            building=building,
-            toward=toward,
-            depends_on=depends,
-            status=_validate_choice(status, {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
-            confidence=confidence,
-            reversible=reversible,
+            building=keep(building, "building", ""),
+            toward=keep(toward, "toward", ""),
+            depends_on=depends_on,
+            status=_validate_choice(keep(status, "status", "holding"), {"holding", "validated", "broken"}, "status"),  # type: ignore[arg-type]
+            confidence=keep(confidence, "confidence", 0.0),
+            reversible=keep(reversible, "reversible", True),
             phase_id=phase_id,
             audience_notes=notes,
         )
@@ -1664,6 +1747,277 @@ def assess_assume(
             ),
         )
         typer.echo(f"Recorded assumption: {assumption.assumption_id} ({assumption.status})")
+
+    _handle(run)
+
+
+@assess_app.command("pain")
+def assess_pain(
+    statement: str = typer.Argument(
+        ..., help="What's hard or annoying for the user today, in plain words."
+    ),
+    pain_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to reword an existing pain point."
+    ),
+) -> None:
+    """Record a pain point — what hurts the user today (Discovery).
+
+    The *why* behind the goal, captured before any solution. Stays on this
+    machine: never exported to `.goals/` or copied into user memory.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        prior = next((p for p in snapshot.pain_points if p.pain_id == pain_id), None)
+        if pain_id is not None and prior is None:
+            raise GoalsError(f"Unknown pain point id: {pain_id}.")
+        if prior is not None and prior.statement != statement:
+            _refuse_reword_after_yes(snapshot, pain_id)
+        _ensure_alignment_check(snapshot)
+        pain = PainPoint(statement=statement, **({"pain_id": pain_id} if pain_id else {}))
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.PAIN_POINT_RECORDED,
+                payload={"pain_point": pain.model_dump()},
+            ),
+        )
+        typer.echo(f"Recorded pain point: {pain.pain_id}")
+
+    _handle(run)
+
+
+@assess_app.command("want")
+def assess_want(
+    statement: str = typer.Argument(
+        ..., help="How the finished thing should feel or behave, in plain words."
+    ),
+    proof: Optional[str] = typer.Option(
+        None,
+        "--proof",
+        help="auto (an automated check can prove it) or user (only the user can judge it).",
+    ),
+    phase: Optional[str] = typer.Option(
+        None,
+        "--phase",
+        help="Phase that proves it. Required for auto; for user it defaults to the last phase.",
+    ),
+    property_id: Optional[str] = typer.Option(
+        None, "--id", help="Reuse an id to reword an existing desired property."
+    ),
+) -> None:
+    """Record a desired property — how the result should feel — and how it's proven.
+
+    --proof auto: that phase's review needs an automated check, run by
+    goals phase verify, whose covers is this property's id. --proof user: adds a
+    user checkpoint (same id) to that phase — the last one unless --phase says
+    otherwise — asked once there's something to try and closed on the user's
+    reply (or --unverified, shown as not verified). A property can't be bound to
+    a phase that's already accepted, and to change what the user wants after
+    they've confirmed it, revise Discovery with them.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        prior = None
+        if property_id is not None:
+            prior = next(
+                (w for w in snapshot.desired_properties if w.property_id == property_id), None
+            )
+            if prior is None:
+                raise GoalsError(f"Unknown desired property id: {property_id}.")
+            if prior.status == "superseded":
+                raise GoalsError(
+                    f"{property_id} was set aside when Discovery was revised; record it as a new "
+                    "property (and ask the user about it) instead of reviving the old one."
+                )
+            if prior.statement != statement:
+                _refuse_reword_after_yes(snapshot, property_id)
+        chosen = proof if proof is not None else (prior.proof if prior else None)
+        if chosen is None:
+            raise GoalsError(
+                "Say how it's proven: --proof auto (an automated check can show it) or "
+                "--proof user (only the user can judge it)."
+            )
+        chosen = _validate_choice(chosen, {"auto", "user"}, "proof")
+        if prior is not None and chosen != prior.proof:
+            raise GoalsError(
+                f"{prior.property_id} is proven by {prior.proof}; record a new property instead "
+                "of changing how an existing one is proven."
+            )
+        valid_phases = [p.phase_id for p in snapshot.phases]
+        if not valid_phases:
+            raise GoalsError("This goal has no phases to prove a desired property in.")
+        if prior is not None and phase is not None and phase != prior.phase_id:
+            raise GoalsError(
+                f"{prior.property_id} is proven in {prior.phase_id}; record a new property to "
+                "prove it elsewhere."
+            )
+        bound = phase if phase is not None else (prior.phase_id if prior else None)
+        if bound is None and chosen == "user":
+            bound = valid_phases[-1]
+        if bound is None:
+            raise GoalsError(
+                "An auto-proven property needs --phase: the phase whose automated checks prove "
+                "it (P3, Execute, in the default Confirm → Inspect → Execute → Review arc)."
+            )
+        if bound not in valid_phases:
+            raise GoalsError(
+                f"Unknown phase id: {bound}. Valid phases: {', '.join(valid_phases)}."
+            )
+        bound_phase = next(p for p in snapshot.phases if p.phase_id == bound)
+        if chosen == "user" and bound == valid_phases[0] and len(valid_phases) > 1:
+            raise GoalsError(
+                f"A property only the user can judge is checked once there's something to try, "
+                f"not in {bound} while Discovery is still settling what to build. Leave --phase "
+                "off to check it in the last phase."
+            )
+        if bound_phase.status == PhaseStatus.ACCEPTED:
+            raise GoalsError(
+                f"{bound} is already accepted, so nothing would ever check this property. "
+                "Bind it to a phase that's still ahead."
+            )
+        wanted = DesiredProperty(
+            statement=statement,
+            proof=chosen,
+            phase_id=bound,
+            **({"property_id": property_id} if property_id else {}),
+        )
+        _ensure_alignment_check(snapshot)
+        if chosen == "user":
+            # The checkpoint goes first: if the second write fails, the goal is
+            # blocked on a check with no property, never a property with no check.
+            _record_property_check(snapshot, wanted, reworded=prior is not None and prior.statement != statement)
+        append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.DESIRED_PROPERTY_RECORDED,
+                payload={"property": wanted.model_dump()},
+            ),
+        )
+        how = (
+            f"proven by an automated check in {bound}"
+            if chosen == "auto"
+            else f"the user confirms it in {bound} (checkpoint {wanted.property_id})"
+        )
+        typer.echo(f"Recorded desired property: {wanted.property_id} — {how}")
+
+    _handle(run)
+
+
+def _discovery_confirmed(snapshot: GoalSnapshot) -> bool:
+    """Has the user closed the first phase's understanding check (said yes, or skipped)?"""
+    if not snapshot.phases:
+        return False
+    return any(
+        c.kind == CheckpointKind.UNDERSTANDING
+        and c.status in (CheckpointStatus.PASSED, CheckpointStatus.WAIVED)
+        for c in snapshot.phases[0].checkpoints
+    )
+
+
+def _refuse_reword_after_yes(snapshot: GoalSnapshot, record_id: str) -> None:
+    if _discovery_confirmed(snapshot):
+        raise GoalsError(
+            f"The user confirmed Discovery with {record_id} worded as it is. To change what "
+            "they want, run `goals assess revise --reason ...` and ask them again."
+        )
+
+
+def _ensure_alignment_check(snapshot: GoalSnapshot) -> None:
+    """Discovery records need the user's yes: make sure the first phase asks for it.
+
+    Created pending (and user-owned) on the first Discovery record, so the first
+    phase can't be accepted until the user answers — an agent can't skip the
+    alignment gate by never recording it, or by recording it as a custom check.
+    """
+    if not snapshot.phases:
+        return
+    first = snapshot.phases[0]
+    if first.status == PhaseStatus.ACCEPTED:
+        return
+    if any(c.kind == CheckpointKind.UNDERSTANDING for c in first.checkpoints):
+        return
+    record_checkpoint_workflow(
+        Path.cwd(),
+        first.phase_id,
+        "alignment",
+        kind=CheckpointKind.UNDERSTANDING,
+        status=CheckpointStatus.PENDING,
+        title="Does this match what you want to build?",
+        summary="Discovery's yes: ask once the pain, wants, and approach are recorded.",
+    )
+
+
+def _record_property_check(
+    snapshot: GoalSnapshot, wanted: DesiredProperty, *, reworded: bool = False
+) -> None:
+    phase = next(p for p in snapshot.phases if p.phase_id == wanted.phase_id)
+    existing = next((c for c in phase.checkpoints if c.checkpoint_id == wanted.property_id), None)
+    if existing is not None and existing.status in (CheckpointStatus.PASSED, CheckpointStatus.WAIVED):
+        if reworded:
+            raise GoalsError(
+                f"The user already answered {wanted.property_id} as worded; record a new property "
+                "(and ask them) instead of changing what they agreed to."
+            )
+        return
+    status = None if existing is not None else CheckpointStatus.PENDING
+    if reworded and existing is not None and checkpoint_is_asked(existing):
+        status = CheckpointStatus.NEEDS_USER  # a changed question needs a fresh answer
+    record_checkpoint_workflow(
+        Path.cwd(),
+        wanted.phase_id,
+        wanted.property_id,
+        kind=CheckpointKind.HUMAN_VALIDATION,
+        status=status,
+        title=f"Ask the user: {wanted.statement}",
+        summary="A desired property only the user can judge. Ask once there's something "
+        "to try, then close it on their reply.",
+    )
+
+
+@assess_app.command("revise")
+def assess_revise(
+    reason: str = typer.Option(
+        ..., "--reason", help="What changed in the user's understanding, in plain words."
+    ),
+) -> None:
+    """Start Discovery over when the user's understanding shifts mid-goal.
+
+    Supersedes the recorded pain points and desired properties, reopens the first
+    phase for a fresh "yes" from the user, and sends phases already accepted back
+    for review against the new framing. Then redo Discovery with them.
+    """
+
+    def run():
+        snapshot = load_active_snapshot(Path.cwd())
+        revision = DiscoveryRevision(reason=reason)
+        updated = append_event(
+            Path.cwd(),
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.DISCOVERY_REVISED,
+                payload={"revision": revision.model_dump()},
+            ),
+        )
+        superseded = sum(1 for w in snapshot.desired_properties if w.status == "active")
+        superseded += sum(1 for p in snapshot.pain_points if p.status == "active")
+        rereview = [
+            p.phase_id for p in updated.phases[1:] if p.status == PhaseStatus.NEEDS_REVIEW
+        ]
+        first = updated.phases[0].phase_id if updated.phases else "the first phase"
+        typer.echo(f"Revised Discovery: {superseded} earlier record(s) superseded; {first} reopened.")
+        typer.echo(
+            "Next: record what the user wants now (`goals assess pain`/`want`), then re-confirm "
+            f"{first} with them"
+            + (
+                f". {', '.join(rereview)} can be re-reviewed only after {first} is accepted again."
+                if rereview
+                else "."
+            )
+        )
 
     _handle(run)
 
@@ -1901,6 +2255,7 @@ def phase_review(phase_id: str) -> None:
     def run():
         result = review_phase_workflow(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
+        _echo_unverified_closes(phase_id)
         if result.verdict != GateVerdict.PASS:
             if result.findings:
                 for finding in result.findings:
@@ -1913,6 +2268,14 @@ def phase_review(phase_id: str) -> None:
     _handle(run)
 
 
+def _echo_unverified_closes(phase_id: str, snapshot: GoalSnapshot | None = None) -> None:
+    """A passing gate never hides that the user's answer wasn't on record."""
+    snapshot = snapshot or load_active_snapshot(Path.cwd())
+    phase = next((p for p in snapshot.phases if p.phase_id == phase_id), None)
+    for line in unverified_closes(phase) if phase is not None else []:
+        typer.echo(f"  {line}")
+
+
 @phase_app.command("accept")
 def phase_accept(phase_id: str) -> None:
     """Accept a reviewed phase."""
@@ -1920,6 +2283,7 @@ def phase_accept(phase_id: str) -> None:
     def run():
         report = accept_phase(Path.cwd(), phase_id)
         typer.echo(f"Accepted phase {phase_id}")
+        _echo_unverified_closes(phase_id, report.snapshot)
         if report.warning:
             typer.echo(report.warning, err=True)
         if report.completion_note:
@@ -2306,29 +2670,57 @@ def hooks_stop() -> None:
     typer.echo(stop_payload(Path.cwd(), transcript_path=transcript_path), nl=False)
 
 
-def _hook_stdin_value(key: str) -> str | None:
-    """Pull one string field from the hook's JSON stdin payload, fail-open.
+@hooks_app.command("user-prompt", hidden=True)
+def hooks_user_prompt() -> None:
+    """Backend for the host's UserPromptSubmit hook — not for agents to call.
 
-    Claude Code pipes the Stop hook a JSON object (with ``transcript_path`` and
-    friends). Anything unexpected — no stdin, a tty, blank input, malformed JSON,
-    a non-string value — degrades to ``None`` so the hook never crashes the
-    session over its own input.
+    Records the user's typed message in the goal waiting on them. Silent and
+    fail-open: it never prints (stdout would be injected into the conversation)
+    and never blocks the prompt. Only a payload shaped like the host's
+    UserPromptSubmit event is recorded.
+    """
+    try:
+        payload = _hook_stdin_payload()
+        prompt = payload.get("prompt")
+        cwd = payload.get("cwd")
+        session_id = payload.get("session_id")
+        if payload.get("hook_event_name") != "UserPromptSubmit" or not isinstance(prompt, str):
+            return
+        record_user_prompt(
+            Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd(),
+            prompt,
+            session_id=session_id if isinstance(session_id, str) else "",
+        )
+    except Exception:  # noqa: BLE001 - a hook must never break the user's prompt
+        return
+
+
+def _hook_stdin_payload() -> dict:
+    """Read the hook's JSON stdin payload, fail-open.
+
+    Claude Code pipes hooks a JSON object (``prompt``, ``cwd``, ``transcript_path``
+    and friends). Anything unexpected — no stdin, a tty, blank input, malformed
+    JSON, a non-object — degrades to ``{}`` so a hook never crashes the session
+    over its own input.
     """
     try:
         if sys.stdin.isatty():
-            return None
+            return {}
         raw = sys.stdin.read()
     except Exception:  # noqa: BLE001 - a hook must not crash on stdin
-        return None
+        return {}
     if not raw.strip():
-        return None
+        return {}
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    value = data.get(key)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _hook_stdin_value(key: str) -> str | None:
+    """Pull one string field from the hook's JSON stdin payload, fail-open."""
+    value = _hook_stdin_payload().get(key)
     return value if isinstance(value, str) else None
 
 

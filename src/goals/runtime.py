@@ -19,7 +19,7 @@ from goals.git_ops import (
     require_clean_repo,
     slugify,
 )
-from goals.gates import review_phase
+from goals.gates import proof_targets, review_phase, revision_blocks
 from goals.models import (
     Evidence,
     EvidenceArtifact,
@@ -303,7 +303,14 @@ def append_event(cwd: Path, event: Event) -> GoalSnapshot:
     store.append(event)
     snapshot = store.snapshot()
     _refresh_portable_export(snapshot)
+    _refresh_discovery_notes(snapshot, goal_dir)
     return snapshot
+
+
+def _refresh_discovery_notes(snapshot: GoalSnapshot, goal_dir: Path) -> None:
+    from goals.discovery_notes import refresh_discovery_notes
+
+    refresh_discovery_notes(snapshot, goal_dir)
 
 
 def _refresh_portable_export(snapshot: GoalSnapshot) -> None:
@@ -318,6 +325,9 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
     if action == "start":
         event_type = EventType.PHASE_STARTED
     elif action == "accept":
+        blocked = revision_blocks(snapshot, phase_id)
+        if blocked:
+            raise GoalsError(blocked)
         checkpoint_issues = phase_checkpoint_blockers(phase)
         if checkpoint_issues:
             raise GoalsError(
@@ -329,6 +339,25 @@ def transition_phase(cwd: Path, phase_id: str, action: Literal["start", "accept"
                 f"Latest phase review must pass before accepting {phase_id}. "
                 f"Record evidence, then run `goals phase review {phase_id}` and fix "
                 "any findings first."
+            )
+        # Something to prove may have been bound to this phase after that review
+        # passed (a desired property or load-bearing assumption): it needs its own
+        # executed check before the phase counts as done.
+        load_bearing, desired = proof_targets(snapshot, phase_id)
+        verifications = phase.evidence.verifications if phase.evidence is not None else []
+        unproven = [
+            target_id
+            for target_id, _ in [*load_bearing, *desired]
+            if not any(
+                v.covers.strip() == target_id and v.kind == "auto" and v.ran and v.passed
+                for v in verifications
+            )
+        ]
+        if unproven:
+            raise GoalsError(
+                f"{phase_id}'s last review passed before {', '.join(unproven)} had to be proven "
+                "here. Add an automated check covering each, run "
+                f"`goals phase verify {phase_id}`, then `goals phase review {phase_id}` again."
             )
         event_type = EventType.PHASE_ACCEPTED
     else:
@@ -365,14 +394,17 @@ def run_gate(cwd: Path, phase_id: str, *, max_attempts: int | None = None) -> Ga
         max_attempts = resolve_max_phase_attempts()
     snapshot = load_active_snapshot(cwd)
     phase = _find_phase(snapshot, phase_id)
+    blocked = revision_blocks(snapshot, phase_id)
+    if blocked:
+        raise GoalsError(blocked)
     attempt = len([review for review in phase.reviews if review.gate_id == "phase-review"]) + 1
-    load_bearing = [
-        (assumption.assumption_id, assumption.statement)
-        for assumption in snapshot.assumptions
-        if assumption.depends_on and assumption.phase_id == phase_id
-    ]
+    load_bearing, desired = proof_targets(snapshot, phase_id)
     result = review_phase(
-        phase, load_bearing=load_bearing, attempt=attempt, max_attempts=max_attempts
+        phase,
+        load_bearing=load_bearing,
+        desired=desired,
+        attempt=attempt,
+        max_attempts=max_attempts,
     )
     append_event(
         cwd,

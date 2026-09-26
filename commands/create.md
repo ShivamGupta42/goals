@@ -11,16 +11,17 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    a worktree, run commands and edit files there; the user never has to `cd`.
 2. **Understand the goal first — phase one (see `/goals-discovery`).** Before
    framing or building, start from the user's **pain points and friction** (not
-   features), draw out the **properties and feel** of a good outcome, and **name
+   features; `goals assess pain`), draw out the **properties and feel** of a good
+   outcome (`goals assess want`, each with how it's proven), and **name
    what you don't yet understand** instead of assuming it. Reflect their goal back
    in plain English, lay out the approach with **honest pros/cons a non-technical
-   person can weigh** (`goals decision record --by agent`), and record the alignment
+   person can weigh** (`goals decision record --by agent --phase P1`), and record the alignment
    question as an `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    **Don't build until the user confirms "yes, this is what I want."** Keep
-   private details out of what you record — it's committed with `.goals/`; the
-   user's own words go in `DISCOVERY.md`, next to the goal's dashboard. Skip only
-   if the goal is trivial and unambiguous.
+   private details out of the breakdown (committed with `.goals/`); pain points
+   and desired properties stay local, and Goals writes `DISCOVERY.md` next to the
+   goal's dashboard. Skip only if the goal is trivial and unambiguous.
 3. **Pause + Assess the goal** (PACERS — see `/goals-problem-solving`).
    Rephrase "$ARGUMENTS" into a specific, testable problem; ask *why* until it
    simplifies to the root. (Phases follow a fixed arc — Confirm → Inspect →

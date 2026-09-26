@@ -36,55 +36,57 @@ Open with their world, not the solution. What's painful or annoying today? When
 does it bite, and how often? What do they do instead right now, and why does that
 fall short? Listen for the friction underneath the request — the goal is usually
 a proposed *fix*, and the pain behind it is the real target. Don't propose
-anything yet.
+anything yet. Record each pain point, in plain words:
+
+```bash
+goals assess pain "<what's hard or annoying today, and when it bites>"
+```
 
 **2. Draw out the desired feel and properties.**
 Turn the pain into the properties of a good outcome. Ask how they'll know it
 worked, what "good" feels like, what would make them *not* trust or use it. You're
 collecting things like *"fast enough that I never wait,"* *"I can hand it to my
 mum,"* *"I trust the number without checking it,"* — not screens and buttons.
-Record each as a property the solution must have, at a high-school reading
-level — no jargon — and **without private details** (health, family, money,
-names): property statements and open questions are copied into the goal's
-`.goals/` spec, which is meant to be committed with the project. Keep the user's
-own words in `DISCOVERY.md` and checkpoint summaries, which stay local. These are
-the success targets, so record each one where the run will actually be held to
-it. Sort each property into one of two kinds:
+Record each as a desired property, at a high-school reading level — no jargon.
+These are the success targets, so each one says how the run will be held to it:
 
 - **Measurable** — a check could fail if it's wrong (*"logging takes under 5
-  seconds,"* *"works with no internet"*). Record it as load-bearing on the phase
-  that builds it — P3 (Execute) in the default Confirm → Inspect → Execute →
-  Review arc:
+  seconds,"* *"works with no internet"*). Bind it to the phase that builds it —
+  P3 (Execute) in the default Confirm → Inspect → Execute → Review arc:
 
   ```bash
-  goals assess assume "The result has to <property> — <what that means here>" \
-    --building "the thing we're making" --toward "the user's real outcome" \
-    --depends --phase P3
+  goals assess want "<property> — <what that means here>" --proof auto --phase P3
   ```
 
   P3's review then won't pass without an automated check, run by
-  `goals phase verify`, whose `covers` is this assumption's id.
+  `goals phase verify`, whose `covers` is the property's id (`DP-…`).
 
 - **A feel only the user can judge** (*"I can hand it to my mum,"* *"I trust the
   number without checking it"*). No automated check can prove it — it's the
-  user's call once there's something to try. Record it as a user check on the
-  last phase — P4 (Review) in the default arc — left `pending` for now:
+  user's call once there's something to try:
 
   ```bash
-  goals checkpoint record P4 feel-<short-name> --kind human_validation \
-    --status pending --title "Ask the user: does it feel <property>?" \
-    --summary "Their words: <how they described it>"
+  goals assess want "<property>" --proof user
   ```
 
-  P4 can't be accepted while it's pending. Don't waive it, and don't set it to
-  `needs_user` before P4 — that puts the question to the user now, before there's
-  anything to judge. In P4, set it to `needs_user` and ask; when they answer, set
-  it to `passed` with their words.
+  This adds a user checkpoint with the property's id to the last phase (P4,
+  Review, in the default arc). That phase can't be accepted until it's closed on
+  the user's reply (`--unverified` also closes it, shown as not verified). It
+  can't be asked before its phase — there's nothing to judge yet — so when that
+  phase is current, set it to `--status needs_user`, ask, and close it with
+  `--status passed` once they answer. To change a property after the user has
+  answered it, record a new one and ask them.
 
-Never tag a property `--depends` on P1 (Confirm): the gate would demand an
-automated check before Confirm can pass, and there's nothing built to check yet.
-If the goal runs a custom loop, use its build phase and its last phase instead
-(the dashboard lists them; an unknown phase id is rejected).
+Never bind a property to P1 (Confirm): there's nothing built to check yet. If the
+goal runs a custom loop, use its build phase for `--proof auto` (the dashboard
+lists the phases; an unknown phase id is rejected) — `--proof user` finds the
+last phase on its own.
+
+Pain points and desired properties stay on this goal: they're never exported
+to the goal's `.goals/` spec or copied into the user's memory, so record them in
+the user's own words. When the goal completes, Goals lists the user's wants with
+the command to keep any as a standing preference (`goals user record`) — nothing
+is saved unless they run it.
 
 **3. Name what you do NOT understand — out loud.**
 This is the heart of Discovery. Instead of quietly assuming, list the gaps: the
@@ -99,7 +101,9 @@ goals assess breakdown --problem "<the user's goal, rephrased plainly>" \
 ```
 
 (The empty middle slot is for tasks — there are none yet at phase one. Everything
-after the second `|` shows on the dashboard as an open question.)
+after the second `|` shows on the dashboard as an open question.) Breakdowns are
+copied into the goal's committable `.goals/` spec, so keep private details (health,
+family, money, names) out of them.
 
 Prefer one honest "I don't know X yet" over ten confident assumptions. If you
 *must* lean on an assumption to move, record it with `goals assess assume` so it
@@ -123,7 +127,7 @@ in the same breath. Record your recommendation so the reasoning is on the
 dashboard:
 
 ```bash
-goals decision record "How we'll approach <goal>" --choice "<the path>" --by agent \
+goals decision record "How we'll approach <goal>" --choice "<the path>" --by agent --phase P1 \
   --why "<plain reason it best fits their pain + desired feel>"
 ```
 
@@ -148,44 +152,56 @@ proceed to Assess:
 goals checkpoint record P1 alignment --kind understanding --status passed \
   --summary "User confirmed: <what they agreed to>"
 goals decision record "How we'll approach <goal>" --choice "<the path they confirmed>" \
-  --by user --why "<their reason, minus private details>"
+  --by user --phase P1 --private --why "<their reason, in their words>"
 ```
 
 A `--by user` decision is also copied into the user's memory across all their
-projects, so keep private details out of its `--why`.
+projects; `--private` keeps it on this goal only.
+
+Only the user's reply can close this checkpoint. The Goals hook records what they
+type while a checkpoint waits on them, and `--status passed` cites that reply —
+it's refused if they haven't answered since you asked. On a host without the
+hook, add `--unverified`: it closes, and every view says it wasn't verified.
 
 If they correct you, fold the correction back in (steps 2–5) and re-ask. A "no"
 here is the cheapest, most valuable feedback in the whole run.
+
+If their understanding shifts **later** — mid-build, after they've said yes —
+don't patch around it. Start Discovery over:
+
+```bash
+goals assess revise --reason "<what changed, in plain words>"
+```
+
+That sets aside what Discovery recorded, reopens P1 for a fresh yes, and sends
+any phase already accepted back for review against the new framing. Then redo
+steps 1–6 with them.
 
 Don't run `goals phase review P1` while this checkpoint is waiting: all it can
 return is "needs you", and each review counts toward the phase's attempt cap.
 Record P1's evidence and review after the yes.
 
-## Write `DISCOVERY.md`
+## `DISCOVERY.md`
 
-Leave a plain-file record next to the goal's dashboard, at
+Goals writes it for you, next to the goal's dashboard at
 `.agent-workflow/goals/<goal>/DISCOVERY.md` (the folder `goals check` prints as
-*Dashboard*) — yours to read and edit. That folder stays out of git, so the notes
-never land in the project's commits, and each goal keeps its own. Five short
-sections:
-
-- **What hurts today** — the pain points and friction, in the user's words.
-- **What good feels like** — the desired properties of the outcome (not features).
-- **What I don't understand yet** — the open questions, honestly listed.
-- **How I'd approach it** — the options with plain-English pros and cons.
-- **What the user confirmed** — exactly what they said yes to (and any "no"s that
-  reshaped the plan).
+*Dashboard*), and rewrites it whenever the goal changes: what hurts today, what
+good feels like (and where each property's proof stands), what's not understood
+yet, how you'll approach it (the `--phase P1` decisions), and what the user
+confirmed, in their words. That folder stays out of git, so it never lands in the
+project's commits. Don't edit it by hand — record through the commands above.
 
 ## Quality bar
 
 - Lead with **pain and feel**, not features. If your notes are a feature list,
   you skipped the user.
 - Make every unknown **explicit**. An unsurfaced assumption is the bug.
-- Put every desired property where the run is **held to it** — a P3 load-bearing
-  assumption or a P4 user check. A property recorded nowhere enforceable is a wish.
-- Keep private details out of anything recorded with `goals assess` or
-  `goals decision record --by user` — those leave this goal. `DISCOVERY.md` and
-  checkpoint summaries stay local.
+- Record every desired property with `goals assess want` and an honest `--proof`
+  — an automated check where one can fail, the user's judgement where only they
+  can tell. A property recorded nowhere enforceable is a wish.
+- Keep private details out of open questions (`goals assess breakdown`, exported
+  to `.goals/`). Pain points, desired properties, `DISCOVERY.md`, checkpoint
+  summaries, and `--private` decisions stay on this goal.
 - Plain English throughout — a non-technical user must be able to weigh the
   pros and cons and answer the alignment question without decoding jargon.
 - Do not start building until the alignment checkpoint is `passed`.

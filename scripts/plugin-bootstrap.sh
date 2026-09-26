@@ -44,6 +44,12 @@ ensure_goals() {
 }
 
 if ensure_goals; then
+    if [ "$1" = "hooks" ]; then
+        # A hook must never block the session. An older CLI without this hook
+        # exits 2, which Claude Code treats as "block the user's prompt".
+        goals "$@" || exit 0
+        exit 0
+    fi
     exec goals "$@"
 fi
 

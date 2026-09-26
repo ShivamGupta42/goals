@@ -8,6 +8,9 @@ second code path.
 - **SessionStart** → inject the active goal's context (silent no-op if none).
 - **Stop** (opt-in) → block stopping while the current phase still needs the
   agent, so the loop doesn't end mid-phase. Off unless ``GOALS_ENFORCE`` is set.
+- **UserPromptSubmit** → record the user's own typed words in every goal that is
+  waiting on them, so a user checkpoint can cite the actual reply instead of the
+  agent's claim that they agreed. Silent; never blocks the prompt.
 """
 
 from __future__ import annotations
@@ -17,17 +20,23 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.models import GateVerdict, GoalStatus, Phase
+from goals.checkpoints import checkpoint_is_asked
+from goals.git_ops import find_git_root, goal_worktrees
+from goals.models import Event, EventType, GateVerdict, GoalStatus, Phase, UserMessage
 from goals.portability import render_context_block
 from goals.runtime import (
     MAX_PHASE_ATTEMPTS_ENV,
     load_active_snapshot,
     resolve_max_phase_attempts,
 )
+from goals.storage import EventStore
 from goals.token_budget import transcript_token_usage
 
 #: Re-exported so callers/tests can reach the cap env var via agent_hooks.
 MAX_ATTEMPTS_ENV = MAX_PHASE_ATTEMPTS_ENV
+
+#: Longest user message kept verbatim; anything past it is clipped.
+MAX_USER_MESSAGE_CHARS = 2000
 
 #: Env var that turns the Stop gate on. Off by default so it never nags.
 ENFORCE_ENV = "GOALS_ENFORCE"
@@ -198,3 +207,130 @@ def _max_tokens() -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value >= 1 else None
+
+
+def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
+    """UserPromptSubmit backend: record the user's words in the goal waiting on them.
+
+    Scoped so a reply meant for one goal can't close another's checkpoint:
+
+    - A checkpoint asked from a known host session only takes replies typed in
+      that same session, so chat in another session never lands in it.
+    - For checkpoints with no known session: if the session's checkout holds an
+      active goal waiting on the user (in place, or the session runs inside its
+      worktree), only that; from a base checkout whose goals live in worktrees,
+      only when exactly one goal is waiting — with two, it's ambiguous, so none.
+
+    Only active goals with a checkpoint put to the user record anything, and
+    slash commands (``/goals:next``) are commands, not answers. Returns how many
+    goals recorded it.
+    """
+    text = prompt.strip()
+    if not text or text.startswith("/"):
+        return 0
+    if len(text) > MAX_USER_MESSAGE_CHARS:
+        text = text[: MAX_USER_MESSAGE_CHARS - 1] + "…"
+    matched: list[tuple[EventStore, str]] = []
+    unstamped_tiers: list[tuple[list[tuple[EventStore, str]], bool]] = []
+    for goal_dirs, own in _candidate_goal_dirs(cwd):
+        unstamped: list[tuple[EventStore, str]] = []
+        for goal_dir in goal_dirs:
+            if not _might_be_waiting(goal_dir):
+                continue
+            store = EventStore(goal_dir)
+            try:
+                snapshot = store.snapshot()
+            except Exception:  # noqa: BLE001 - one unreadable goal must not stop the rest
+                continue
+            if snapshot.status not in _RECORDING_STATUSES:
+                continue
+            asked = [
+                checkpoint
+                for phase in snapshot.phases
+                for checkpoint in phase.checkpoints
+                if checkpoint_is_asked(checkpoint)
+            ]
+            if session_id and any(c.asked_session == session_id for c in asked):
+                matched.append((store, snapshot.goal_id))
+            elif any(not c.asked_session for c in asked):
+                unstamped.append((store, snapshot.goal_id))
+        unstamped_tiers.append((unstamped, own))
+    # A session match is unambiguous wherever it is. Otherwise the nearest tier
+    # with anything waiting decides: all of the session's own checkout, or a
+    # lone waiting worktree goal.
+    targets = matched
+    if not targets:
+        for unstamped, own in unstamped_tiers:
+            if unstamped:
+                if own or len(unstamped) == 1:
+                    targets = unstamped
+                break
+    recorded = 0
+    for store, goal_id in targets:
+        try:
+            store.append(
+                Event(
+                    goal_id=goal_id,
+                    event_type=EventType.USER_MESSAGE_RECORDED,
+                    actor="user-prompt-hook",
+                    payload={
+                        "message": UserMessage(text=text, session_id=session_id).model_dump()
+                    },
+                )
+            )
+        except Exception:  # noqa: BLE001 - e.g. a lock timeout: skip this goal, keep going
+            continue
+        recorded += 1
+    return recorded
+
+
+#: Goals that can still be waiting on the user (BLOCKED means waiting on them).
+_RECORDING_STATUSES = (GoalStatus.ACTIVE, GoalStatus.BLOCKED)
+
+
+def _candidate_goal_dirs(cwd: Path) -> list[tuple[list[Path], bool]]:
+    """Goal dirs this session could be answering, nearest first.
+
+    First the session's own checkout (flagged ``True``), then the repo's goal
+    worktrees — consulted only when the own checkout has nothing waiting.
+    """
+    root = find_git_root(cwd) or cwd.resolve()
+    tiers: list[tuple[list[Path], bool]] = [(_goal_dirs_under(root), True)]
+    try:
+        worktrees = goal_worktrees(root)
+    except Exception:  # noqa: BLE001 - not a git repo, or git unavailable
+        worktrees = []
+    found: list[Path] = []
+    for worktree in worktrees:
+        if worktree.resolve() != root.resolve():
+            found.extend(_goal_dirs_under(worktree))
+    tiers.append((found, False))
+    return tiers
+
+
+def _might_be_waiting(goal_dir: Path) -> bool:
+    """Cheap pre-check on the saved snapshot before replaying a goal's whole log.
+
+    Runs on every prompt for every goal in the repo, so finished or idle goals
+    are skipped without a replay. Anything unreadable is replayed to be safe.
+    """
+    try:
+        state = json.loads((goal_dir / "goal.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if state.get("status") not in {status.value for status in _RECORDING_STATUSES}:
+        return False
+    for phase in state.get("phases", []):
+        for checkpoint in phase.get("checkpoints", []):
+            if checkpoint.get("status") in {"passed", "waived"}:
+                continue
+            if checkpoint.get("needs_user") or checkpoint.get("status") == "needs_user":
+                return True
+    return False
+
+
+def _goal_dirs_under(root: Path) -> list[Path]:
+    goals_dir = root / ".agent-workflow" / "goals"
+    if not goals_dir.is_dir():
+        return []
+    return [child for child in sorted(goals_dir.iterdir()) if (child / "goal.json").exists()]

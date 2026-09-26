@@ -108,7 +108,9 @@ def recommended_checks(worktree: Path) -> list[str]:
 
 def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan, *, full: bool = True) -> str:
     adapter_notes = _adapter_notes(plan.adapter, plan.adapter_ready, plan.adapter_detail)
-    criteria = _criteria_bullets(_current_phase(snapshot))
+    criteria = _criteria_bullets(_current_phase(snapshot)) + _desired_bullets(
+        snapshot, plan.current_phase
+    )
     evidence_json = json.dumps(plan.evidence_template.model_dump(mode="json"), indent=2)
     if not full:
         return _render_short_prompt(snapshot, plan, criteria, evidence_json, adapter_notes)
@@ -142,7 +144,7 @@ Required loop:
 2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
 3. Make reversible progress without changing unrelated files.
 4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
-5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion id (for example `{plan.current_phase}.C1`) AND every load-bearing assumption, write a check or explicit manual/production/waiver verification that covers that id. Prefer automated checks; a `manual`, `production`, or `waived` verification must say why local automation is not appropriate. Put this in the evidence `verifications` list at `{plan.evidence_file}`.
+5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion id (for example `{plan.current_phase}.C1`) AND every load-bearing assumption or auto-proven desired property (`goals assess want --proof auto`) bound to this phase, write a check or explicit manual/production/waiver verification that covers that id — load-bearing assumptions and auto-proven desired properties need an automated check. Prefer automated checks; a `manual`, `production`, or `waived` verification must say why local automation is not appropriate. Put this in the evidence `verifications` list at `{plan.evidence_file}`.
 6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`, then `goals phase verify {plan.current_phase}` — the engine runs your checks and records the real results; you cannot mark a check passed yourself. Fix the build until every automated check passes.
 7. Run `goals capability check --agent {plan.adapter}` and `goals issues` to find missing skills/tools, blockers, missing proof, unresolved source claims, or important user decisions before review.
 8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
@@ -205,6 +207,26 @@ Goals is the durable state and review layer. The native agent goal loop owns per
 """
 
 
+def _desired_bullets(snapshot: GoalSnapshot, phase_id: str | None) -> str:
+    """The user's desired properties this phase must prove, so the agent sees them up front."""
+    wanted = [
+        w
+        for w in snapshot.desired_properties
+        if w.status == "active" and w.phase_id == phase_id
+    ]
+    if not wanted:
+        return ""
+    lines = ["", "What the user asked for, proven in this phase:"]
+    for w in wanted:
+        how = (
+            f"an automated check whose `covers` is `{w.property_id}`"
+            if w.proof == "auto"
+            else f"ask the user once there's something to try, close `{w.property_id}` on their reply"
+        )
+        lines.append(f"- `{w.property_id}` {w.statement} — {how}")
+    return "\n".join(lines)
+
+
 def _render_short_prompt(
     snapshot: GoalSnapshot,
     plan: ModeAPlan,
@@ -242,8 +264,8 @@ Write them plainly enough for a non-technical reader — they become the dashboa
 3. Prove it by execution, not description. First **invert** — try to break it: how could it fail \
 (boundaries/signs, time/locale, empty/huge, concurrency, storage or network failing)? Fix each, \
 guard it with a check, or — if it's a premise you're relying on — record it as a load-bearing \
-assumption. Then for each acceptance criterion id (for example {phase}.C1) AND each load-bearing assumption write a runnable \
-check that fails if it's wrong, or an explicit manual/production/waiver verification with rationale. Put them in the evidence \
+assumption. Then for each acceptance criterion id (for example {phase}.C1) AND each load-bearing assumption or auto-proven desired property bound to this phase write a runnable \
+check that fails if it's wrong (those two need one), or an explicit manual/production/waiver verification with rationale. Put them in the evidence \
 `verifications` list at `{evidence_rel}`, then `goals phase evidence {phase} --file {evidence_rel}` \
 and `goals phase verify {phase}` (the engine runs them and records real results — you can't pass a \
 check yourself). Fix until all pass.

@@ -89,6 +89,10 @@ class EventType(StrEnum):
     SOURCE_RECORDED = "source_recorded"
     LEARNING_CAPTURED = "learning_captured"
     TOOL_HEALTH_RECORDED = "tool_health_recorded"
+    USER_MESSAGE_RECORDED = "user_message_recorded"
+    PAIN_POINT_RECORDED = "pain_point_recorded"
+    DESIRED_PROPERTY_RECORDED = "desired_property_recorded"
+    DISCOVERY_REVISED = "discovery_revised"
 
 
 class Event(BaseModel):
@@ -138,6 +142,20 @@ class PhaseCheckpoint(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
     notes: str = ""
+    # How a user checkpoint was closed: the recorded reply it cites, or an
+    # explicit agent claim with no recorded reply (shown as "not verified").
+    user_message_id: str = ""
+    unverified: bool = False
+    # Sticky: once a checkpoint is the user's to answer it stays that way, so no
+    # later update (kind, status, needs_user) can turn it into an agent-closable one.
+    user_owned: bool = False
+    # When (and from which host session) it was last put to the user: only a
+    # reply after asked_at — from that session, when known — can close it.
+    asked_at: str = ""
+    asked_session: str = ""
+    # What was put to the user when last asked (its summary then), kept after it
+    # closes: a later closing summary is the agent's account, this is the question.
+    asked_summary: str = ""
 
 
 class PhaseProtocol(BaseModel):
@@ -605,6 +623,76 @@ class Subproblem(BaseModel):
     assumption_ids: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     audience_notes: dict[str, str] = Field(default_factory=dict)
+
+
+class UserMessage(BaseModel):
+    """The user's own typed message, recorded by a host hook while a goal waits on them.
+
+    Only the host (e.g. Claude Code's UserPromptSubmit hook) writes these — the
+    agent never authors one through a normal command — so a checkpoint that cites
+    one shows the user's actual words instead of the agent's claim that they
+    agreed. Recorded verbatim (truncated) and kept local: never exported.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: str = Field(default_factory=lambda: f"UM-{uuid4().hex[:8]}")
+    text: str
+    recorded_at: str = Field(default_factory=utc_now)
+    source: str = "user-prompt-hook"
+    session_id: str = ""
+
+
+class PainPoint(BaseModel):
+    """Something that hurts the user today, in plain words — the *why* behind a goal.
+
+    Recorded in Discovery before any solution is proposed. Kept local: never
+    exported to the portable spec or copied into cross-project user memory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pain_id: str = Field(default_factory=lambda: f"PP-{uuid4().hex[:8]}")
+    statement: str
+    status: Literal["active", "superseded"] = "active"
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+class DesiredProperty(BaseModel):
+    """How the finished thing should feel or behave, and how the run proves it.
+
+    ``proof="auto"``: the bound phase's review needs an engine-run automated check
+    whose ``covers`` is this id. ``proof="user"``: only the user can judge it, so a
+    user checkpoint with this id on the bound phase (by default the last) must be
+    closed on their reply before that phase can be accepted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    property_id: str = Field(default_factory=lambda: f"DP-{uuid4().hex[:8]}")
+    statement: str
+    proof: Literal["auto", "user"]
+    phase_id: str
+    status: Literal["active", "superseded"] = "active"
+    recorded_at: str = Field(default_factory=utc_now)
+
+
+class DiscoveryRevision(BaseModel):
+    """The user's understanding shifted mid-goal, so Discovery starts over.
+
+    Replaying it supersedes the recorded pain points and desired properties,
+    reopens the first phase for a fresh "yes", and sends later accepted phases
+    back for review against the new framing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    revised_at: str = Field(default_factory=utc_now)
+    # Derived on replay, never authored: whether the user has re-confirmed the
+    # first phase since, and which breakdowns belong to the old framing.
+    settled: bool = False
+    earlier_breakdowns: list[str] = Field(default_factory=list)
 
 
 class ProblemBreakdown(BaseModel):
@@ -1122,6 +1210,13 @@ class GoalSnapshot(BaseModel):
     judgements: list[JudgementRecord] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
     breakdowns: list[ProblemBreakdown] = Field(default_factory=list)
+    user_messages: list[UserMessage] = Field(default_factory=list)
+    pain_points: list[PainPoint] = Field(default_factory=list)
+    desired_properties: list[DesiredProperty] = Field(default_factory=list)
+    discovery_revisions: list[DiscoveryRevision] = Field(default_factory=list)
+    # Every user reply any checkpoint has ever been closed on (derived on replay):
+    # a reply answers one question, even after that checkpoint is reopened.
+    cited_message_ids: list[str] = Field(default_factory=list)
     sources: list[SourceRecord] = Field(default_factory=list)
     source_claims: list[SourceClaim] = Field(default_factory=list)
     architecture: GoalArchitectureMap | None = None

@@ -80,6 +80,7 @@ def _setup_claude(claude_home: Path, *, dry_run: bool) -> list[SetupAction]:
 
 def _setup_codex(codex_home: Path, *, dry_run: bool) -> list[SetupAction]:
     actions = _install_skills("codex", codex_home, dry_run=dry_run)
+    actions += _install_codex_user_prompt_hook(codex_home, dry_run=dry_run)
     actions.append(
         SetupAction(
             target="codex",
@@ -88,6 +89,51 @@ def _setup_codex(codex_home: Path, *, dry_run: bool) -> list[SetupAction]:
         )
     )
     return actions
+
+
+# `|| true`: a hook must never block the prompt (an older CLI without it exits 2).
+CODEX_USER_PROMPT_COMMAND = "goals hooks user-prompt || true"
+
+
+def _install_codex_user_prompt_hook(codex_home: Path, *, dry_run: bool) -> list[SetupAction]:
+    """Add the UserPromptSubmit hook to Codex so user checkpoints can cite real replies.
+
+    Merges into ``hooks.json`` without touching other hooks, and writes through a
+    symlinked file instead of replacing the link (dotfile setups link it).
+    """
+    hooks_path = codex_home / "hooks.json"
+    data = _load_json(hooks_path)
+    hooks = data.setdefault("hooks", {})
+    groups = hooks.setdefault("UserPromptSubmit", []) if isinstance(hooks, dict) else None
+    if not isinstance(groups, list):
+        raise GoalsError(
+            f"{hooks_path} has an unexpected shape (\"hooks\" must be an object and "
+            "\"UserPromptSubmit\" a list). Fix it by hand, then re-run `goals setup --agent codex`."
+        )
+    present = any(
+        isinstance(hook, dict) and str(hook.get("command", "")).strip() == CODEX_USER_PROMPT_COMMAND
+        for group in groups
+        if isinstance(group, dict)
+        for hook in group.get("hooks", [])
+    )
+    if present:
+        return [SetupAction(target="codex", detail="user-prompt hook already configured", changed=False)]
+    if dry_run:
+        return [SetupAction(target="codex", detail=f"would add the user-prompt hook to {hooks_path}", changed=False)]
+    groups.append({"hooks": [{"type": "command", "command": CODEX_USER_PROMPT_COMMAND}]})
+    target = hooks_path.resolve() if hooks_path.is_symlink() else hooks_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(target, json.dumps(data, indent=2) + "\n")
+    return [
+        SetupAction(
+            target="codex",
+            detail=(
+                f"added a hook to {hooks_path}: while a goal waits on your answer, Goals saves "
+                "what you type, on this machine only (Codex asks you to trust the hook on next start)"
+            ),
+            changed=True,
+        )
+    ]
 
 
 def _merge_claude_settings(settings: dict) -> tuple[dict, list[str]]:

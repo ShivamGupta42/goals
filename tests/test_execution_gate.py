@@ -4,6 +4,7 @@ Examples here are deliberately generic (a trivial check that exits 0/1). The gat
 encodes no domain knowledge — only that proof was *run*, not asserted.
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -426,7 +427,36 @@ def test_answered_user_checkpoint_does_not_leave_goal_waiting_on_user(
     assert run_gate(repo, "P1").verdict == GateVerdict.NEEDS_HUMAN
     assert "Waiting on: you" in runner.invoke(app, ["check"]).stdout
 
+    reply = json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "yes", "cwd": str(repo)})
+    assert runner.invoke(app, ["hooks", "user-prompt"], input=reply).exit_code == 0
     assert runner.invoke(app, [*record, "--status", "passed"]).exit_code == 0
     checked = runner.invoke(app, ["check"]).stdout
     assert "Waiting on: you" not in checked
     assert "no longer needs the user" in checked
+
+
+def test_updating_an_assumption_by_id_keeps_what_it_leaves_out(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Re-emitting with --id to flip the status must not reset --depends or move the
+    # assumption to the current phase — that would let a load-bearing assumption
+    # escape its phase's falsifier check.
+    repo = _repo_with_goal(tmp_path)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+    last = load_active_snapshot(repo).phases[-1].phase_id
+    created = runner.invoke(
+        app, ["assess", "assume", "fast", "--depends", "--phase", last, "--building", "logger"]
+    )
+    assert created.exit_code == 0, created.stdout
+    assumption_id = load_active_snapshot(repo).assumptions[0].assumption_id
+
+    updated = runner.invoke(
+        app, ["assess", "assume", "fast", "--id", assumption_id, "--status", "validated"]
+    )
+    assert updated.exit_code == 0, updated.stdout
+    assumption = load_active_snapshot(repo).assumptions[0]
+    assert assumption.status == "validated"
+    assert assumption.depends_on is True
+    assert assumption.phase_id == last
+    assert assumption.building == "logger"

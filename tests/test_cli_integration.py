@@ -412,20 +412,40 @@ def test_checkpoint_cli_blocks_review_and_acceptance(tmp_path: Path) -> None:
     assert blocked_review.returncode == 1
     assert "needs_human" in blocked_review.stdout
 
-    run(
-        [
-            "python",
-            "-m",
-            "goals.cli",
-            "checkpoint",
-            "waive",
-            "P1",
-            "CP-plan",
-            "--reason",
-            "User confirmed the plan in chat.",
-        ],
-        worktree,
+    waive = [
+        "python",
+        "-m",
+        "goals.cli",
+        "checkpoint",
+        "waive",
+        "P1",
+        "CP-plan",
+        "--reason",
+        "User confirmed the plan in chat.",
+    ]
+    # The agent's word alone can't close a checkpoint that waits on the user...
+    unconfirmed = run_unchecked(waive, worktree)
+    assert unconfirmed.returncode == 1
+    assert "no reply from them has been recorded" in unconfirmed.stdout
+    # ...but the user's own reply, recorded by the UserPromptSubmit hook, can.
+    subprocess.run(
+        ["python", "-m", "goals.cli", "hooks", "user-prompt"],
+        cwd=worktree,
+        input=json.dumps(
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Yes, that plan is right.",
+                "cwd": str(worktree),
+                "session_id": "s-1",
+            }
+        ),
+        text=True,
+        stdout=subprocess.PIPE,
+        check=True,
     )
+    run(waive, worktree)
+    listed = run(["python", "-m", "goals.cli", "checkpoint", "list"], worktree)
+    assert 'Closed on the user\'s reply: "Yes, that plan is right."' in listed.stdout
     evidence_file = worktree / "evidence.json"
     evidence_file.write_text(
         json.dumps(

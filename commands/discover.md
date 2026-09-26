@@ -16,22 +16,24 @@ cheaper to fix a misunderstanding now than after it's built.
    outcome, **name what you don't yet understand** instead of assuming it, reflect
    their goal back in plain English, then lay out the approach with **honest
    pros/cons a non-technical person can weigh** (including doing nothing).
-3. Capture it durably as you go, exactly as SKILL.md shows: each desired property
-   where the run is held to it (measurable → `goals assess assume --depends --phase P3`;
-   a feel only the user can judge → a pending P4 `human_validation` checkpoint — never
-   `--depends` on P1, where nothing is built to check yet), the rephrased problem and
-   open unknowns as open questions via `goals assess breakdown`, your recommended
-   approach via `goals decision record --by agent`, and the alignment question as an
+3. Capture it durably as you go, exactly as SKILL.md shows: pain points via
+   `goals assess pain`; each desired property via `goals assess want` with how it's
+   proven (measurable → `--proof auto --phase P3`; a feel only the user can judge →
+   `--proof user`, checked on the last phase — never bind one to P1, where nothing
+   is built to check yet); the rephrased problem and open unknowns as open questions
+   via `goals assess breakdown`; your recommended approach via
+   `goals decision record --by agent --phase P1`; and the alignment question as an
    `understanding` checkpoint that needs the user
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
-   Keep private details (health, family, money, names) out of the `assess` records
-   and the `--by user` decision's `--why` — they're copied into the committable
-   `.goals/` spec and the user's cross-project memory. Write `DISCOVERY.md` next to
-   the goal's dashboard (`.agent-workflow/goals/<goal>/`, kept out of git).
+   Keep private details (health, family, money, names) out of the breakdown (copied
+   into the committable `.goals/` spec); pain points and desired properties stay on
+   this goal. Goals writes `DISCOVERY.md` next to the goal's dashboard for you (kept
+   out of git).
 4. **Get an explicit yes before building.** Ask plainly: *"Here's what I
    understand and how I'd approach it — is this what you want to build?"* When the
-   user confirms, flip the checkpoint to `passed`, record their choice with
-   `goals decision record --by user`, and continue to Assess. If they
+   user confirms, flip the checkpoint to `passed` (Goals cites their recorded reply;
+   `--unverified` only on a host without the Goals hook), record their choice with
+   `goals decision record --by user --phase P1 --private`, and continue to Assess. If they
    correct you, fold it in and re-ask — a "no" here is the most valuable feedback
    in the whole run.
 

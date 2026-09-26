@@ -11,24 +11,33 @@ from typing import Iterator, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
+from goals.checkpoints import phase_checkpoint_blockers
+
 from goals.models import (
     Assumption,
+    CheckpointKind,
+    CheckpointStatus,
     Decision,
+    DesiredProperty,
+    DiscoveryRevision,
     Evidence,
     EvidenceArtifact,
     Event,
     EventType,
     GateResult,
+    GateVerdict,
     GoalArchitectureMap,
     GoalSnapshot,
     GoalStatus,
     JudgementRecord,
+    PainPoint,
     PhaseCheckpoint,
     PhaseStatus,
     ToolHealthCheck,
     ProblemBreakdown,
     SourceClaim,
     SourceRecord,
+    UserMessage,
 )
 
 
@@ -141,9 +150,15 @@ def lock_file(path: Path, timeout_seconds: float = 5.0) -> Iterator[None]:
     while True:
         try:
             fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
             os.close(fd)
             break
         except FileExistsError:
+            if _lock_is_stale(lock_path):
+                # The holder died without releasing it (killed hook, crash):
+                # break it rather than wedging every later write to this goal.
+                lock_path.unlink(missing_ok=True)
+                continue
             if time.monotonic() - start > timeout_seconds:
                 raise GoalsError(f"Timed out waiting for lock: {lock_path}") from None
             time.sleep(0.05)
@@ -151,6 +166,30 @@ def lock_file(path: Path, timeout_seconds: float = 5.0) -> Iterator[None]:
         yield
     finally:
         lock_path.unlink(missing_ok=True)
+
+
+def _lock_is_stale(lock_path: Path) -> bool:
+    """True when the lock names a process that no longer exists.
+
+    A lock with no readable pid (written by an older Goals, or caught mid-write)
+    is left alone and waited out as before. POSIX only: on Windows
+    ``os.kill(pid, 0)`` would terminate the holder, not probe it.
+    """
+    if os.name != "posix":
+        return False
+    try:
+        pid = int(lock_path.read_text().strip())
+    except (OSError, ValueError):
+        return False
+    if pid <= 0 or pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False  # alive, owned by another user
+    return False
 
 
 class EventStore:
@@ -210,6 +249,12 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
         _drop_unknown_fields(first.payload["snapshot"], GoalSnapshot)
     )
     snapshot.event_count = len(events)
+    seen_messages = {m.message_id for m in snapshot.user_messages}
+    # Phases a Discovery revision reset that haven't passed review since. An
+    # accept for one of them (e.g. from an older Goals that skipped the revision
+    # and accepted on stale reviews) is ignored, as the accept command would
+    # refuse it — so the revision can't be silently undone.
+    unreviewed_since_revision: set[str] = set()
     for event in events[1:]:
         snapshot.last_updated = event.timestamp
         payload = event.payload
@@ -276,16 +321,41 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
             phase.reviews.append(
                 GateResult.model_validate(_drop_unknown_fields(payload["gate_result"], GateResult))
             )
+            if phase.reviews[-1].verdict == GateVerdict.PASS and (
+                phase is snapshot.phases[0] or not _revision_open(snapshot)
+            ):
+                # A later phase's pass only counts once the user has re-confirmed
+                # the first phase against the new framing.
+                unreviewed_since_revision.discard(phase.phase_id)
             snapshot.current_phase = phase.phase_id
             _mark_active_if_reopened(snapshot)
         elif event.event_type == EventType.PHASE_CHECKPOINT_RECORDED:
             phase = _phase(snapshot, payload["phase_id"])
-            checkpoint = PhaseCheckpoint.model_validate(
-                _drop_unknown_fields(payload["checkpoint"], PhaseCheckpoint)
-            )
+            raw = payload["checkpoint"]
+            checkpoint = PhaseCheckpoint.model_validate(_drop_unknown_fields(raw, PhaseCheckpoint))
+            if isinstance(raw, dict) and "user_owned" not in raw:
+                # Written by an older Goals that doesn't know ownership (and
+                # defaulted --kind to custom): a user checkpoint stays the user's.
+                prior = next(
+                    (c for c in phase.checkpoints if c.checkpoint_id == checkpoint.checkpoint_id),
+                    None,
+                )
+                if prior is not None and prior.user_owned:
+                    checkpoint.user_owned = True
+                    if checkpoint.kind == CheckpointKind.CUSTOM:
+                        checkpoint.kind = prior.kind
+            if checkpoint.user_message_id and checkpoint.user_message_id not in snapshot.cited_message_ids:
+                snapshot.cited_message_ids.append(checkpoint.user_message_id)
             _upsert_checkpoint(phase.checkpoints, checkpoint)
         elif event.event_type == EventType.PHASE_ACCEPTED:
             phase = _phase(snapshot, payload["phase_id"])
+            first = snapshot.phases[0]
+            if phase.phase_id in unreviewed_since_revision:
+                continue
+            if _revision_open(snapshot):
+                if phase is not first or phase_checkpoint_blockers(first):
+                    continue  # the accept command would refuse this; so does replay
+                snapshot.discovery_revisions[-1].settled = True
             phase.status = PhaseStatus.ACCEPTED
             snapshot.current_phase = _next_pending_phase_id(snapshot)
             if snapshot.current_phase is None:
@@ -313,6 +383,29 @@ def derive_snapshot(events: list[Event]) -> GoalSnapshot:
                 _drop_unknown_fields(payload["breakdown"], ProblemBreakdown)
             )
             _upsert_breakdown(snapshot.breakdowns, breakdown)
+        elif event.event_type == EventType.USER_MESSAGE_RECORDED:
+            message = UserMessage.model_validate(
+                _drop_unknown_fields(payload["message"], UserMessage)
+            )
+            if message.message_id not in seen_messages:
+                seen_messages.add(message.message_id)
+                snapshot.user_messages.append(message)
+        elif event.event_type == EventType.PAIN_POINT_RECORDED:
+            pain = PainPoint.model_validate(_drop_unknown_fields(payload["pain_point"], PainPoint))
+            _upsert_by(snapshot.pain_points, pain, "pain_id")
+        elif event.event_type == EventType.DESIRED_PROPERTY_RECORDED:
+            wanted = DesiredProperty.model_validate(
+                _drop_unknown_fields(payload["property"], DesiredProperty)
+            )
+            _upsert_by(snapshot.desired_properties, wanted, "property_id")
+        elif event.event_type == EventType.DISCOVERY_REVISED:
+            revision = DiscoveryRevision.model_validate(
+                _drop_unknown_fields(payload["revision"], DiscoveryRevision)
+            )
+            revision.settled = False
+            revision.earlier_breakdowns = [b.breakdown_id for b in snapshot.breakdowns]
+            _apply_discovery_revision(snapshot, revision)
+            unreviewed_since_revision = {phase.phase_id for phase in snapshot.phases}
         elif event.event_type == EventType.ARCHITECTURE_UPDATED:
             snapshot.architecture = GoalArchitectureMap.model_validate(
                 _drop_unknown_fields(payload["architecture"], GoalArchitectureMap)
@@ -428,6 +521,15 @@ def _upsert_checkpoint(checkpoints: list[PhaseCheckpoint], checkpoint: PhaseChec
     checkpoints.append(checkpoint)
 
 
+def _upsert_by(items: list, item: BaseModel, key: str) -> None:
+    """Replace the record with the same id (a later event updates it), else append."""
+    for index, existing in enumerate(items):
+        if getattr(existing, key) == getattr(item, key):
+            items[index] = item
+            return
+    items.append(item)
+
+
 def _upsert_assumption(assumptions: list[Assumption], assumption: Assumption) -> None:
     # Re-emitting an assumption (e.g. flipping status holding -> broken) replaces
     # the prior record rather than stacking a duplicate.
@@ -444,6 +546,84 @@ def _upsert_breakdown(breakdowns: list[ProblemBreakdown], breakdown: ProblemBrea
             breakdowns[index] = breakdown
             return
     breakdowns.append(breakdown)
+
+
+def _revision_open(snapshot: GoalSnapshot) -> bool:
+    """A Discovery revision the user hasn't re-confirmed the first phase for yet."""
+    return bool(snapshot.discovery_revisions) and not snapshot.discovery_revisions[-1].settled
+
+
+def _apply_discovery_revision(snapshot: GoalSnapshot, revision: DiscoveryRevision) -> None:
+    """Start Discovery over without losing history.
+
+    - Recorded pain points and desired properties are superseded (they stop
+      gating); an open user check for a superseded property is waived.
+    - The first phase reopens with its reviews cleared, and its understanding
+      checkpoints go back to pending: the user must confirm the new framing.
+    - Later phases lose their reviews; accepted ones go back to needs_review, so
+      nothing stays "done" against the old framing.
+    """
+    snapshot.discovery_revisions.append(revision)
+    superseded: set[str] = set()
+    for pain in snapshot.pain_points:
+        pain.status = "superseded"
+    for wanted in snapshot.desired_properties:
+        if wanted.status == "active" and wanted.proof == "user":
+            superseded.add(wanted.property_id)
+        wanted.status = "superseded"
+    note = f"Superseded by a Discovery revision: {revision.reason}"
+    for index, phase in enumerate(snapshot.phases):
+        for checkpoint in phase.checkpoints:
+            if checkpoint.status in {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}:
+                if index == 0 and checkpoint.kind == CheckpointKind.UNDERSTANDING:
+                    _reset_understanding(checkpoint, revision)
+                continue
+            if checkpoint.checkpoint_id in superseded:
+                checkpoint.status = CheckpointStatus.WAIVED
+                checkpoint.needs_user = False
+                checkpoint.summary = note
+                checkpoint.notes = note
+                checkpoint.updated_at = revision.revised_at
+            elif index == 0 and checkpoint.kind == CheckpointKind.UNDERSTANDING:
+                _reset_understanding(checkpoint, revision)
+        phase.reviews = []
+        if index == 0:
+            phase.status = PhaseStatus.IN_PROGRESS
+        elif phase.status == PhaseStatus.ACCEPTED:
+            phase.status = PhaseStatus.NEEDS_REVIEW
+    if snapshot.phases and not any(
+        c.kind == CheckpointKind.UNDERSTANDING for c in snapshot.phases[0].checkpoints
+    ):
+        # Discovery was skipped before: the new framing still needs the user's yes.
+        existing_ids = {c.checkpoint_id for c in snapshot.phases[0].checkpoints}
+        snapshot.phases[0].checkpoints.append(
+            PhaseCheckpoint(
+                checkpoint_id="alignment" if "alignment" not in existing_ids else "alignment-revised",
+                kind=CheckpointKind.UNDERSTANDING,
+                title="Does this still match what you want to build?",
+                status=CheckpointStatus.PENDING,
+                required=True,
+                user_owned=True,
+                summary=f"Confirm with the user after the revision: {revision.reason}",
+                created_at=revision.revised_at,
+                updated_at=revision.revised_at,
+            )
+        )
+    snapshot.current_phase = _next_pending_phase_id(snapshot)
+    if snapshot.status == GoalStatus.COMPLETE:
+        snapshot.status = GoalStatus.ACTIVE
+
+
+def _reset_understanding(checkpoint: PhaseCheckpoint, revision: DiscoveryRevision) -> None:
+    checkpoint.status = CheckpointStatus.PENDING
+    checkpoint.needs_user = False
+    checkpoint.user_message_id = ""
+    checkpoint.unverified = False
+    checkpoint.asked_at = ""
+    checkpoint.asked_session = ""
+    checkpoint.asked_summary = ""
+    checkpoint.summary = f"Re-confirm with the user after the revision: {revision.reason}"
+    checkpoint.updated_at = revision.revised_at
 
 
 def _next_pending_phase_id(snapshot: GoalSnapshot) -> str | None:

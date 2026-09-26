@@ -13,6 +13,7 @@ from goals.architecture import (
 from goals.audit import build_phase_lineage
 from goals.brief import build_goal_brief
 from goals.capabilities import analyze_capabilities
+from goals.checkpoint_workflows import confirmation_lines, property_state
 from goals.checkpoints import build_current_checkpoint_brief
 from goals.decisions import should_surface_decision
 from goals.git_ops import source_commit
@@ -102,6 +103,8 @@ def render_dashboard(
     status_banner = _status_banner_html(snapshot, brief, checkpoint, open_questions)
     produced = _produced_html(checkpoint)
     steps = _steps_html(snapshot)
+    wants_section = _wants_html(snapshot)
+    confirmations_section = _confirmations_html(snapshot)
     journey_section = _journey_html(snapshot)
     decisions_section = _decisions_section_html(snapshot)
     memory_section = _memory_section_html(user_memory)
@@ -344,10 +347,12 @@ def render_dashboard(
     {how_to_read}
     {produced}
 
+    {wants_section}
     <h2 class="sec">What happened</h2>
     <h3 class="subsec">The steps</h3>
     <p class="secap">The goal broken into stages. Each one must show proof it works before it counts as done.</p>
     <ul class="steps">{steps}</ul>
+    {confirmations_section}
     {journey_section}
     {decisions_section}
     {memory_section}
@@ -555,6 +560,51 @@ def _waiting_label(value: str) -> str:
         "agent": "Agent",
         "no one": "No one",
     }.get(str(value), str(value))
+
+
+def _wants_html(snapshot: GoalSnapshot) -> str:
+    """What the user wants and what hurts today — Discovery's record, in their words.
+
+    Each desired property says how it's proven and where that stands, so "done"
+    reads against the feel they asked for. Hidden until Discovery records any.
+    """
+    pains = [p for p in snapshot.pain_points if p.status == "active"]
+    wanted = [w for w in snapshot.desired_properties if w.status == "active"]
+    if not pains and not wanted:
+        return ""
+    want_items = "".join(
+        f'<li>{escape(w.statement)} <span class="d">— {escape(property_state(snapshot, w))}</span></li>'
+        for w in wanted
+    )
+    pain_items = "".join(f"<li>{escape(p.statement)}</li>" for p in pains)
+    wants = (
+        '<h3 class="subsec">What you want</h3>'
+        '<p class="secap">How the finished thing should feel, and how each one gets proven.</p>'
+        f"<ul>{want_items}</ul>"
+        if wanted
+        else ""
+    )
+    hurts = (
+        '<h3 class="subsec">What hurts today</h3>' f"<ul>{pain_items}</ul>" if pains else ""
+    )
+    return f'<section aria-label="What you want and what hurts today">{wants}{hurts}</section>'
+
+
+def _confirmations_html(snapshot: GoalSnapshot) -> str:
+    """Each closed user checkpoint and the reply it was closed on — or a note that
+    the agent closed it with no recorded reply. Hidden until one has been closed."""
+    lines = confirmation_lines(snapshot)
+    if not lines:
+        return ""
+    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+    return (
+        '<section aria-label="Your replies on record">'
+        '<h3 class="subsec">Your replies on record</h3>'
+        '<p class="secap">Questions only you can answer, and the words you typed that closed '
+        "each one — or a note that the agent closed it without a recorded reply.</p>"
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
 
 
 def _journey_html(snapshot: GoalSnapshot) -> str:

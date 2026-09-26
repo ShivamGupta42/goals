@@ -5,9 +5,9 @@ from pathlib import Path
 
 from goals.architecture import analyze_code_architecture
 from goals.capabilities import analyze_capabilities
-from goals.checkpoints import checkpoint_waits_on_user
+from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
 from goals.decisions import should_surface_decision
-from goals.gates import review_phase
+from goals.gates import proof_targets, review_phase, revision_blocks
 from goals.merge_readiness import analyze_merge_readiness
 from goals.models import (
     ArchitectureCheckReport,
@@ -159,10 +159,18 @@ def _state_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
 def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     issues: list[GoalIssue] = []
     current_phase = snapshot.current_phase
+    issues.extend(_revision_issues(snapshot))
     for phase in snapshot.phases:
         refs = [f"phase:{phase.phase_id}"]
-        issues.extend(_checkpoint_issues(phase.phase_id, phase.checkpoints, refs))
+        checkpoints = phase.checkpoints
+        if is_future_phase(snapshot, phase.phase_id):
+            # Not reached yet: its pending checks aren't actionable now (listing them
+            # as "complete or waive" only invites closing them early). Anything
+            # already put to the user still shows.
+            checkpoints = [c for c in checkpoints if checkpoint_is_asked(c)]
+        issues.extend(_checkpoint_issues(phase.phase_id, checkpoints, refs))
         if phase.status == PhaseStatus.ACCEPTED:
+            issues.extend(_unproven_property_issues(snapshot, phase, refs))
             if not phase.reviews or phase.reviews[-1].verdict != GateVerdict.PASS:
                 issues.append(
                     GoalIssue(
@@ -186,12 +194,8 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
             )
         if phase.evidence is not None:
             issues.extend(_evidence_issues(phase.phase_id, phase.evidence, refs))
-            load_bearing = [
-                (assumption.assumption_id, assumption.statement)
-                for assumption in snapshot.assumptions
-                if assumption.depends_on and assumption.phase_id == phase.phase_id
-            ]
-            synthetic_review = review_phase(phase, load_bearing=load_bearing)
+            load_bearing, desired = proof_targets(snapshot, phase.phase_id)
+            synthetic_review = review_phase(phase, load_bearing=load_bearing, desired=desired)
             if synthetic_review.verdict != GateVerdict.PASS and not phase.reviews:
                 issues.append(
                     GoalIssue(
@@ -203,7 +207,10 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
                         evidence_refs=refs,
                     )
                 )
-        if phase.status == PhaseStatus.NEEDS_REVIEW and not phase.reviews:
+        if phase.status == PhaseStatus.NEEDS_REVIEW and not phase.reviews and not revision_blocks(
+            snapshot, phase.phase_id
+        ):
+            # (While a revision is open, the revision issue says what to do first.)
             issues.append(
                 GoalIssue(
                     severity="p1",
@@ -270,10 +277,97 @@ def _phase_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
     return issues
 
 
+def _revision_issues(snapshot: GoalSnapshot) -> list[GoalIssue]:
+    """After a Discovery revision, say what has to be redone until it is."""
+    if not snapshot.discovery_revisions or not snapshot.phases:
+        return []
+    if snapshot.discovery_revisions[-1].settled:
+        return []
+    first = snapshot.phases[0]
+    revision = snapshot.discovery_revisions[-1]
+    rereview = [p.phase_id for p in snapshot.phases[1:] if p.status == PhaseStatus.NEEDS_REVIEW]
+    return [
+        GoalIssue(
+            severity="p1",
+            area="state",
+            summary=f"Discovery was revised: {revision.reason}.",
+            suggested_action=(
+                "Record what the user wants now (`goals assess pain`/`want`), re-confirm "
+                f"{first.phase_id} with them"
+                + (f", then re-review {', '.join(rereview)}." if rereview else ".")
+            ),
+        )
+    ]
+
+
+def _unproven_property_issues(snapshot: GoalSnapshot, phase, refs: list[str]) -> list[GoalIssue]:
+    """An accepted phase whose auto-proven desired property has no passing check.
+
+    The gate enforces these, but a phase accepted by an older Goals (which didn't
+    know about desired properties) or before the property was recorded slipped
+    past it; the evidence is still in the log, so say so.
+    """
+    _, desired = proof_targets(snapshot, phase.phase_id)
+    verifications = phase.evidence.verifications if phase.evidence is not None else []
+    issues: list[GoalIssue] = []
+    for property_id, statement in desired:
+        if any(
+            v.covers.strip() == property_id and v.kind == "auto" and v.ran and v.passed
+            for v in verifications
+        ):
+            continue
+        issues.append(
+            GoalIssue(
+                severity="p1",
+                area="gate",
+                summary=(
+                    f"{phase.phase_id} was accepted without proving desired property "
+                    f"{property_id}: {statement}."
+                ),
+                suggested_action=(
+                    f"Add an automated check covering {property_id} to {phase.phase_id}'s "
+                    f"evidence, run `goals phase verify {phase.phase_id}`, then review and "
+                    "accept it again."
+                ),
+                evidence_refs=refs,
+            )
+        )
+    return issues
+
+
+def _ask_action(phase_id: str, checkpoint, label: str) -> str:
+    from goals.checkpoint_workflows import current_host_session
+
+    here = current_host_session()
+    if checkpoint.asked_session and here and checkpoint.asked_session != here:
+        return (
+            f"It was asked in another session; re-ask it here with `goals checkpoint record "
+            f"{phase_id} {checkpoint.checkpoint_id} --status needs_user`, then ask the user."
+        )
+    return f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+
+
 def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[GoalIssue]:
     issues: list[GoalIssue] = []
     for checkpoint in checkpoints:
         if not checkpoint.required:
+            if checkpoint_is_asked(checkpoint):
+                # Optional, but put to the user: they should see it's waiting,
+                # since their next message is what answers it.
+                label = checkpoint.title or checkpoint.checkpoint_id
+                issues.append(
+                    GoalIssue(
+                        severity="p1",
+                        area="checkpoint",
+                        summary=f"{phase_id} optional question waiting on the user: {label}.",
+                        detail=checkpoint.summary,
+                        suggested_action=(
+                            f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+                        ),
+                        needs_user=True,
+                        evidence_refs=[*refs, *checkpoint.evidence_refs],
+                    )
+                )
             continue
         if checkpoint.status in {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}:
             continue
@@ -287,7 +381,7 @@ def _checkpoint_issues(phase_id: str, checkpoints, refs: list[str]) -> list[Goal
                 detail=checkpoint.summary
                 or "A required checkpoint must pass or be waived before this phase can be accepted.",
                 suggested_action=(
-                    f"Ask the user to answer checkpoint {checkpoint.checkpoint_id}: {label}."
+                    _ask_action(phase_id, checkpoint, label)
                     if needs_user
                     else f"Complete or waive checkpoint {checkpoint.checkpoint_id} before review."
                 ),

@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 from goals.models import (
+    CheckpointKind,
     CheckpointStatus,
     CurrentCheckpointBrief,
     GoalSnapshot,
     Phase,
     PhaseCheckpoint,
     PhaseStatus,
+    UserMessage,
 )
 
 COMPLETE_CHECKPOINT_STATUSES = {CheckpointStatus.PASSED, CheckpointStatus.WAIVED}
+# Kinds whose whole point is the user's answer: closing one needs their reply.
+USER_CHECKPOINT_KINDS = {
+    CheckpointKind.UNDERSTANDING,
+    CheckpointKind.HUMAN_VALIDATION,
+    CheckpointKind.APPROVAL,
+}
 
 
 def checkpoint_blocks_phase(checkpoint: PhaseCheckpoint) -> bool:
@@ -24,6 +32,66 @@ def checkpoint_waits_on_user(checkpoint: PhaseCheckpoint) -> bool:
     if not checkpoint_blocks_phase(checkpoint):
         return False
     return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
+
+
+def is_future_phase(snapshot: GoalSnapshot, phase_id: str) -> bool:
+    """True for a phase after the current one — work that hasn't been reached yet."""
+    ids = [phase.phase_id for phase in snapshot.phases]
+    if snapshot.current_phase not in ids or phase_id not in ids:
+        return False
+    return ids.index(phase_id) > ids.index(snapshot.current_phase)
+
+
+def is_user_checkpoint(checkpoint: PhaseCheckpoint) -> bool:
+    """A checkpoint only the user can close: owned by them, a user kind, or asked."""
+    return (
+        checkpoint.user_owned
+        or checkpoint.kind in USER_CHECKPOINT_KINDS
+        or checkpoint_is_asked(checkpoint)
+    )
+
+
+def checkpoint_is_asked(checkpoint: PhaseCheckpoint) -> bool:
+    """Open and put to the user — whether or not it is required."""
+    if checkpoint.status in COMPLETE_CHECKPOINT_STATUSES:
+        return False
+    return checkpoint.needs_user or checkpoint.status == CheckpointStatus.NEEDS_USER
+
+
+def replies_since_asked(
+    snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint | None
+) -> list[UserMessage]:
+    """User messages recorded after this checkpoint was last put to the user.
+
+    A checkpoint counts as asked only while it is open and put to the user;
+    ``asked_at`` is the moment it was (re)asked (``updated_at`` for checkpoints
+    recorded before that field). If the asking host session is known, only its
+    replies count. A reply already cited by another checkpoint doesn't count:
+    one answer closes one question.
+    """
+    if checkpoint is None or not checkpoint_is_asked(checkpoint):
+        return []
+    asked_at = checkpoint.asked_at or checkpoint.updated_at
+    cited = set(snapshot.cited_message_ids) | {
+        other.user_message_id
+        for phase in snapshot.phases
+        for other in phase.checkpoints
+        if other.user_message_id and other is not checkpoint
+    }
+    return [
+        m
+        for m in snapshot.user_messages
+        if m.recorded_at > asked_at
+        and m.message_id not in cited
+        and (not checkpoint.asked_session or m.session_id == checkpoint.asked_session)
+    ]
+
+
+def user_message_by_id(snapshot: GoalSnapshot, message_id: str) -> UserMessage | None:
+    for message in snapshot.user_messages:
+        if message.message_id == message_id:
+            return message
+    return None
 
 
 def phase_checkpoint_blockers(phase: Phase) -> list[str]:
