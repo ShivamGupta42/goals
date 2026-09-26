@@ -1628,6 +1628,13 @@ def assess_assume(
         # with no `--phase` would have phase_id=None, match no phase, and silently
         # escape the gate entirely.
         phase_id = phase if phase is not None else snapshot.current_phase
+        # An unknown --phase would match no gate, so a load-bearing assumption
+        # tagged to it would silently never be enforced (e.g. P3 on a 2-phase loop).
+        valid_phases = [p.phase_id for p in snapshot.phases]
+        if phase is not None and phase not in valid_phases:
+            raise GoalsError(
+                f"Unknown phase id: {phase}. Valid phases: {', '.join(valid_phases) or 'none'}."
+            )
         if depends and phase_id is None:
             raise GoalsError(
                 "A load-bearing (--depends) assumption must belong to a phase so the gate "

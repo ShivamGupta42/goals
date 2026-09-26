@@ -184,9 +184,13 @@ class EventStore:
                 return
             event = _with_causality(events, event)
             snapshot = derive_snapshot(events + [event])
-            lines = [existing.model_dump_json() for existing in events]
-            lines.append(event.model_dump_json())
-            atomic_write_text(self.events_path, "\n".join(lines) + "\n")
+            # Keep every existing line byte-for-byte. Re-serializing parsed events
+            # would silently delete lines this version can't parse (event types or
+            # fields from a newer Goals) and rewrite history on every append.
+            existing = self.events_path.read_text() if self.events_path.exists() else ""
+            if existing and not existing.endswith("\n"):
+                existing += "\n"
+            atomic_write_text(self.events_path, existing + event.model_dump_json() + "\n")
             atomic_write_text(self.snapshot_path, snapshot.model_dump_json(indent=2) + "\n")
 
     def snapshot(self) -> GoalSnapshot:
