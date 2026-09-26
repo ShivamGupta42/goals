@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from goals.discovery_notes import render_wants_offer
 from goals.models import Evidence, Event, EventType, GateResult, GoalSnapshot, GoalStatus
 from goals.runtime import append_event, load_active_snapshot, run_gate, transition_phase, verify_phase
 from goals.storage import GoalsError
@@ -70,6 +71,7 @@ def accept_phase(cwd: Path, phase_id: str) -> PhaseAcceptReport:
     snapshot = transition_phase(cwd, phase_id, "accept")
     if snapshot.status != GoalStatus.COMPLETE:
         return PhaseAcceptReport(snapshot=snapshot)
+    offer = render_wants_offer(snapshot)
     try:
         digest = build_goal_memory_digest(snapshot.goal_id)
         interview = render_post_goal_interview(snapshot.goal_id) if mark_interview_prompted(snapshot.goal_id) else ""
@@ -77,11 +79,12 @@ def accept_phase(cwd: Path, phase_id: str) -> PhaseAcceptReport:
             snapshot=snapshot,
             interview=interview,
             completion_note=COMPLETION_CRITIQUE_NUDGE,
-            memory_digest=digest,
+            memory_digest=digest + offer,
         )
     except GoalsError as exc:
         return PhaseAcceptReport(
             snapshot=snapshot,
             warning=f"User memory warning: {exc}",
             completion_note=COMPLETION_CRITIQUE_NUDGE,
+            memory_digest=offer,
         )

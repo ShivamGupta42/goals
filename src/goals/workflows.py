@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from goals.checkpoint_workflows import confirmation_lines
+from goals.discovery_notes import render_wants_offer
 from goals.health import GoalHealthReport, build_goal_health
 from goals.loop_builder import load_design, profile_root_for_loop_path, to_snapshot
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
@@ -173,6 +174,7 @@ def finish_workflow(cwd: Path) -> WorkflowFinish:
         digest = build_goal_memory_digest(snapshot.goal_id)
     except GoalsError:
         digest = ""
+    digest += render_wants_offer(snapshot)
     return WorkflowFinish(snapshot=snapshot, check=check, export=export, memory_digest=digest)
 
 
@@ -415,6 +417,8 @@ def render_finish_workflow(report: WorkflowFinish) -> str:
             f"- Issues: {report.check.issues.summary}",
             f"- Merge: {report.check.merge.summary}",
             f"- Architecture: {report.check.architecture.summary}",
+            # A finished goal still says which of the user's answers weren't on record.
+            *_confirmation_section(report.snapshot),
         ]
     )
     if report.memory_digest:

@@ -54,9 +54,6 @@ record"; `DISCOVERY.md` is generated from the log next to the dashboard.
   catch; one reply answers one question.
 - On a single-phase goal, a property only the user can judge is checked in that
   same phase, so it can be asked during Discovery.
-- `goals user forget` matches preferences, not observations, so a remembered
-  desired property is removed by editing `observations.md`. Remembering is
-  opt-in (`--remember`) for this reason.
 - Gate messages quote property text, which `goals memory absorb` can carry into
   self-evolution memory (pre-existing for assumption text too).
 
@@ -121,9 +118,10 @@ Each step ships and meets its criteria before the next starts.
      history rewrite.
 4. **Views and privacy.** — *implemented. As built: the plan said properties are
    "never logged to user memory" and also that recurring ones are promoted, which
-   needs them logged; resolved as opt-in — a property recorded with `--remember`
-   is remembered once, at the user's first recorded yes to Discovery (pain never
-   is). `decision record --private` keeps the whole decision off memory, not just
+   needs them logged; resolved (user-approved in the plan audit, 2026-09-26):
+   Goals never writes pain or desired properties to memory, and the goal-end
+   summary lists the user's wants with the `goals user record` command to keep
+   any themselves. `decision record --private` keeps the whole decision off memory, not just
    its `--why`. A hand-written `DISCOVERY.md` is moved aside once, not
    overwritten.*
    - A dashboard "What you want / What hurts today" section, replacing
@@ -164,9 +162,19 @@ Each step ships and meets its criteria before the next starts.
 - *(Build)* Replies are bound to the asking host session when the host exports
   its id; otherwise the nearest checkout decides, and two waiting worktree goals
   make a base-checkout reply ambiguous, so it's recorded nowhere.
-- *(Build)* Remembering desired properties is opt-in (`--remember`) because
-  Discovery wants can be health-adjacent and `goals user forget` can't target
-  observations. *(Replaces "never logged" / "promote recurring ones".)*
+- *(Build; approved in the plan audit, 2026-09-26)* Desired properties are never
+  written to memory; the goal-end summary offers each one as a `goals user
+  record` command the user runs themselves. *(Replaces "promote recurring ones",
+  which needed them logged; Discovery wants can be health-adjacent.)*
+- *(Approved in the plan audit, 2026-09-26)* `--unverified` closes a user
+  checkpoint only after it was put to the user, and every view — including
+  `goals phase review`, `phase accept`, and `goals finish` — says it wasn't
+  verified. *(Amends the P0 criterion below: the listed commands fail until a
+  reply is recorded, unless the host can't record one.)*
+- *(Approved in the plan audit, 2026-09-26)* Three review fixes outside the plan
+  stay: breaking a lock left by a dead process (POSIX), `assess assume --id`
+  keeping what it leaves out, and `phase accept` re-checking load-bearing
+  assumptions as well as desired properties bound after the last review.
 
 ### Validation criteria
 
@@ -178,17 +186,17 @@ P0 — block release:
 - [x] (auto) `checkpoint record P1 alignment --status passed` and
   `checkpoint waive P1 alignment` both fail while it is `needs_user` with no
   newer `USER_CONFIRMATION`, and both succeed after one. *(test_user_confirmation.py;
-  the event is `USER_MESSAGE_RECORDED`, and `--unverified` also closes it, labelled)*
+  the event is `USER_MESSAGE_RECORDED`; amendment approved: once asked, `--unverified`
+  also closes it, labelled "not verified" everywhere)*
 - [x] (auto) An `auto` property blocks its phase's review until an engine-run
   check covering its `DP-` id passes; a `manual` verification covering it
   doesn't count. *(test_discovery_records.py)*
 - [x] (auto) A `user` property blocks accepting `phases[-1]` on a custom
-  two-phase loop. *(test_discovery_records.py)*
+  two-phase loop. *(test_discovery_records.py, via `goals phase accept`)*
 - [x] (auto) After recording pain points and properties, none of their text
   appears in `.goals/goal-state.json`, `.goals/GOAL.md`, or
-  `~/.goals/user/observations.md`. *(test_discovery_views.py — with one deliberate
-  exception: a property the agent marks `--remember` is written to
-  `observations.md` at the user's first recorded yes; see Decisions)*
+  `~/.goals/user/observations.md`. *(test_discovery_views.py, through goal
+  completion)*
 
 P1:
 - [x] (auto) `assess assume --depends --phase P9` on a four-phase goal errors.

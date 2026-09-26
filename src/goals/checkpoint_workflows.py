@@ -60,6 +60,16 @@ def render_checkpoint_list(snapshot: GoalSnapshot) -> str:
     return "\n".join(lines) + "\n"
 
 
+def unverified_closes(phase: Phase) -> list[str]:
+    """Lines for this phase's user checkpoints closed without a recorded reply."""
+    return [
+        f"Not verified: {c.title or c.checkpoint_id} was closed without a recorded reply "
+        "from the user."
+        for c in phase.checkpoints
+        if c.unverified and c.status in COMPLETE_CHECKPOINT_STATUSES
+    ]
+
+
 def checkpoint_provenance(snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint) -> str:
     """Plain-language line saying how a closed user checkpoint was closed."""
     if checkpoint.user_message_id:
@@ -241,48 +251,7 @@ def record_checkpoint(
         asked_session=asked_session,
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
-    newly_confirmed = (
-        status == CheckpointStatus.PASSED
-        and cited
-        and kind == CheckpointKind.UNDERSTANDING
-        and (existing is None or existing.status not in COMPLETE_CHECKPOINT_STATUSES)
-    )
-    if newly_confirmed:
-        _remember_confirmed_properties(snapshot, phase_id)
     return checkpoint
-
-
-def _remember_confirmed_properties(snapshot: GoalSnapshot, phase_id: str) -> None:
-    """When the user first says yes to Discovery, remember the wants marked to remember.
-
-    Only desired properties recorded with ``remember`` (opt-in: general, not
-    personal) become observations in the user's cross-project memory, once, so a
-    recurring one is offered for promotion in the end-of-goal digest with their
-    say-so. Pain points never are. Best-effort: a memory problem (unwritable
-    home, a sandbox) never undoes the confirmation.
-    """
-    if not snapshot.phases or phase_id != snapshot.phases[0].phase_id:
-        return
-    from goals.user_memory import infer_area, load_observations, record_observation
-
-    try:
-        already = {
-            obs.choice for obs in load_observations() if obs.goal_id == snapshot.goal_id
-        }
-        for wanted in snapshot.desired_properties:
-            if not wanted.remember or wanted.status != "active":
-                continue
-            if " ".join(wanted.statement.split()) in already:
-                continue  # remembered once per goal, however often it's confirmed
-            record_observation(
-                goal_id=snapshot.goal_id,
-                choice=wanted.statement,
-                context="what you wanted in this goal",
-                area=infer_area(wanted.statement),
-                phase_id=phase_id,
-            )
-    except (GoalsError, OSError):
-        return
 
 
 #: Env vars through which a host tells the agent's shell its session id. The
@@ -399,13 +368,13 @@ def _closing_provenance(
         return user_message_id, False
     if replies:
         return replies[-1].message_id, False
-    if unverified:
-        return "", True
+    if unverified and existing is not None and checkpoint_is_asked(existing):
+        return "", True  # asked, but this host can't record the answer: labelled
     if existing is None or not checkpoint_is_asked(existing):
         raise GoalsError(
             f"{phase_id} checkpoint {checkpoint_id} is the user's to answer and hasn't been "
-            "put to them yet. Record it with --status needs_user, ask them, and close it after "
-            "they reply — or pass --unverified on a host without the Goals hook (it will show "
+            "put to them yet. Record it with --status needs_user and ask them; close it after "
+            "they reply (on a host without the Goals hook, --unverified then closes it, shown "
             "as not verified)."
         )
     here = current_host_session()

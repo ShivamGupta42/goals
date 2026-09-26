@@ -20,9 +20,8 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    (`goals checkpoint record P1 alignment --kind understanding --status needs_user --needs-user`).
    **Don't build until the user confirms "yes, this is what I want."** Keep
    private details out of the breakdown (committed with `.goals/`); pain points
-   and desired properties stay local unless a general want is marked `--remember`,
-   and Goals writes `DISCOVERY.md` next to the goal's dashboard. Skip only if the
-   goal is trivial and unambiguous.
+   and desired properties stay local, and Goals writes `DISCOVERY.md` next to the
+   goal's dashboard. Skip only if the goal is trivial and unambiguous.
 3. **Pause + Assess the goal** (PACERS — see `/goals-problem-solving`).
    Rephrase "$ARGUMENTS" into a specific, testable problem; ask *why* until it
    simplifies to the root. (Phases follow a fixed arc — Confirm → Inspect →

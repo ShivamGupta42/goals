@@ -548,3 +548,41 @@ def test_the_hook_skips_idle_goals_without_replaying_them(repo: Path, monkeypatc
     calls.clear()
     assert record_user_prompt(repo, "yes") == 1
     assert calls  # a waiting goal is replayed before recording
+
+
+# --------------------------------------------------------------------------- #
+# Plan-audit remediation R2: --unverified only after asking; never hidden by a pass
+# --------------------------------------------------------------------------- #
+def test_unverified_needs_the_question_to_have_been_put_to_the_user(repo: Path) -> None:
+    runner = CliRunner()
+    feel = ["checkpoint", "record", "P1", "appr", "--kind", "approval"]
+    assert runner.invoke(app, [*feel, "--status", "pending"]).exit_code == 0
+    never_asked = runner.invoke(app, [*feel, "--status", "passed", "--unverified"])
+    assert never_asked.exit_code == 1 and "hasn't been put to them yet" in never_asked.stdout
+    waive = ["checkpoint", "waive", "P1", "appr", "--reason", "no hook", "--unverified"]
+    assert runner.invoke(app, waive).exit_code == 1
+    fresh = runner.invoke(app, ["checkpoint", "record", "P1", "new", "--kind", "approval",
+                                "--status", "passed", "--unverified"])
+    assert fresh.exit_code == 1
+    assert runner.invoke(app, [*feel, "--status", "needs_user"]).exit_code == 0
+    assert runner.invoke(app, waive).exit_code == 0  # asked, on a host that can't record the reply
+
+
+def test_review_accept_and_finish_never_hide_an_unverified_close(repo: Path) -> None:
+    runner = CliRunner()
+    _ask(repo)
+    assert runner.invoke(app, [*ASK, "--status", "passed", "--unverified"]).exit_code == 0
+    phase = load_active_snapshot(repo).phases[0]
+    evidence = repo / "evidence-P1.json"
+    evidence.write_text(json.dumps({"checks_run": ["true"], "verifications": [
+        {"covers": f"P1.C{i + 1}", "kind": "auto", "command": "true"}
+        for i in range(len(phase.acceptance_criteria))]}))
+    for args in (["phase", "evidence", "P1", "--file", str(evidence)], ["phase", "verify", "P1"]):
+        assert runner.invoke(app, args).exit_code == 0
+    note = "Not verified: alignment was closed without a recorded reply from the user."
+    review = runner.invoke(app, ["phase", "review", "P1"])
+    assert review.exit_code == 0 and note in review.stdout
+    accept = runner.invoke(app, ["phase", "accept", "P1"])
+    assert accept.exit_code == 0 and note in accept.stdout
+    finish = runner.invoke(app, ["finish"])
+    assert "Not verified: closed without a recorded reply from the user." in finish.stdout

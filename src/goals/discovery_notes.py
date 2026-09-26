@@ -8,6 +8,7 @@ hand-written file untouched.
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 from goals.checkpoint_workflows import confirmation_lines, property_state
@@ -82,6 +83,24 @@ def render_discovery_markdown(snapshot: GoalSnapshot) -> str:
             "## Set aside by revisions",
             *_bullets(set_aside),
         ]
+    return "\n".join(lines) + "\n"
+
+
+def render_wants_offer(snapshot: GoalSnapshot) -> str:
+    """At goal end, offer the user's wants as standing preferences — theirs to keep.
+
+    Goals never writes desired properties to cross-project memory itself; the
+    user runs the command for any they want future goals to honour.
+    """
+    wanted = [w.statement for w in snapshot.desired_properties if w.status == "active"]
+    if not wanted:
+        return ""
+    lines = [
+        "",
+        "What you wanted in this goal — to have future goals honour one too, run:",
+        *[f"- goals user record {shlex.quote(_flat(statement))}" for statement in wanted],
+        "(Nothing is saved unless you run it.)",
+    ]
     return "\n".join(lines) + "\n"
 
 

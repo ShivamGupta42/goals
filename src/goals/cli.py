@@ -31,6 +31,7 @@ from goals.checkpoint_workflows import (
     current_checkpoint,
     checkpoint_provenance,
     record_checkpoint as record_checkpoint_workflow,
+    unverified_closes,
     render_checkpoint_list,
     waive_checkpoint as waive_checkpoint_workflow,
 )
@@ -1805,12 +1806,6 @@ def assess_want(
     property_id: Optional[str] = typer.Option(
         None, "--id", help="Reuse an id to reword an existing desired property."
     ),
-    remember: Optional[bool] = typer.Option(
-        None,
-        "--remember/--no-remember",
-        help="Once the user confirms Discovery, keep this in their memory across projects "
-        "(off by default; only for general, non-personal wants).",
-    ),
 ) -> None:
     """Record a desired property — how the result should feel — and how it's proven.
 
@@ -1887,7 +1882,6 @@ def assess_want(
             statement=statement,
             proof=chosen,
             phase_id=bound,
-            remember=remember if remember is not None else (prior.remember if prior else False),
             **({"property_id": property_id} if property_id else {}),
         )
         _ensure_alignment_check(snapshot)
@@ -2261,6 +2255,7 @@ def phase_review(phase_id: str) -> None:
     def run():
         result = review_phase_workflow(Path.cwd(), phase_id)
         typer.echo(f"{result.verdict}: {result.summary}")
+        _echo_unverified_closes(phase_id)
         if result.verdict != GateVerdict.PASS:
             if result.findings:
                 for finding in result.findings:
@@ -2273,6 +2268,14 @@ def phase_review(phase_id: str) -> None:
     _handle(run)
 
 
+def _echo_unverified_closes(phase_id: str, snapshot: GoalSnapshot | None = None) -> None:
+    """A passing gate never hides that the user's answer wasn't on record."""
+    snapshot = snapshot or load_active_snapshot(Path.cwd())
+    phase = next((p for p in snapshot.phases if p.phase_id == phase_id), None)
+    for line in unverified_closes(phase) if phase is not None else []:
+        typer.echo(f"  {line}")
+
+
 @phase_app.command("accept")
 def phase_accept(phase_id: str) -> None:
     """Accept a reviewed phase."""
@@ -2280,6 +2283,7 @@ def phase_accept(phase_id: str) -> None:
     def run():
         report = accept_phase(Path.cwd(), phase_id)
         typer.echo(f"Accepted phase {phase_id}")
+        _echo_unverified_closes(phase_id, report.snapshot)
         if report.warning:
             typer.echo(report.warning, err=True)
         if report.completion_note:

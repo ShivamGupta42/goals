@@ -139,6 +139,7 @@ def test_a_user_property_blocks_the_last_phase_of_a_custom_loop(two_phase_repo: 
     blocked = run_gate(repo, "P2")
     assert blocked.verdict != GateVerdict.PASS
     assert any("checkpoint" in issue.lower() for issue in blocked.p0)
+    _fails("phase", "accept", "P2")  # AC-4: accepting phases[-1] is refused
     # The agent can't close it on its own word...
     _fails("checkpoint", "record", "P2", dp.property_id, "--status", "passed")
     # ...only after asking and getting the user's reply.
@@ -146,6 +147,7 @@ def test_a_user_property_blocks_the_last_phase_of_a_custom_loop(two_phase_repo: 
     _say(repo, "Yes, I'd trust that number.")
     _invoke("checkpoint", "record", "P2", dp.property_id, "--status", "passed")
     assert run_gate(repo, "P2").verdict == GateVerdict.PASS
+    assert "Accepted phase P2" in _invoke("phase", "accept", "P2")
 
 
 def test_want_validates_proof_and_phase(repo: Path) -> None:
