@@ -153,6 +153,9 @@ class PhaseCheckpoint(BaseModel):
     # reply after asked_at — from that session, when known — can close it.
     asked_at: str = ""
     asked_session: str = ""
+    # What was put to the user when last asked (its summary then), kept after it
+    # closes: a later closing summary is the agent's account, this is the question.
+    asked_summary: str = ""
 
 
 class PhaseProtocol(BaseModel):

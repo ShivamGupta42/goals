@@ -621,6 +621,7 @@ def _reset_understanding(checkpoint: PhaseCheckpoint, revision: DiscoveryRevisio
     checkpoint.unverified = False
     checkpoint.asked_at = ""
     checkpoint.asked_session = ""
+    checkpoint.asked_summary = ""
     checkpoint.summary = f"Re-confirm with the user after the revision: {revision.reason}"
     checkpoint.updated_at = revision.revised_at
 

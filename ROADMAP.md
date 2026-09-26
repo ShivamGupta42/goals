@@ -54,6 +54,12 @@ record"; `DISCOVERY.md` is generated from the log next to the dashboard.
   catch; one reply answers one question.
 - On a single-phase goal, a property only the user can judge is checked in that
   same phase, so it can be asked during Discovery.
+- *(Follow-up, plan re-audit 2026-09-26)* After a revision, a later phase's
+  re-review runs the gate on its pre-revision evidence; it doesn't force a fresh
+  `goals phase verify` against the new framing.
+- *(Follow-up, plan re-audit 2026-09-26)* `goals phase review` prints "pass"
+  directly above any "Not verified: …" line; the summary line itself doesn't say
+  how many user answers weren't verified.
 - Gate messages quote property text, which `goals memory absorb` can carry into
   self-evolution memory (pre-existing for assumption text too).
 

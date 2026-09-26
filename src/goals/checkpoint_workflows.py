@@ -106,9 +106,13 @@ def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
         return "closed without a reply from you on record (not verified)"
     if check.status in COMPLETE_CHECKPOINT_STATUSES:
         message = user_message_by_id(snapshot, check.user_message_id)
-        said = f': "{_clip(message.text)}"' if message else ""
+        if message is None:
+            # Never claim the user's answer without their words on record (e.g.
+            # closed by an older Goals, or a cited reply missing on this machine).
+            return "closed with no reply from you on record"
         verb = "you said yes" if check.status == CheckpointStatus.PASSED else "you skipped this"
-        return verb + said
+        return f'{verb}: "{_clip(message.text)}"'
+
     if checkpoint_is_asked(check):
         return "waiting on your answer"
     return f"you'll be asked in {step}, once there's something to try"
@@ -120,6 +124,7 @@ def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
     superseded = {
         w.property_id for w in snapshot.desired_properties if w.status == "superseded"
     }
+    property_checks = {w.property_id for w in snapshot.desired_properties}
     for phase in snapshot.phases:
         for checkpoint in phase.checkpoints:
             if checkpoint.status not in COMPLETE_CHECKPOINT_STATUSES:
@@ -136,8 +141,14 @@ def confirmation_lines(snapshot: GoalSnapshot) -> list[str]:
             ):
                 continue
             label = checkpoint.title or checkpoint.checkpoint_id
+            # What was put to the user. A desired property's check already names
+            # the want in its title (its summary is guidance for the agent).
+            asked = "" if checkpoint.checkpoint_id in property_checks else (
+                checkpoint.asked_summary or checkpoint.summary
+            )
+            about = f' — asked: "{_clip(asked)}"' if asked and asked != label else ""
             lines.append(
-                f"{phase.phase_id} {label} ({checkpoint.status}): "
+                f"{phase.phase_id} {label}{about} ({checkpoint.status}): "
                 + (provenance or "no reply on record.")
             )
     return lines
@@ -216,6 +227,11 @@ def record_checkpoint(
     # re-asks. The asking host session, when known, is the one whose replies count.
     now_asked = not closing and needs_user
     was_asked = existing is not None and checkpoint_is_asked(existing)
+    resolved_summary = summary or (existing.summary if existing else "")
+    if now_asked and (explicitly_asked or not was_asked):
+        asked_summary = resolved_summary
+    else:
+        asked_summary = existing.asked_summary if existing is not None else ""
     if now_asked and (explicitly_asked or not was_asked):
         # Keep a known asking session when this shell can't tell us its own, so
         # re-asking from an unknown session never widens who can answer.
@@ -249,6 +265,7 @@ def record_checkpoint(
         user_owned=user_owned,
         asked_at=asked_at,
         asked_session=asked_session,
+        asked_summary=asked_summary,
     )
     _append_checkpoint(cwd, snapshot.goal_id, phase_id, checkpoint)
     return checkpoint

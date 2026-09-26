@@ -289,3 +289,46 @@ def test_the_notes_show_only_the_current_framing_after_a_revision(repo: Path) ->
     current = (_goal_dir(repo) / "DISCOVERY.md").read_text().split("## Revisions")[0]
     assert "new question?" in current and "old question?" not in current
     assert "new approach" in current and "old approach" not in current
+
+
+# --------------------------------------------------------------------------- #
+# Re-audit follow-up (AC-9): "A non-technical reader can tell from the dashboard
+# alone what they said yes to and whether that yes was verified."
+# --------------------------------------------------------------------------- #
+def test_the_dashboard_never_claims_a_yes_without_the_users_words(repo: Path) -> None:
+    from goals.checkpoint_workflows import property_state
+    from goals.models import Event, EventType
+    from goals.storage import EventStore
+
+    _invoke("assess", "want", "Works offline", "--proof", "user")
+    for phase_id in ("P1", "P2", "P3"):
+        _accept_quick(repo, phase_id)
+    dp = load_active_snapshot(repo).desired_properties[0]
+    # e.g. an older Goals closes the check with no reply recorded
+    snapshot = load_active_snapshot(repo)
+    check = next(c for c in snapshot.phases[3].checkpoints if c.checkpoint_id == dp.property_id)
+    closed = check.model_dump() | {"status": "passed", "needs_user": False}
+    closed.pop("user_owned")  # written by a binary that doesn't know ownership
+    EventStore(_goal_dir(repo)).append(Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+                                             payload={"phase_id": "P4", "checkpoint": closed}))
+    state = property_state(load_active_snapshot(repo), dp)
+    assert state == "closed with no reply from you on record"
+    _invoke("dashboard")
+    html = (_goal_dir(repo) / "dashboard.html").read_text()
+    assert "you said yes" not in html and "closed with no reply from you on record" in html
+
+
+def test_replies_on_record_show_what_the_user_was_asked(repo: Path) -> None:
+    _invoke("assess", "pain", "Logging takes too many taps")
+    align = ["checkpoint", "record", "P1", "alignment", "--kind", "understanding"]
+    _invoke(*align, "--status", "needs_user", "--summary", "Log weight on your phone in under 5 seconds")
+    payload = {"hook_event_name": "UserPromptSubmit", "prompt": "yes, exactly", "cwd": str(repo)}
+    assert runner.invoke(app, ["hooks", "user-prompt"], input=json.dumps(payload)).exit_code == 0
+    # The closing summary is the agent's account; what was asked is kept.
+    _invoke(*align, "--status", "passed", "--summary", "User confirmed the plan")
+    line = 'asked: "Log weight on your phone in under 5 seconds" (passed): Closed on the user\'s reply: "yes, exactly"'
+    assert line in _invoke("check")
+    _invoke("dashboard")
+    html = (_goal_dir(repo) / "dashboard.html").read_text()
+    assert "Log weight on your phone in under 5 seconds" in html and "yes, exactly" in html
+    assert "Log weight on your phone in under 5 seconds" in (_goal_dir(repo) / "DISCOVERY.md").read_text()
