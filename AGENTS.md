@@ -3,6 +3,34 @@
 Goals is a Python CLI for durable, evidence-backed agent workflows. Keep this
 file shareable: no secrets, local absolute paths, hostnames, or personal config.
 
+## Known constraints (surprising, enforced by code)
+
+These fail at runtime if you don't know them. Learn them once, and you won't hit them again.
+
+- **`extra="forbid"` on all data models** — the Evidence, Verification, Event, and
+  every other model reject unknown keys. Do not add fields like `summary` on
+  Evidence; use the existing `notes` field. A pydantic error with a readable
+  message will name the offending key and list the allowed fields.
+- **Engine owns `ran`/`passed` on verifications.** You can set them in your
+  evidence JSON, but `goals phase verify` overwrites them with the real exit
+  codes. Declare the verifications you want; the engine proves them. The notice
+  "ignored agent-set results on N verification(s)" means this happened.
+- **Load-bearing assumptions need a falsifier.** An assumption recorded with
+  `--depends` must have an `auto` verification whose `covers` is the assumption
+  id, bound to the same phase. The gate rejects a load-bearing assumption with
+  no automated check that could prove it wrong.
+- **Phase P1 (Confirm) alignment checkpoint needs a real user reply.** Only the
+  Goals hook's recorded message can close it. On a host without the hook, use
+  `--unverified` — the checkpoint closes but is labelled "not verified"
+  everywhere.
+- **Gate review is verified evidence only.** A phase passes review only when
+  each acceptance criterion and each load-bearing assumption has a verification
+  the engine actually ran and that passed. Narrated proof ("I tested it and it
+  works") is not enough.
+- **One goal per directory without a worktree.** You cannot create a second
+  in-place goal in the same repo root. Use `--worktree` (or `git checkout -b`
+  first) to run parallel goals.
+
 ## Working In This Repo
 
 - Prefer existing modules and tests over new subsystems. The stable state layer
