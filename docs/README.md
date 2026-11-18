@@ -1,5 +1,9 @@
 # Goals Docs
 
+> **Reading order:** start with [`FOR_HUMANS.md`](FOR_HUMANS.md) if you're the person overseeing the AI.
+> Then [`architecture.md`](architecture.md) for system diagrams, and
+> [`GOAL_EXECUTION_MEMORY.md`](GOAL_EXECUTION_MEMORY.md) for how it learns your preferences.
+
 Start with the root `README.md` for user-facing setup and workflow commands.
 This directory holds deeper design notes and long-lived project context.
 
