@@ -2,6 +2,13 @@
   "snapshot_date": "2026-11-18",
   "screen": "not archived, pushed within 365 days, README loop-words>=3 and check-words>=1",
   "screen_note": "First pass counted only the word 'loop'; valkor-ai/loom scored 2 (README lines 52-54 describe plan, build, check, repair, check again). Widened loop-words to loop|cycle|iterat|repair|retry|recursive|repeat.",
+  "subject": {
+    "forks": 5,
+    "license": "mit",
+    "pushed": "2026-11-18",
+    "stars": 17,
+    "repo": "ShivamGupta42/goals"
+  },
   "candidates": [
     {
       "repo": "cobusgreyling/loop-engineering",
@@ -82,7 +89,7 @@
       "repo": "anthropics/claude-plugins-official",
       "group": "ralph-style runner",
       "readme_path": "plugins/ralph-loop/README.md",
-      "stars": 47663,
+      "stars": 47664,
       "license": "apache-2.0",
       "language": "Python",
       "archived": false,

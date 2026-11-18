@@ -71,12 +71,23 @@ for repo, readme_path, group in CANDIDATES:
         }
     )
 
+SUBJECT = "ShivamGupta42/goals"
+subject = json.loads(
+    gh(
+        f"repos/{SUBJECT}",
+        '{stars:.stargazers_count,forks:.forks_count,license:(.license.key // "none"),pushed:.pushed_at}',
+    )
+)
+subject["repo"] = SUBJECT
+subject["pushed"] = subject["pushed"][:10]
+
 with open(OUT, "w") as f:
     json.dump(
         {
             "snapshot_date": now.date().isoformat(),
             "screen": "not archived, pushed within 365 days, README loop-words>=3 and check-words>=1",
             "screen_note": "First pass counted only the word 'loop'; valkor-ai/loom scored 2 (README lines 52-54 describe plan, build, check, repair, check again). Widened loop-words to loop|cycle|iterat|repair|retry|recursive|repeat.",
+            "subject": subject,
             "candidates": rows,
         },
         f,

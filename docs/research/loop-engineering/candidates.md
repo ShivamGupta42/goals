@@ -13,7 +13,7 @@ plan, act, check cycles until a goal is done.**
 | 3 | [agentic-in/inferoa](https://github.com/agentic-in/inferoa) | named framework | 571 | Apache-2.0 | 2026-06-18 | Agent harness for loop engineering. Quiet for about 5 months |
 | 4 | [ChaoYue0307/awesome-loop-engineering](https://github.com/ChaoYue0307/awesome-loop-engineering) | named framework (catalog) | 60 | CC0-1.0 | 2026-11-17 | Catalog of loop patterns and "loop contracts" with runtime starters |
 | 5 | [snarktank/ralph](https://github.com/snarktank/ralph) | Ralph-style runner | 22,294 | MIT | 2026-02-02 | Agent loop that runs repeatedly until all PRD items are complete |
-| 6 | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) (`plugins/ralph-loop`) | Ralph-style runner | 47,663 (whole plugin directory) | Apache-2.0 | 2026-11-18 | The official Ralph loop plugin for Claude Code |
+| 6 | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) (`plugins/ralph-loop`) | Ralph-style runner | 47,664 (whole plugin directory) | Apache-2.0 | 2026-11-18 | The official Ralph loop plugin for Claude Code |
 | 7 | [AnandChowdhary/continuous-claude](https://github.com/AnandChowdhary/continuous-claude) | Ralph-style runner | 1,389 | MIT | 2026-10-29 | Ralph loop with pull requests: loops, waits for checks, merges |
 | 8 | [tzachbon/smart-ralph](https://github.com/tzachbon/smart-ralph) | Ralph-style runner | 566 | MIT | 2026-10-28 | Spec-driven Ralph loop plugin with smart compaction |
 | 9 | [computerlovetech/ralphify](https://github.com/computerlovetech/ralphify) | Ralph-style runner | 70 | MIT | 2026-08-12 | Educational loop runtime. Its description says "Not actively maintained" |
@@ -51,7 +51,7 @@ screen re-run, so Loom stays in.
 
 ## Files and commands used
 
-- `docs/research/loop-engineering/candidates.json`: the snapshot (stars, license, last push, screen counts).
+- `docs/research/loop-engineering/candidates.json`: the snapshot (stars, license, last push, screen counts). Key `subject` holds Goals' own stats for scale: 17 stars, 5 forks, MIT, last push 2026-11-18.
 - `docs/research/loop-engineering/screen.py`: re-runs the screen. `python3 -I screen.py OUT.json README_CACHE_DIR` (needs the `gh` CLI, logged in).
 - `gh search repos "loop engineering"`, `"ralph wiggum loop"`, `"continuous claude"`, `"ralphify"`: how the candidates were found.
 - `gh api repos/OWNER/REPO` and `gh api repos/OWNER/REPO/readme`: stats and README text.
@@ -74,7 +74,7 @@ README and docs say:
 
 - **READMEs, not behavior.** We read what each project says about itself. We do not run the tools, so claims are unproven.
 - **Our own project is in the table.** Goals is the author's project. It is scored on the same README-level evidence, and gaps are stated plainly.
-- **Stars are a popularity signal only.** The 47,663 under `claude-plugins-official` is the whole plugin directory, not the Ralph plugin alone.
+- **Stars are a popularity signal only.** The 47,664 under `claude-plugins-official` is the whole plugin directory, not the Ralph plugin alone.
 - **"Loop engineering" is a loose label.** Hits include tools, guides and a benchmark. The screen and the adjacent group exist for this reason.
 - **A keyword screen is blunt.** It wrongly failed Loom once. Verdicts rest on reading, not on counts.
 - **Search only finds what uses the phrase.** Agent frameworks that never say "loop engineering" or "Ralph" are out of scope.

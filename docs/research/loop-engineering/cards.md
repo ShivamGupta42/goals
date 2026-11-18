@@ -7,7 +7,7 @@ Snapshot: 2026-11-18 (UTC). Each project card comes from that project's README a
 How these were made and checked:
 
 - Helper agents read the files and wrote one card each. Every point carries a short quote and a location.
-- `verify_quotes.py` looks up every quote in the source text. Result: all 99 quotes found word for word.
+- `verify_quotes.py` looks up every quote of 4 words or more in the source text. Result: all 99 found word for word.
 - Six high-impact cells were also checked by hand against the source. All six matched.
 - **Not stated** means the README does not say. It does not mean the project lacks the feature.
 - Re-check: `python3 verify_quotes.py cards.md README_CACHE_DIR GOALS_DIR`. Fill the cache with `screen.py`.
