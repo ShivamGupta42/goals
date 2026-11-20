@@ -1,9 +1,10 @@
 """Count what Goals' own event logs already say about how goals ran.
 
 Read-only. Takes one or more ``events.jsonl`` paths and prints one JSON object per goal:
-review verdicts, phases that passed their first review, the proof mix (auto, manual,
-waived) taken from the latest evidence of each phase, checkpoint events and recorded
-user replies. Used by ``improvement-plan.md`` to show a baseline costs nothing to build.
+review verdicts (with the first reason of each non-pass), the first verdict of every phase,
+the proof mix (auto, manual, waived) taken from the latest evidence of each phase, checkpoint
+events and recorded user replies. Used by ``improvement-plan.md`` to show a baseline costs
+nothing to build.
 
 Usage: python3 -I baseline_events.py PATH/events.jsonl [PATH/events.jsonl ...]
 """
@@ -17,6 +18,7 @@ from pathlib import Path
 def summarize(path: Path) -> dict:
     """Summarize one goal's event log."""
     verdicts_by_phase: dict[str, list[str]] = {}
+    non_pass: list[list[str]] = []
     latest_evidence: dict[str, list[dict]] = {}
     counts: Counter[str] = Counter()
     first_ts = last_ts = ""
@@ -29,7 +31,11 @@ def summarize(path: Path) -> dict:
         last_ts = event["timestamp"]
         if kind == "phase_reviewed":
             phase = payload["phase_id"]
-            verdicts_by_phase.setdefault(phase, []).append(payload["gate_result"]["verdict"])
+            gate = payload["gate_result"]
+            verdicts_by_phase.setdefault(phase, []).append(gate["verdict"])
+            if gate["verdict"] != "pass":
+                first_p0 = (gate.get("p0") or [""])[0]
+                non_pass.append([phase, gate["verdict"], first_p0[:70]])
         elif kind == "phase_evidence":
             evidence = payload.get("evidence") or {}
             latest_evidence[payload["phase_id"]] = evidence.get("verifications") or []
@@ -41,6 +47,8 @@ def summarize(path: Path) -> dict:
         "last_event": last_ts,
         "phases_reviewed": len(verdicts_by_phase),
         "first_review_passed": sum(vs[0] == "pass" for vs in verdicts_by_phase.values()),
+        "first_review_by_phase": {ph: vs[0] for ph, vs in sorted(verdicts_by_phase.items())},
+        "non_pass_reviews": non_pass,
         "review_attempts": sum(verdicts.values()),
         "review_verdicts": dict(verdicts),
         "proof_kinds": dict(proof),

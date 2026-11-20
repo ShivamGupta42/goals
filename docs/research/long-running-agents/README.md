@@ -3,6 +3,9 @@
 Snapshot: 2026-11-19. This folder holds the method and the data behind the paper reading.
 The reading results come later, in `cards/` and the findings report.
 
+What to build in Goals, ordered by evidence and with stop rules: [improvement-plan.md](improvement-plan.md).
+It replaces the ranked build list at the end of `findings.md` as the thing to act on.
+
 Goal behind it: what AI agents that run for hours or days need (kinds of memory, context
 handling), how they keep adapting over time, and how that compares with Goals, a small layer
 that sits inside Claude Code and Codex.
