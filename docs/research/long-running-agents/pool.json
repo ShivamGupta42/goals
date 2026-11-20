@@ -1,0 +1,881 @@
+{
+ "verified": [
+  {
+   "arxiv_id": "2210.03629",
+   "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+   "year": 2022,
+   "themes": [
+    "T3"
+   ],
+   "type": "method",
+   "why": "Interleaves reasoning and tool actions in one loop; the basic scaffold pattern that long-running agent loops build on.",
+   "code_url": null,
+   "citation_count": 14113,
+   "influential_citation_count": 1332
+  },
+  {
+   "arxiv_id": "2303.11366",
+   "title": "Reflexion: Language Agents with Verbal Reinforcement Learning",
+   "year": 2023,
+   "themes": [
+    "T3",
+    "T4"
+   ],
+   "type": "method",
+   "why": "Agents write verbal feedback after failures and retry; a basic verification-and-retry loop for long runs.",
+   "code_url": "https://github.com/noahshinn024/reflexion",
+   "citation_count": 6821,
+   "influential_citation_count": 471
+  },
+  {
+   "arxiv_id": "2304.03442",
+   "title": "Generative Agents: Interactive Simulacra of Human Behavior",
+   "year": 2023,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "Memory stream of observations, reflection into insights, and retrieval by recency, importance and relevance: a template for multi-day coherence.",
+   "code_url": "https://github.com/joonspk-research/generative_agents",
+   "citation_count": 6554,
+   "influential_citation_count": 382
+  },
+  {
+   "arxiv_id": "2305.10250",
+   "title": "MemoryBank: Enhancing Large Language Models with Long-Term Memory",
+   "year": 2023,
+   "themes": [
+    "T1"
+   ],
+   "type": "method",
+   "why": "Stores conversation memories with a forgetting curve, so older memories fade while recent or repeatedly used ones persist across many sessions.",
+   "code_url": "https://github.com/zhongwanjun/MemoryBank-SiliconFriend",
+   "citation_count": 904,
+   "influential_citation_count": 67
+  },
+  {
+   "arxiv_id": "2305.16291",
+   "title": "Voyager: An Open-Ended Embodied Agent with Large Language Models",
+   "year": 2023,
+   "themes": [
+    "T3",
+    "T4"
+   ],
+   "type": "system",
+   "why": "Keeps a growing skill library of verified code so later sessions reuse earlier work; a lifelong-agent memory design.",
+   "code_url": "https://github.com/MineDojo/Voyager",
+   "citation_count": 2898,
+   "influential_citation_count": 184
+  },
+  {
+   "arxiv_id": "2305.17126",
+   "title": "Large Language Models as Tool Makers",
+   "year": 2023,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "The LLM writes its own reusable tools in a closed loop and keeps them for later problems, so capability grows without training.",
+   "code_url": "https://github.com/ctlllll/LLM-ToolMaker",
+   "citation_count": 404,
+   "influential_citation_count": 25
+  },
+  {
+   "arxiv_id": "2307.03172",
+   "title": "Lost in the Middle: How Language Models Use Long Contexts",
+   "year": 2023,
+   "themes": [
+    "T2"
+   ],
+   "type": "benchmark",
+   "why": "Shows models miss facts placed mid-context, the core long-context failure agents hit as their history grows.",
+   "code_url": null,
+   "citation_count": 6094,
+   "influential_citation_count": 347
+  },
+  {
+   "arxiv_id": "2308.10144",
+   "title": "ExpeL: LLM Agents Are Experiential Learners",
+   "year": 2023,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Learns from its own past trajectories by extracting insights and examples, then reuses them at inference with frozen weights.",
+   "code_url": "https://github.com/LeapLabTHU/ExpeL",
+   "citation_count": 1351,
+   "influential_citation_count": 127
+  },
+  {
+   "arxiv_id": "2308.15022",
+   "title": "Recursively Summarizing Enables Long-Term Dialogue Memory in Large Language Models",
+   "year": 2023,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Recursive summaries keep long dialogue memory usable without re-reading the full history, a basic compaction pattern.",
+   "code_url": null,
+   "citation_count": 117,
+   "influential_citation_count": 6
+  },
+  {
+   "arxiv_id": "2309.02427",
+   "title": "Cognitive Architectures for Language Agents",
+   "year": 2023,
+   "themes": [
+    "T1"
+   ],
+   "type": "position",
+   "why": "Frames agent memory as working, episodic, semantic and procedural stores inside one decision loop, giving a shared vocabulary for long-running agents.",
+   "code_url": null,
+   "citation_count": 609,
+   "influential_citation_count": 40
+  },
+  {
+   "arxiv_id": "2310.05736",
+   "title": "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models",
+   "year": 2023,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Token-level prompt compression that shrinks long inputs with small accuracy loss; an early tool for trimming context.",
+   "code_url": null,
+   "citation_count": 440,
+   "influential_citation_count": 32
+  },
+  {
+   "arxiv_id": "2310.06770",
+   "title": "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?",
+   "year": 2023,
+   "themes": [
+    "T3"
+   ],
+   "type": "benchmark",
+   "why": "Real GitHub issues as the standard test for repo-level coding agents; the baseline long coding harnesses are measured against.",
+   "code_url": null,
+   "citation_count": 5006,
+   "influential_citation_count": 809
+  },
+  {
+   "arxiv_id": "2310.08560",
+   "title": "MemGPT: Towards LLMs as Operating Systems",
+   "year": 2023,
+   "themes": [
+    "T1",
+    "T3"
+   ],
+   "type": "system",
+   "why": "Pages memory between a small context window and external storage, so agents can run past the window limit in long conversations.",
+   "code_url": "https://github.com/cpacker/MemGPT",
+   "citation_count": 1899,
+   "influential_citation_count": 150
+  },
+  {
+   "arxiv_id": "2310.10134",
+   "title": "CLIN: A Continually Learning Language Agent for Rapid Task Adaptation and Generalization",
+   "year": 2023,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Language agent that keeps improving across trials through a memory of causal abstractions, with no fine-tuning.",
+   "code_url": "https://github.com/allenai/clin",
+   "citation_count": 114,
+   "influential_citation_count": 10
+  },
+  {
+   "arxiv_id": "2403.12968",
+   "title": "LLMLingua-2: Data Distillation for Efficient and Faithful Task-Agnostic Prompt Compression",
+   "year": 2024,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Task-agnostic prompt compression distilled from a teacher model; faster and more faithful for trimming agent context.",
+   "code_url": null,
+   "citation_count": 517,
+   "influential_citation_count": 107
+  },
+  {
+   "arxiv_id": "2404.13501",
+   "title": "A Survey on the Memory Mechanism of Large Language Model based Agents",
+   "year": 2024,
+   "themes": [
+    "T1"
+   ],
+   "type": "survey",
+   "why": "Early survey that organizes scattered memory mechanisms in LLM agents, a baseline map for long-running agent memory.",
+   "code_url": null,
+   "citation_count": 928,
+   "influential_citation_count": 29
+  },
+  {
+   "arxiv_id": "2405.14831",
+   "title": "HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models",
+   "year": 2024,
+   "themes": [
+    "T1"
+   ],
+   "type": "method",
+   "why": "Indexes knowledge as a graph and retrieves associatively, linking facts across many documents for multi-hop recall a long-running agent needs.",
+   "code_url": "https://github.com/OSU-NLP-Group/HippoRAG",
+   "citation_count": 489,
+   "influential_citation_count": 40
+  },
+  {
+   "arxiv_id": "2405.15793",
+   "title": "SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering",
+   "year": 2024,
+   "themes": [
+    "T3"
+   ],
+   "type": "system",
+   "why": "Shows the agent-computer interface (tool design) strongly affects coding-agent results; a core harness design lesson.",
+   "code_url": null,
+   "citation_count": 2556,
+   "influential_citation_count": 214
+  },
+  {
+   "arxiv_id": "2407.01489",
+   "title": "Agentless: Demystifying LLM-based Software Engineering Agents",
+   "year": 2024,
+   "themes": [
+    "T3"
+   ],
+   "type": "method",
+   "why": "A fixed localize-repair-validate pipeline competes with open agent loops on SWE-bench Lite; a counterpoint on harness complexity.",
+   "code_url": "https://github.com/OpenAutoCoder/Agentless",
+   "citation_count": 587,
+   "influential_citation_count": 77
+  },
+  {
+   "arxiv_id": "2407.16741",
+   "title": "OpenHands: An Open Platform for AI Software Developers as Generalist Agents",
+   "year": 2024,
+   "themes": [
+    "T3"
+   ],
+   "type": "system",
+   "why": "Open agent platform with a sandboxed runtime and event-stream history; a concrete harness for long coding runs.",
+   "code_url": "https://github.com/All-Hands-AI/OpenHands",
+   "citation_count": 1391,
+   "influential_citation_count": 127
+  },
+  {
+   "arxiv_id": "2407.16833",
+   "title": "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach",
+   "year": 2024,
+   "themes": [
+    "T2"
+   ],
+   "type": "benchmark",
+   "why": "Compares RAG with long-context LLMs and proposes a hybrid, informing when to retrieve versus keep everything in context.",
+   "code_url": null,
+   "citation_count": 204,
+   "influential_citation_count": 12
+  },
+  {
+   "arxiv_id": "2409.07429",
+   "title": "Agent Workflow Memory",
+   "year": 2024,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Induces reusable workflows from past successful trajectories and feeds them into later tasks, so repeated subtasks get cheaper over runs.",
+   "code_url": "https://github.com/zorazrw/agent-workflow-memory",
+   "citation_count": 496,
+   "influential_citation_count": 40
+  },
+  {
+   "arxiv_id": "2411.04468",
+   "title": "Magentic-One: A Generalist Multi-Agent System for Solving Complex Tasks",
+   "year": 2024,
+   "themes": [
+    "T3"
+   ],
+   "type": "system",
+   "why": "An orchestrator keeps a task ledger and tracks progress across specialist agents; a multi-agent coordination pattern.",
+   "code_url": null,
+   "citation_count": 333,
+   "influential_citation_count": 36
+  },
+  {
+   "arxiv_id": "2412.14161",
+   "title": "TheAgentCompany: Benchmarking LLM Agents on Consequential Real World Tasks",
+   "year": 2024,
+   "themes": [
+    "T3"
+   ],
+   "type": "benchmark",
+   "why": "Multi-step workplace tasks with checkpoints that give partial credit; shows long, multi-step tasks remain hard for agents.",
+   "code_url": "https://github.com/TheAgentCompany/TheAgentCompany",
+   "citation_count": 415,
+   "influential_citation_count": 22
+  },
+  {
+   "arxiv_id": "2501.07278",
+   "title": "Lifelong Learning of Large Language Model based Agents: A Roadmap",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "survey",
+   "why": "Explains why deployed LLM agents stay static and maps the methods that let them keep learning after deployment.",
+   "code_url": null,
+   "citation_count": 109,
+   "influential_citation_count": 2
+  },
+  {
+   "arxiv_id": "2501.13956",
+   "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "Temporal knowledge graph memory that tracks when facts were true and when they were learned, so changed facts update without losing history.",
+   "code_url": null,
+   "citation_count": 506,
+   "influential_citation_count": 68
+  },
+  {
+   "arxiv_id": "2502.06975",
+   "title": "Position: Episodic Memory is the Missing Piece for Long-Term LLM Agents",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "position",
+   "why": "Argues long-term LLM agents need episodic memory with five key properties for single-shot, context-specific learning as environments change.",
+   "code_url": null,
+   "citation_count": 49,
+   "influential_citation_count": 2
+  },
+  {
+   "arxiv_id": "2502.12110",
+   "title": "A-MEM: Agentic Memory for LLM Agents",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "method",
+   "why": "Builds Zettelkasten-style linked notes that update older memories when new ones arrive, so memory reorganizes itself as history grows.",
+   "code_url": "https://github.com/WujiangXu/AgenticMemory",
+   "citation_count": 1447,
+   "influential_citation_count": 188
+  },
+  {
+   "arxiv_id": "2503.13657",
+   "title": "Why Do Multi-Agent LLM Systems Fail?",
+   "year": 2025,
+   "themes": [
+    "T3"
+   ],
+   "type": "survey",
+   "why": "Taxonomy of 14 failure modes from annotated multi-agent traces, including premature termination and missing verification.",
+   "code_url": "https://github.com/multi-agent-systems-failure-taxonomy/MAST",
+   "citation_count": 901,
+   "influential_citation_count": 134
+  },
+  {
+   "arxiv_id": "2503.14499",
+   "title": "Measuring AI Ability to Complete Long Software Tasks",
+   "year": 2025,
+   "themes": [
+    "T3"
+   ],
+   "type": "benchmark",
+   "why": "Defines the 50% time horizon: how long a task an agent completes half the time; the main measure of long-run ability.",
+   "code_url": null,
+   "citation_count": 219,
+   "influential_citation_count": 12
+  },
+  {
+   "arxiv_id": "2504.07079",
+   "title": "SkillWeaver: Web Agents can Self-Improve by Discovering and Honing Skills",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Web agent that explores, abstracts experience into reusable skills and hones them, so later runs call skills instead of re-exploring.",
+   "code_url": "https://github.com/OSU-NLP-Group/SkillWeaver",
+   "citation_count": 226,
+   "influential_citation_count": 12
+  },
+  {
+   "arxiv_id": "2504.07952",
+   "title": "Dynamic Cheatsheet: Test-Time Learning with Adaptive Memory",
+   "year": 2025,
+   "themes": [
+    "T2",
+    "T4"
+   ],
+   "type": "method",
+   "why": "Adaptive memory of reusable solution notes that persists lessons across tasks beyond a single context window.",
+   "code_url": "https://github.com/suzgunmirac/dynamic-cheatsheet",
+   "citation_count": 206,
+   "influential_citation_count": 23
+  },
+  {
+   "arxiv_id": "2504.19413",
+   "title": "Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "Extracts, consolidates and retrieves salient facts from conversations, with a graph variant, targeting consistent memory across long multi-session dialogue.",
+   "code_url": "https://github.com/mem0ai/mem0",
+   "citation_count": 937,
+   "influential_citation_count": 186
+  },
+  {
+   "arxiv_id": "2505.22954",
+   "title": "Darwin Godel Machine: Open-Ended Evolution of Self-Improving Agents",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "system",
+   "why": "Coding agent that rewrites its own code and keeps an archive of variants, a clear case of open-ended self-improvement over runs.",
+   "code_url": "https://github.com/jennyzzt/dgm",
+   "citation_count": 528,
+   "influential_citation_count": 36
+  },
+  {
+   "arxiv_id": "2506.06326",
+   "title": "Memory OS of AI Agent",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "OS-style memory manager with hierarchical storage for agents, aimed at long-term memory and personalization in long conversations.",
+   "code_url": "https://github.com/BAI-LAB/MemoryOS",
+   "citation_count": 191,
+   "influential_citation_count": 31
+  },
+  {
+   "arxiv_id": "2506.15841",
+   "title": "MEM1: Learning to Synergize Memory and Reasoning for Efficient Long-Horizon Agents",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Consolidates memory and reasoning into a compact internal state, keeping agent context small over long tasks.",
+   "code_url": null,
+   "citation_count": 275,
+   "influential_citation_count": 22
+  },
+  {
+   "arxiv_id": "2507.03724",
+   "title": "MemOS: A Memory OS for AI System",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "Treats memory as a managed system resource for long-context reasoning, continual personalization and knowledge updates across extended use.",
+   "code_url": "https://github.com/MemTensor/MemOS",
+   "citation_count": 168,
+   "influential_citation_count": 12
+  },
+  {
+   "arxiv_id": "2507.13334",
+   "title": "A Survey of Context Engineering for Large Language Models",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "survey",
+   "why": "Surveys how context is retrieved, processed and managed for LLM systems; a map of the whole theme.",
+   "code_url": null,
+   "citation_count": 177,
+   "influential_citation_count": 11
+  },
+  {
+   "arxiv_id": "2507.19457",
+   "title": "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Evolves prompts by reflecting in language on sampled trajectories, reported to beat RL while needing far fewer rollouts.",
+   "code_url": "https://github.com/gepa-ai/gepa",
+   "citation_count": 717,
+   "influential_citation_count": 126
+  },
+  {
+   "arxiv_id": "2508.07407",
+   "title": "A Comprehensive Survey of Self-Evolving AI Agents: A New Paradigm Bridging Foundation Models and Lifelong Agentic Systems",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "survey",
+   "why": "Surveys techniques that let agents improve automatically after deployment, rather than staying fixed as manually configured systems.",
+   "code_url": null,
+   "citation_count": 231,
+   "influential_citation_count": 22
+  },
+  {
+   "arxiv_id": "2508.16153",
+   "title": "Memento: Fine-tuning LLM Agents without Fine-tuning LLMs",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Adapts agents continually through a case memory the planner reuses, a learning path that avoids fine-tuning the LLM itself.",
+   "code_url": "https://github.com/Agent-on-the-Fly/Memento",
+   "citation_count": 126,
+   "influential_citation_count": 6
+  },
+  {
+   "arxiv_id": "2509.13313",
+   "title": "ReSum: Unlocking Long-Horizon Search Intelligence via Context Summarization",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Trains search agents to summarize accumulated context so long-horizon search can continue past context limits.",
+   "code_url": null,
+   "citation_count": 168,
+   "influential_citation_count": 17
+  },
+  {
+   "arxiv_id": "2509.25140",
+   "title": "ReasoningBank: Scaling Agent Self-Evolving with Reasoning Memory",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Distills reasoning strategies from both successful and failed runs into memory that guides future tasks at test time.",
+   "code_url": "https://github.com/google-research/reasoning-bank",
+   "citation_count": 349,
+   "influential_citation_count": 62
+  },
+  {
+   "arxiv_id": "2510.00615",
+   "title": "ACON: Optimizing Context Compression for Long-horizon LLM Agents",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Optimizes what a compressor keeps from agent histories across long-horizon tasks, cutting context while protecting success.",
+   "code_url": null,
+   "citation_count": 183,
+   "influential_citation_count": 17
+  },
+  {
+   "arxiv_id": "2510.04618",
+   "title": "Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models",
+   "year": 2025,
+   "themes": [
+    "T2",
+    "T4"
+   ],
+   "type": "method",
+   "why": "Evolving structured playbook updated by generator, reflector and curator roles to avoid context collapse in long runs.",
+   "code_url": "https://github.com/ace-agent/ace",
+   "citation_count": 568,
+   "influential_citation_count": 69
+  },
+  {
+   "arxiv_id": "2510.08191",
+   "title": "Training-Free Group Relative Policy Optimization",
+   "year": 2025,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Learns experiential knowledge as a token prior, a GRPO-like improvement signal that needs no parameter updates.",
+   "code_url": "https://github.com/TencentCloudADP/youtu-agent/tree/training_free_GRPO",
+   "citation_count": 68,
+   "influential_citation_count": 11
+  },
+  {
+   "arxiv_id": "2510.11967",
+   "title": "Scaling Long-Horizon LLM Agent via Context-Folding",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Folds finished sub-trajectories into short summaries, letting long-horizon tasks run inside a bounded context.",
+   "code_url": null,
+   "citation_count": 177,
+   "influential_citation_count": 14
+  },
+  {
+   "arxiv_id": "2510.24699",
+   "title": "AgentFold: Long-Horizon Web Agents with Proactive Context Management",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Web agent that proactively manages its own context during long browsing runs instead of waiting for overflow.",
+   "code_url": null,
+   "citation_count": 110,
+   "influential_citation_count": 8
+  },
+  {
+   "arxiv_id": "2510.26493",
+   "title": "Context Engineering 2.0: The Context of Context Engineering",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "position",
+   "why": "Position paper on what context engineering is and what context itself must hold in agent systems.",
+   "code_url": null,
+   "citation_count": 24,
+   "influential_citation_count": 4
+  },
+  {
+   "arxiv_id": "2512.12818",
+   "title": "Hindsight is 20/20: Building Agent Memory that Retains, Recalls, and Reflects",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "method",
+   "why": "Builds agent memory that retains, recalls and reflects, critiquing top-k snippet retrieval so agents can accumulate experience across sessions.",
+   "code_url": "https://github.com/vectorize-io/hindsight",
+   "citation_count": 43,
+   "influential_citation_count": 5
+  },
+  {
+   "arxiv_id": "2512.13564",
+   "title": "Memory in the Age of AI Agents",
+   "year": 2025,
+   "themes": [
+    "T1"
+   ],
+   "type": "survey",
+   "why": "Recent survey that tries to fix fragmented agent-memory terminology, useful for choosing which memory kinds a long-running agent needs.",
+   "code_url": null,
+   "citation_count": 330,
+   "influential_citation_count": 24
+  },
+  {
+   "arxiv_id": "2512.24601",
+   "title": "Recursive Language Models",
+   "year": 2025,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Lets a model call sub-models over a long prompt held outside the window, instead of loading all of it into context.",
+   "code_url": null,
+   "citation_count": 112,
+   "influential_citation_count": 13
+  },
+  {
+   "arxiv_id": "2601.02163",
+   "title": "EverMemOS: A Self-Organizing Memory Operating System for Structured Long-Horizon Reasoning",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "system",
+   "why": "Self-organizing memory with an engram-inspired lifecycle that consolidates evolving user states and resolves conflicts for long-running agents.",
+   "code_url": "https://github.com/EverMind-AI/EverMemOS",
+   "citation_count": 67,
+   "influential_citation_count": 14
+  },
+  {
+   "arxiv_id": "2601.18642",
+   "title": "FadeMem: Biologically-Inspired Forgetting for Efficient Agent Memory",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "method",
+   "why": "Adds selective forgetting with adaptive decay, so agents avoid both catastrophic loss at context limits and overload from keeping everything.",
+   "code_url": null,
+   "citation_count": 16,
+   "influential_citation_count": 2
+  },
+  {
+   "arxiv_id": "2602.05665",
+   "title": "Graph-based Agent Memory: Taxonomy, Techniques, and Applications",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "survey",
+   "why": "Survey of graph-structured agent memory for relational and hierarchical recall in long-horizon tasks, covering techniques and applications.",
+   "code_url": null,
+   "citation_count": 28,
+   "influential_citation_count": 2
+  },
+  {
+   "arxiv_id": "2602.19320",
+   "title": "Anatomy of Agentic Memory: Taxonomy and Empirical Analysis of Evaluation and System Limitations",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "survey",
+   "why": "Survey plus empirical study finding existing memory benchmarks underscaled, metrics misaligned and system costs overlooked.",
+   "code_url": null,
+   "citation_count": 33,
+   "influential_citation_count": 3
+  },
+  {
+   "arxiv_id": "2605.26252",
+   "title": "Is Agent Memory a Database? Rethinking Data Foundations for Long-Term AI Agent Memory",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "position",
+   "why": "Position paper naming failure modes of storage-style agent memory, such as unregulated growth and missing semantic revision, that long-running agents hit.",
+   "code_url": "https://github.com/CoDS-GCS/MemState",
+   "citation_count": 3,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2606.06448",
+   "title": "Agent Memory: Characterization and System Implications of Stateful Long-Horizon Workloads",
+   "year": 2026,
+   "themes": [
+    "T1"
+   ],
+   "type": "benchmark",
+   "why": "First systems characterization of how agent memory behaves on long-horizon, stateful workloads, relevant to multi-day agent design.",
+   "code_url": "https://github.com/Tambe-Lab/agent-memory-profiling",
+   "citation_count": 13,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2606.29718",
+   "title": "Diagnosing and Mitigating Context Rot in Long-horizon Search",
+   "year": 2026,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Diagnoses context rot in long-horizon search agents and tests mitigations for it.",
+   "code_url": null,
+   "citation_count": 9,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2608.22752",
+   "title": "The Compaction Cliff in Long-Running AI Agent Memory",
+   "year": 2026,
+   "themes": [
+    "T2"
+   ],
+   "type": "benchmark",
+   "why": "Examines a sharp failure point in long-running agent memory tied to compaction, relevant to multi-day runs.",
+   "code_url": null,
+   "citation_count": 4,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2610.02163",
+   "title": "AutoCompact: Learning When to Compact Context in Long-Horizon Coding Agents",
+   "year": 2026,
+   "themes": [
+    "T2"
+   ],
+   "type": "method",
+   "why": "Learns when to compact context during long coding runs instead of using a fixed threshold.",
+   "code_url": null,
+   "citation_count": 7,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2610.22984",
+   "title": "Self-Evolving Agents Can Repair Failures but Struggle to Generalize from Them",
+   "year": 2026,
+   "themes": [
+    "T4"
+   ],
+   "type": "benchmark",
+   "why": "Finds agents that learn only from their own failures can repair errors but often struggle to transfer the fix to new tasks.",
+   "code_url": null,
+   "citation_count": 1,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2610.25858",
+   "title": "Are Self-Evolving Agents Continual Learners?",
+   "year": 2026,
+   "themes": [
+    "T4"
+   ],
+   "type": "benchmark",
+   "why": "Tests whether nonparametric self-evolving agents keep learning new tasks over time without forgetting earlier ones, a direct long-run check.",
+   "code_url": null,
+   "citation_count": null,
+   "influential_citation_count": null
+  },
+  {
+   "arxiv_id": "2611.03223",
+   "title": "Do Agents Still Follow the Rules? Benchmarking Rule Compliance under Agent Context Compaction",
+   "year": 2026,
+   "themes": [
+    "T2"
+   ],
+   "type": "benchmark",
+   "why": "Tests whether agents keep following their rules after compaction, a safety-relevant failure mode for long runs.",
+   "code_url": null,
+   "citation_count": 0,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2611.04169",
+   "title": "Length Is Cheap, Competition Is Not: Attention Predicts Context Rot in Retrieval",
+   "year": 2026,
+   "themes": [
+    "T2"
+   ],
+   "type": "benchmark",
+   "why": "Links attention competition to context rot in retrieval, explaining why accuracy falls as inputs grow.",
+   "code_url": null,
+   "citation_count": 0,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2611.20605",
+   "title": "AdMem: Expectation-Grounded Procedural Memory for Long-Horizon Task-Solving Agents",
+   "year": 2026,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Shows naive cross-task memory can make agents worse than memoryless ones, then proposes expectation-grounded procedural memory to fix it.",
+   "code_url": null,
+   "citation_count": 0,
+   "influential_citation_count": 0
+  },
+  {
+   "arxiv_id": "2611.23588",
+   "title": "ARISE: Practical Self-Evolving Memory for Accurate and Cost-Efficient Enterprise Agents",
+   "year": 2026,
+   "themes": [
+    "T4"
+   ],
+   "type": "method",
+   "why": "Memory evolves from the agent's own failures without changing weights, tools or workflows, aimed at enterprise agents that keep changing.",
+   "code_url": null,
+   "citation_count": null,
+   "influential_citation_count": null
+  }
+ ],
+ "rejected": []
+}
