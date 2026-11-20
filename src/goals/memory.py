@@ -4,6 +4,7 @@ from pathlib import Path
 
 from goals.git_ops import git_root
 from goals.models import (
+    Event,
     GateVerdict,
     GoalSnapshot,
     MemorySyncCandidate,
@@ -52,6 +53,20 @@ def append_memory_entry(
         memory.entries.append(entry)
     save_memory(cwd, memory, snapshot)
     return memory
+
+
+def latest_event_ref(events: list[Event], phase_id: str | None) -> str | None:
+    """Return ``event:<id>`` for the newest event of ``phase_id``, so a new note can be traced.
+
+    Returns None when the phase has no event of its own (not started, a mistyped phase id, or
+    no phase at all): a reference to some unrelated event would be worse than none.
+    """
+    if phase_id is None:
+        return None
+    for event in reversed(events):
+        if event.payload.get("phase_id") == phase_id:
+            return f"event:{event.event_id}"
+    return None
 
 
 def plan_memory_sync(
@@ -268,6 +283,7 @@ def derive_memory_suggestions(memory: SelfEvolutionMemory) -> list[SelfEvolution
                 occurrences=len(entries),
                 severity=severity,
                 evidence_refs=_evidence_refs(entries),
+                entry_ids=[entry.entry_id for entry in entries],
                 user_visible=severity == "high"
                 or len(entries) >= 2
                 or _has_cross_project_memory(entries),

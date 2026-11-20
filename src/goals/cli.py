@@ -47,6 +47,7 @@ from goals.memory import (
     append_memory_entry,
     apply_memory_sync,
     derive_memory_suggestions,
+    latest_event_ref,
     load_memory,
     memory_path,
     plan_memory_sync,
@@ -80,6 +81,7 @@ from goals.loop_improve import (
     render_regression_report,
 )
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
+from goals.metrics import build_metrics_report, render_metrics_report
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.journey import render_journey_text
 from goals.models import (
@@ -120,6 +122,7 @@ from goals.rubric import category_for
 from goals.setup import render_setup_report, setup_agents
 from goals.simulate import render_simulation_report, run_simulations
 from goals.runtime import (
+    active_goal_dir,
     append_event,
     claim_worktree,
     create_goal,
@@ -715,6 +718,22 @@ def brief(
     _handle(run)
 
 
+@app.command(rich_help_panel="Advanced building blocks")
+def metrics(
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Show how this repo's past goals went, counted from their event logs (read-only)."""
+
+    def run():
+        report = build_metrics_report(Path.cwd())
+        if json_output:
+            typer.echo(report.model_dump_json(indent=2))
+        else:
+            typer.echo(render_metrics_report(report))
+
+    _handle(run)
+
+
 @app.command("merge-check", rich_help_panel="Advanced building blocks")
 def merge_check(
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
@@ -1110,6 +1129,14 @@ def memory_record(
 
     def run():
         snapshot = _optional_snapshot(Path.cwd())
+        phase_id = phase or (snapshot.current_phase if snapshot is not None else None)
+        refs = list(evidence or [])
+        if snapshot is not None:
+            # Point the new note back at the goal's latest event for this phase.
+            events = EventStore(active_goal_dir(Path.cwd())).read_events()
+            source = latest_event_ref(events, phase_id)
+            if source and source not in refs:
+                refs.append(source)
         entry = SelfEvolutionEntry(
             kind=_validate_choice(kind, {"friction", "gap", "learning", "success"}, "kind"),  # type: ignore[arg-type]
             area=_validate_choice(
@@ -1133,8 +1160,8 @@ def memory_record(
             note=note,
             severity=_validate_choice(severity, {"low", "medium", "high"}, "severity"),  # type: ignore[arg-type]
             goal_id=snapshot.goal_id if snapshot is not None else "",
-            phase_id=phase or (snapshot.current_phase if snapshot is not None else None),
-            evidence_refs=evidence or [],
+            phase_id=phase_id,
+            evidence_refs=refs,
         )
         memory = append_memory_entry(Path.cwd(), entry, snapshot)
         suggestions = derive_memory_suggestions(memory)

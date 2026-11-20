@@ -37,6 +37,9 @@ LOW_CONFIDENCE = 0.5
 _MEM_SEVERITY = {"p0": "high", "p1": "medium", "p2": "low"}
 # Memory areas whose lessons point at the loop's shape rather than execution.
 _LOOP_DESIGN_AREAS = {"phase", "gate"}
+# Longest "why" line and longest list of ids printed under a suggestion.
+_WHY_LIMIT = 240
+_LIST_LIMIT = 5
 # Review verdicts that must surface to the user, not defer — a blocked or
 # needs-human review is the same severity class as an itemized P0.
 _BLOCKING_VERDICTS = {GateVerdict.BLOCKED, GateVerdict.UNSAFE, GateVerdict.NEEDS_HUMAN}
@@ -72,6 +75,12 @@ class LoopImprovement(BaseModel):
     source: Literal["memory", "loop-check"]
     auto_applicable: bool = False
     evidence_refs: list[str] = Field(default_factory=list)
+    #: Why this was suggested, in the words of the notes (or linter finding) behind it.
+    why: str = ""
+    #: How many memory notes sit behind it; 0 for a linter finding.
+    occurrences: int = 0
+    severity: str = ""
+    entry_ids: list[str] = Field(default_factory=list)
 
 
 class LoopImprovementPlan(BaseModel):
@@ -291,6 +300,10 @@ def _memory_improvements(cwd: Path, snapshot: GoalSnapshot | None) -> list[LoopI
                 source="memory",
                 auto_applicable=False,
                 evidence_refs=suggestion.evidence_refs,
+                why=suggestion.plain_summary,
+                occurrences=suggestion.occurrences,
+                severity=suggestion.severity,
+                entry_ids=suggestion.entry_ids,
             )
         )
     return improvements
@@ -312,6 +325,7 @@ def _loop_design_improvements(
             source="loop-check",
             auto_applicable=True,
             evidence_refs=[finding.phase_id] if finding.phase_id else [],
+            why=finding.summary,
         )
         for finding in check_loop(design, profile_root=profile_root).findings
         if finding.auto_fixable
@@ -337,10 +351,38 @@ def render_loop_improvement_plan(plan: LoopImprovementPlan) -> str:
     for imp in plan.improvements:
         flag = " (auto)" if imp.auto_applicable else ""
         lines.append(f"- [{imp.target}]{flag} {imp.title}: {imp.detail}")
+        if imp.why:
+            lines.append(f"    why: {_cut(imp.why, _WHY_LIMIT)}")
+        lines.append(f"    {_evidence_line(imp)}")
     if not plan.dry_run and plan.applied:
         lines.append("Applied:")
         lines += [f"- {change}" for change in plan.applied]
     return "\n".join(lines)
+
+
+def _evidence_line(imp: LoopImprovement) -> str:
+    """One line that lets a reader judge a suggestion: how often, how bad, which notes, which refs."""
+    parts: list[str] = []
+    if imp.occurrences:
+        times = "time" if imp.occurrences == 1 else "times"
+        parts.append(f"seen {imp.occurrences} {times}")
+    if imp.severity:
+        parts.append(f"severity {imp.severity}")
+    if imp.entry_ids:
+        parts.append(f"notes {_listed(imp.entry_ids)}")
+    parts.append(f"refs: {_listed(imp.evidence_refs) or 'none recorded'}")
+    return " · ".join(parts)
+
+
+def _listed(items: list[str]) -> str:
+    shown = ", ".join(items[:_LIST_LIMIT])
+    extra = len(items) - _LIST_LIMIT
+    return f"{shown} (+{extra} more)" if extra > 0 else shown
+
+
+def _cut(text: str, limit: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def _phase(snapshot: GoalSnapshot, phase_id: str) -> Phase:

@@ -31,7 +31,18 @@ The visual loop builder feeds the same loop. After a phase is accepted,
 records each *with evidence refs* — routed **improve-now** (blocking, surfaced)
 or **defer** (recorded, awaiting approval). `goals loop improve` turns that
 evidence-backed memory into a reviewable change set, and `--apply` enacts only
-the safe, reversible loop-design fixes. Deferred items never auto-apply.
+the safe, reversible loop-design fixes. Deferred items never auto-apply. Each
+suggestion prints the note behind it, how many times it was seen, its severity,
+the note ids, and the references (new notes made by `goals memory record` carry
+`event:<id>` for the goal's latest event in that phase, and none when the phase has no event yet).
+
+`goals metrics` is a read-only report for the person judging whether a change to
+Goals helped. It counts, across this repo's goals (including separate working
+folders), how many phases passed their first review and which kind of check
+backed each phase, straight from the goals' event logs. Logs from older versions
+with fewer fields are reported as "not recorded", never an error. Its numbers
+are not injected into any agent prompt, hook, or skill, so the agent cannot aim
+at them.
 
 ## Decision rule
 
