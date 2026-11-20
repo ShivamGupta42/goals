@@ -4,18 +4,22 @@ from pathlib import Path
 from goals.loop_builder import load_design, new_session, run_script
 from goals.loop_check import check_loop
 from goals.loop_improve import (
+    LoopImprovement,
+    LoopImprovementPlan,
     apply_loop_improvements,
     detect_phase_regression,
     log_phase_regression,
     plan_loop_improvements,
+    render_loop_improvement_plan,
 )
-from goals.memory import load_memory
+from goals.memory import append_memory_entry, load_memory
 from goals.models import (
     Evidence,
     GateResult,
     GateVerdict,
     GoalSnapshot,
     Phase,
+    SelfEvolutionEntry,
     WorktreeLease,
 )
 
@@ -205,6 +209,105 @@ def test_improve_applies_safe_loop_design_fixes_on_approval(tmp_path: Path) -> N
     plan = apply_loop_improvements(tmp_path, snapshot, design_dir=tmp_path)
     assert plan.applied  # termination + evidence fixes applied
     assert check_loop(load_design(tmp_path)).has_blocking is False
+
+
+# --- evidence behind each suggestion --------------------------------------- #
+def _note(goal_id: str, note: str, refs: list[str], severity: str = "medium") -> SelfEvolutionEntry:
+    return SelfEvolutionEntry(
+        kind="friction",
+        area="phase",
+        note=note,
+        severity=severity,  # type: ignore[arg-type]
+        goal_id=goal_id,
+        phase_id="P1",
+        evidence_refs=refs,
+    )
+
+
+def _plan_from_notes(tmp_path: Path, notes: list[SelfEvolutionEntry]) -> LoopImprovementPlan:
+    snapshot = _snapshot(tmp_path, Phase(phase_id="P1", title="P", goal="g"))
+    for entry in notes:
+        append_memory_entry(tmp_path, entry, snapshot)
+    return plan_loop_improvements(tmp_path, snapshot)
+
+
+def test_suggestion_carries_the_notes_and_ids_behind_it(tmp_path: Path) -> None:
+    first = _note("g1", "Proof check was not set up before review.", ["event:abc-123"])
+    second = _note("g2", "Proof check missing again at review time.", [])
+    plan = _plan_from_notes(tmp_path, [first, second])
+
+    imp = plan.improvements[0]
+    assert imp.occurrences == 2
+    assert imp.severity == "medium"
+    assert imp.entry_ids == [first.entry_id, second.entry_id]
+    assert "Proof check missing again at review time." in imp.why
+
+    text = render_loop_improvement_plan(plan)
+    assert "why: " in text and "Proof check missing again" in text
+    assert "seen 2 times" in text and "severity medium" in text
+    assert first.entry_id in text and second.entry_id in text
+    assert "event:abc-123" in text and "g1" in text and "g2" in text
+
+
+def test_a_suggestion_with_no_references_says_so(tmp_path: Path) -> None:
+    plan = _plan_from_notes(tmp_path, [_note("", "Needs a closer look.", [], severity="high")])
+
+    text = render_loop_improvement_plan(plan)
+
+    assert "refs: none recorded" in text
+    entry_id = plan.improvements[0].entry_ids[0]
+    assert f"seen 1 time · severity high · notes {entry_id} · refs: none recorded" in text
+
+
+def test_long_notes_and_many_references_are_cut(tmp_path: Path) -> None:
+    refs = [f"event:{n:04d}" for n in range(12)]
+    long_note = "word " * 200
+    plan = _plan_from_notes(tmp_path, [_note("g1", "first", refs), _note("g2", long_note, [])])
+
+    text = render_loop_improvement_plan(plan)
+
+    assert "event:0000" in text and "event:0011" not in text
+    assert "more" in text  # "+N more" marks what was left out
+    assert max(len(line) for line in text.splitlines()) < 400
+    assert "…" in text
+
+
+def test_loop_check_improvement_says_why_too() -> None:
+    plan = LoopImprovementPlan(
+        goal_id="",
+        summary="1 proposed improvement(s)",
+        improvements=[
+            LoopImprovement(
+                target="loop-design",
+                title="Fix missing-termination",
+                detail="Add a stop condition.",
+                source="loop-check",
+                auto_applicable=True,
+                evidence_refs=["P1"],
+                why="The loop has no stop condition.",
+            )
+        ],
+    )
+
+    text = render_loop_improvement_plan(plan)
+
+    assert "why: The loop has no stop condition." in text
+    assert "refs: P1" in text
+    assert "seen" not in text  # a linter finding has no note count
+
+
+def test_design_fixes_get_the_linter_message_as_the_why(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    session = new_session(tmp_path, skills=[])
+    run_script(
+        session,
+        ["objective Fixme", "add Plan", "accept The dashboard renders.", "save"],
+        write=lambda _msg: None,
+    )
+    plan = plan_loop_improvements(tmp_path, None, design_dir=tmp_path)
+
+    fixes = [imp for imp in plan.improvements if imp.auto_applicable]
+    assert fixes and all(imp.why for imp in fixes)
 
 
 # --- dogfood: the builder reproduces its own goal spec --------------------- #

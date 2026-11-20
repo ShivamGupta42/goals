@@ -955,6 +955,8 @@ class SelfEvolutionSuggestion(BaseModel):
     occurrences: int
     severity: Literal["low", "medium", "high"] = "medium"
     evidence_refs: list[str] = Field(default_factory=list)
+    #: Ids of the memory notes this suggestion was derived from, oldest first.
+    entry_ids: list[str] = Field(default_factory=list)
     user_visible: bool = False
     suggested_command: str = ""
 
