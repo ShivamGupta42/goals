@@ -10,6 +10,7 @@ from goals.models import (
     GoalSnapshot,
     PhaseStatus,
 )
+from goals.proof_summary import render_proof_line
 
 
 def build_goal_brief(snapshot: GoalSnapshot) -> GoalBrief:
@@ -64,6 +65,7 @@ def build_goal_brief(snapshot: GoalSnapshot) -> GoalBrief:
         summary=summary,
         progress=progress,
         proof=proof,
+        proof_mix=render_proof_line(snapshot),
         current_checkpoint=current_checkpoint,
         user_actions=user_actions,
         agent_actions=agent_actions,
@@ -98,6 +100,7 @@ def render_goal_brief(brief: GoalBrief) -> str:
         "## Progress and Proof",
         f"- {brief.progress}",
         f"- {brief.proof}",
+        *([f"- {brief.proof_mix}"] if brief.proof_mix else []),
         "",
         "## Technical Details",
         _bullets(brief.technical_details),

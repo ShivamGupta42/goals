@@ -484,6 +484,9 @@ class GoalBrief(BaseModel):
     summary: str
     progress: str
     proof: str
+    # How this goal's checks were made, e.g. 'Checks: 3 run by the engine, 1 by hand (P4.C3), 0 waived'.
+    # Defaulted so any code that builds a GoalBrief without it keeps working.
+    proof_mix: str = ""
     current_checkpoint: CurrentCheckpointBrief | None = None
     user_actions: list[GoalBriefAction] = Field(default_factory=list)
     agent_actions: list[GoalBriefAction] = Field(default_factory=list)

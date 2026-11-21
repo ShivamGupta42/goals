@@ -44,6 +44,15 @@ with fewer fields are reported as "not recorded", never an error. Its numbers
 are not injected into any agent prompt, hook, or skill, so the agent cannot aim
 at them.
 
+`goals check`, `goals brief`, the dashboard and `goals finish` each show one
+`Checks:` line for the goal in front of you, such as
+`Checks: 18 run by the engine, 1 by hand (P4.C3), 0 waived`. It counts that one
+goal's own recorded checks (`src/goals/proof_summary.py`), so weak proof shows
+up where people already look. It is display only: no gate reads it, and it is
+not the cross-goal report above. On the last phase, `goals next` also suggests a
+fresh-context reviewer for results that are claims (research, docs). That is
+advice, not a gate; nothing checks that it was followed.
+
 ## Decision rule
 
 Only **blocking** decisions are user-facing by default. The agent can decide

@@ -105,3 +105,63 @@ def test_short_handoff_is_calm_and_points_to_full(monkeypatch, tmp_path: Path) -
     # Paths in the short handoff are relative to the worktree, not absolute.
     assert str(tmp_path) not in short.split("relative to the goal worktree")[0]
     assert ".agent-workflow/goals/demo/evidence-p1.json" in short
+
+
+# --- reviewer advice on the last phase (advice only, never a gate) ------- #
+REVIEWER_ADVICE = "fresh-context reviewer"
+
+
+def test_last_phase_suggests_a_fresh_reviewer_in_short_and_full(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (name == "claude", "ok"))
+    snap = snapshot_for(tmp_path)
+    last = snap.phases[-1].phase_id
+    snap = snap.model_copy(update={"current_phase": last})
+    for full in (False, True):
+        prompt = build_mode_a_plan(snap, "claude", full=full).prompt
+        assert REVIEWER_ADVICE in prompt
+        assert "advice only" in prompt  # it says it is not a gate
+        # It comes before the review step, so it is read in time to be used.
+        assert prompt.index(REVIEWER_ADVICE) < prompt.index(f"goals phase review {last}")
+        # It comes before the evidence is recorded, and says to verify again afterwards,
+        # because recording evidence clears earlier verify results.
+        assert prompt.index(REVIEWER_ADVICE) < prompt.index(f"goals phase evidence {last} --file")
+        assert "same evidence file" in prompt
+        assert "verify` again" in prompt
+
+
+def test_other_phases_do_not_get_the_reviewer_advice(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (name == "claude", "ok"))
+    snap = snapshot_for(tmp_path)
+    for phase in snap.phases[:-1]:
+        moved = snap.model_copy(update={"current_phase": phase.phase_id})
+        for full in (False, True):
+            assert REVIEWER_ADVICE not in build_mode_a_plan(moved, "claude", full=full).prompt
+
+
+def test_the_last_phase_of_a_custom_loop_gets_it_too(monkeypatch, tmp_path: Path) -> None:
+    """Keyed on 'last phase', not the literal name P4, so custom loops work."""
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (name == "claude", "ok"))
+    snap = snapshot_for(tmp_path)
+    phases = snap.phases[:2]  # a two-phase loop
+    snap = snap.model_copy(update={"phases": phases, "current_phase": phases[-1].phase_id})
+    assert REVIEWER_ADVICE in build_mode_a_plan(snap, "claude", full=False).prompt
+
+
+def test_the_short_handoff_stays_short_with_the_advice(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("goals.mode_a.adapter_check", lambda name: (name == "claude", "ok"))
+    snap = snapshot_for(tmp_path)
+    snap = snap.model_copy(update={"current_phase": snap.phases[-1].phase_id})
+    short = build_mode_a_plan(snap, "claude", full=False).prompt
+    full = build_mode_a_plan(snap, "claude", full=True).prompt
+    assert len(short) < len(full) / 2
+    assert "fixed arc" in short and "goals loop activate" in short
+
+
+def test_the_create_command_carries_the_same_advice() -> None:
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "commands" / "create.md").read_text()
+    assert REVIEWER_ADVICE in text
+    assert "not a gate" in text
+    assert "same evidence file" in text and "again" in text

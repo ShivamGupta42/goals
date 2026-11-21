@@ -119,6 +119,7 @@ def render_mode_a_prompt(snapshot: GoalSnapshot, plan: ModeAPlan, *, full: bool 
     personalization = _personalization_for_prompt()
     sources = render_source_summary(snapshot)
     claims = render_claim_summary(snapshot)
+    reviewer_line = _reviewer_line(snapshot, plan.current_phase)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
 Mode A adapter: {plan.adapter}
@@ -144,7 +145,7 @@ Required loop:
 2. Assess before building: break this phase into sub-problems and hunt the assumptions your approach depends on. Record each with `goals assess assume "I'm assuming X" --building "..." --toward "the sub-problem it serves" [--depends] --phase {plan.current_phase}`, and record the breakdown with `goals assess breakdown --file <breakdown.json>`. Write each assumption plainly enough for a non-technical reader — it becomes the building journey on the dashboard. Skip only for a trivial phase.
 3. Make reversible progress without changing unrelated files.
 4. Keep `architecture.md` current when the phase changes what is built, planned, blocked, or deferred.
-5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion id (for example `{plan.current_phase}.C1`) AND every load-bearing assumption or auto-proven desired property (`goals assess want --proof auto`) bound to this phase, write a check or explicit manual/production/waiver verification that covers that id — load-bearing assumptions and auto-proven desired properties need an automated check. Prefer automated checks; a `manual`, `production`, or `waived` verification must say why local automation is not appropriate. Put this in the evidence `verifications` list at `{plan.evidence_file}`.
+{reviewer_line}5. Prove it by execution, not by description. First **invert** — deliberately try to break what you built before trusting it: enumerate how it could fail across the dimensions it's exposed to (boundaries and signs, time and locale, empty and huge inputs, concurrency, and the things it depends on — storage, the network, the clock — failing). The gate only makes you defend the assumptions you *name*, so this is where you surface the hidden ones: for each plausible failure, either fix it, write a check that exercises it, or — if it's a premise you're silently relying on — record it as a load-bearing assumption (which then needs its own falsifier). Then, for every acceptance criterion id (for example `{plan.current_phase}.C1`) AND every load-bearing assumption or auto-proven desired property (`goals assess want --proof auto`) bound to this phase, write a check or explicit manual/production/waiver verification that covers that id — load-bearing assumptions and auto-proven desired properties need an automated check. Prefer automated checks; a `manual`, `production`, or `waived` verification must say why local automation is not appropriate. Put this in the evidence `verifications` list at `{plan.evidence_file}`.
 6. Run `goals phase evidence {plan.current_phase} --file {plan.evidence_file}`, then `goals phase verify {plan.current_phase}` — the engine runs your checks and records the real results; you cannot mark a check passed yourself. Fix the build until every automated check passes.
 7. Run `goals capability check --agent {plan.adapter}` and `goals issues` to find missing skills/tools, blockers, missing proof, unresolved source claims, or important user decisions before review.
 8. Run `goals brief` before interrupting the user; use its plain wording for any user-facing question.
@@ -245,6 +246,7 @@ def _render_short_prompt(
     except ValueError:
         evidence_rel = plan.evidence_file
     phase = plan.current_phase
+    reviewer_line = _reviewer_line(snapshot, phase)
     return f"""/goal Finish this Goals-managed task: {snapshot.objective}
 
 Current phase: {phase} - {plan.phase_title}
@@ -261,7 +263,7 @@ your approach depends on. Record them with \
 and `goals assess breakdown --problem "..." --subproblem "statement | task | open question"`. \
 Write them plainly enough for a non-technical reader — they become the dashboard's building journey.
 2. Build only this phase. Keep changes reversible and don't touch unrelated files.
-3. Prove it by execution, not description. First **invert** — try to break it: how could it fail \
+{reviewer_line}3. Prove it by execution, not description. First **invert** — try to break it: how could it fail \
 (boundaries/signs, time/locale, empty/huge, concurrency, storage or network failing)? Fix each, \
 guard it with a check, or — if it's a premise you're relying on — record it as a load-bearing \
 assumption. Then for each acceptance criterion id (for example {phase}.C1) AND each load-bearing assumption or auto-proven desired property bound to this phase write a runnable \
@@ -284,6 +286,25 @@ portable cross-agent handoff), run `goals next --full`. For a plain-language sta
 `goals check`.
 {adapter_notes}
 """
+
+
+def _reviewer_line(snapshot: GoalSnapshot, phase_id: str) -> str:
+    """One line of advice on the last phase only, ending in a newline (or empty).
+
+    A reviewer is extra eyes, not a gate: no stored field says whether a goal's result
+    is claims or code, so the wording is conditional and nothing checks that it was
+    followed. Keyed on the last phase, not the name P4, so custom loops get it too.
+    """
+    if not snapshot.phases or snapshot.phases[-1].phase_id != phase_id:
+        return ""
+    return (
+        "Before you record this phase's evidence (advice only, not a gate): if the result is "
+        "claims (research, docs), have a fresh-context reviewer read the deliverable and check "
+        "each of its findings against the source before applying it. Then add an extra `manual` "
+        "check to the same evidence file (`covers` the criterion it supports; `rationale` says "
+        "how many findings the reviewer raised and how many you confirmed). Recording evidence "
+        "clears earlier verify results, so run `goals phase verify` again after.\n"
+    )
 
 
 def _current_phase(snapshot: GoalSnapshot) -> Phase:

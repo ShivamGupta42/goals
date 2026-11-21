@@ -20,16 +20,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from goals.git_ops import find_git_root, list_worktrees
+from goals.proof_summary import PROOF_LABELS
 
 _REASON_LIMIT = 100
 _NON_PASS_SHOWN = 10
-_PROOF_LABELS = {
-    "auto": "run by the engine",
-    "manual": "by hand",
-    "waived": "waived",
-    "production": "checked in production",
-    "not_run": "declared but not run",
-}
 
 
 class NonPassReview(BaseModel):
@@ -314,7 +308,7 @@ def _proof_text(t: MetricsTotals) -> str:
     if not t.proof_kinds:
         return "not recorded in any log"
     parts = ", ".join(
-        f"{n} {_PROOF_LABELS.get(kind, kind)}"
+        f"{n} {PROOF_LABELS.get(kind, kind)}"
         for kind, n in sorted(t.proof_kinds.items(), key=lambda kv: -kv[1])
     )
     if t.goals_without_proof_kinds:
@@ -331,7 +325,7 @@ def _span(g: GoalMetrics) -> str:
 
 def _goal_line(g: GoalMetrics) -> str:
     checks = (
-        ", ".join(f"{n} {_PROOF_LABELS.get(k, k)}" for k, n in sorted(g.proof_kinds.items()))
+        ", ".join(f"{n} {PROOF_LABELS.get(k, k)}" for k, n in sorted(g.proof_kinds.items()))
         if g.proof_kinds
         else "not recorded"
     )
