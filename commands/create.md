@@ -35,6 +35,13 @@ Start a durable, reviewable goal for: **$ARGUMENTS**
    `goals phase verify <PHASE>` (the engine runs your checks and records the real
    results — you can't pass a check yourself), then `goals phase review <PHASE>`,
    and once it passes, `goals phase accept <PHASE>`.
+   On the last phase, before you record evidence, and if the result is claims
+   (research, docs): have a fresh-context reviewer read the deliverable, and check
+   each of its findings against the source before you apply it. Then add an extra
+   `manual` check to the same evidence file (`covers` the criterion it supports;
+   `rationale` says how many findings were raised and how many you confirmed), and
+   run `goals phase verify` again, because recording evidence clears earlier
+   results. This is advice, not a gate.
 5. Before interrupting the user, run `goals check` (or `goals brief`) and ask in
    its plain wording only if it says you're waiting on the user.
 

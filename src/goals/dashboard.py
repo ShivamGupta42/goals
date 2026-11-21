@@ -20,6 +20,7 @@ from goals.git_ops import source_commit
 from goals.issues import analyze_goal_issues
 from goals.journey import sort_assumptions
 from goals.models import Event, GoalArchitectureMap, GoalSnapshot, UserMemory
+from goals.proof_summary import render_proof_line
 from goals.sources import analyze_source_freshness, unresolved_claims
 from goals.storage import atomic_write_text
 
@@ -1081,7 +1082,8 @@ def _evidence_detail_html(snapshot: GoalSnapshot, checkpoint) -> str:
             f'<p><strong>Current checkpoint:</strong> {title}'
             f'{(" — " + what) if what else ""}{refs_html}</p>'
         )
-    return f'<ul class="kv">{"".join(items)}</ul>{checkpoint_html}'
+    checks_html = f"<p>{escape(render_proof_line(snapshot))}</p>"
+    return f'{checks_html}<ul class="kv">{"".join(items)}</ul>{checkpoint_html}'
 
 
 def _architecture_detail_html(

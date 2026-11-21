@@ -9,6 +9,7 @@ from goals.health import GoalHealthReport, build_goal_health
 from goals.loop_builder import load_design, profile_root_for_loop_path, to_snapshot
 from goals.mode_a import ModeAAdapter, build_mode_a_plan
 from goals.projections import emit_dashboard, export_goal, refresh_goal_outputs
+from goals.proof_summary import render_proof_line
 from goals.storage import GoalsError
 from goals.models import (
     ArchitectureCheckReport,
@@ -260,6 +261,7 @@ def render_check_workflow(report: WorkflowCheck) -> str:
         brief.summary,
         f"- Progress: {brief.progress}",
         f"- Proof: {brief.proof}",
+        *([f"- {brief.proof_mix}"] if brief.proof_mix else []),
         "",
         "## Next Safe Step",
         checkpoint.next_safe_step,
@@ -417,6 +419,7 @@ def render_finish_workflow(report: WorkflowFinish) -> str:
             f"- Issues: {report.check.issues.summary}",
             f"- Merge: {report.check.merge.summary}",
             f"- Architecture: {report.check.architecture.summary}",
+            f"- {render_proof_line(report.snapshot)}",
             # A finished goal still says which of the user's answers weren't on record.
             *_confirmation_section(report.snapshot),
         ]
