@@ -24,7 +24,13 @@ from goals.models import (
     PhaseStatus,
     PortableExport,
 )
-from goals.runtime import claim_worktree, create_goal, load_active_snapshot
+from goals.git_ops import untracked_paths
+from goals.runtime import (
+    GOALS_METADATA_PREFIXES,
+    claim_worktree,
+    create_goal,
+    load_active_snapshot,
+)
 from goals.user_memory import build_goal_memory_digest
 
 
@@ -33,6 +39,7 @@ class WorkflowStart:
     snapshot: GoalSnapshot
     plan: ModeAPlan
     dashboard_path: Path
+    left_behind: tuple[str, ...] = ()  # untracked files that stayed in the main checkout
 
 
 @dataclass(frozen=True)
@@ -117,11 +124,20 @@ def start_workflow(
         workspace=workspace,  # type: ignore[arg-type]
         phases=phases,
         definition_of_done=definition_of_done,
+        allow_untracked=True,  # the start message names what stays behind
     )
     worktree = Path(snapshot.topology.worktree_path)
+    repo = Path(snapshot.topology.base_repo)
+    left_behind = (
+        tuple(untracked_paths(repo, ignored_prefixes=GOALS_METADATA_PREFIXES))
+        if worktree != repo
+        else ()
+    )
     dashboard_path = emit_dashboard(worktree)
     plan = build_mode_a_plan(snapshot, agent)
-    return WorkflowStart(snapshot=snapshot, plan=plan, dashboard_path=dashboard_path)
+    return WorkflowStart(
+        snapshot=snapshot, plan=plan, dashboard_path=dashboard_path, left_behind=left_behind
+    )
 
 
 def next_workflow(cwd: Path, *, agent: ModeAAdapter = "auto", full: bool = False) -> WorkflowNext:
@@ -179,6 +195,23 @@ def finish_workflow(cwd: Path) -> WorkflowFinish:
     return WorkflowFinish(snapshot=snapshot, check=check, export=export, memory_digest=digest)
 
 
+def _printable(name: str) -> str:
+    """One line, no stray backticks: a file name can hold a newline or a backtick."""
+    return "".join(ch if ch.isprintable() and ch != "`" else "?" for ch in name)
+
+
+def _left_behind_note(names: tuple[str, ...]) -> list[str]:
+    if not names:
+        return []
+    shown = ", ".join(f"`{_printable(name)}`" for name in names[:5])
+    more = f" (+{len(names) - 5} more)" if len(names) > 5 else ""
+    return [
+        "Not copied into the new folder (untracked in your main checkout): "
+        f"{shown}{more}. Copy what the goal needs.",
+        "",
+    ]
+
+
 def render_start_workflow(report: WorkflowStart) -> str:
     plan = report.plan
     snapshot = report.snapshot
@@ -231,6 +264,7 @@ def render_start_workflow(report: WorkflowStart) -> str:
             "",
             notice,
             "",
+            *_left_behind_note(report.left_behind),
             "Next:",
             *steps,
             f"{len(steps) + 1}. Paste the output into {paste_target}.",

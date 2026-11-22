@@ -162,6 +162,7 @@ def create_goal(
     workspace: Workspace = "auto",
     phases: list[Phase] | None = None,
     definition_of_done: list[str] | None = None,
+    allow_untracked: bool = False,
 ) -> GoalSnapshot:
     base = _ensure_repo(cwd, new_project) if new_project is not None else cwd
     plan = resolve_workspace(base, requested=workspace, new_project_created=new_project is not None)
@@ -179,7 +180,11 @@ def create_goal(
                 "(worktrees are how you run several goals at once)."
             )
     if plan.mode == "worktree":
-        require_clean_repo(plan.repo, ignored_prefixes=GOALS_METADATA_PREFIXES)
+        # A new worktree is cut from HEAD, so untracked files stay behind. A caller that
+        # tells the user which ones (``goals start``) passes allow_untracked=True.
+        require_clean_repo(
+            plan.repo, ignored_prefixes=GOALS_METADATA_PREFIXES, allow_untracked=allow_untracked
+        )
         if not has_commits(plan.repo):
             raise GoalsError(
                 "Repository has no commits. Create an initial commit before creating a goal."

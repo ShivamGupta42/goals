@@ -9,6 +9,7 @@ from goals.models import (
     JudgementRecord,
     SourceClaim,
     SourceRecord,
+    UserMessage,
 )
 from goals.runtime import default_phases
 from goals.models import (
@@ -763,3 +764,37 @@ def test_ref_bearing_finding_requires_a_ref() -> None:
     # ref-bearing fact with a ref -> accepted; non-ref fact needs no ref.
     GateFinding(fact_type=GateFactType.CHECK_FAILED, message="m", ref="V-1")
     GateFinding(fact_type=GateFactType.NO_PASSING_CHECK, message="m")
+
+
+def test_a_raw_line_separator_in_a_reply_does_not_break_the_log(tmp_path: Path) -> None:
+    """The writer keeps U+2028/U+2029/U+0085 raw inside a JSON string; splitting on them cuts one event in two."""
+    snapshot = GoalSnapshot(
+        goal_id="sep",
+        objective="Separators",
+        topology=WorktreeLease(
+            base_repo="/repo", base_branch="main", worktree_path="/wt", branch="goal/sep"
+        ),
+        phases=default_phases("Separators"),
+        current_phase="P1",
+    )
+    odd = "a\u2028b\u2029c\x85d"
+    goal_dir = tmp_path / "goal"
+    store = EventStore(goal_dir)
+    store.append(
+        Event(goal_id="sep", event_type=EventType.GOAL_CREATED, payload={"snapshot": snapshot.model_dump()})
+    )
+    store.append(
+        Event(
+            goal_id="sep",
+            event_type=EventType.USER_MESSAGE_RECORDED,
+            payload={"message": UserMessage(text=odd, session_id="s").model_dump()},
+        )
+    )
+    assert "\u2028" in store.events_path.read_text(encoding="utf-8")  # the writer keeps it raw
+
+    loaded = store.snapshot()  # must not raise
+
+    assert [message.text for message in loaded.user_messages] == [odd]
+    assert loaded.event_count == 2
+    store.append(Event(goal_id="sep", event_type=EventType.PHASE_STARTED, payload={"phase_id": "P1"}))
+    assert store.snapshot().event_count == 3

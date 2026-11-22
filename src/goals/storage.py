@@ -202,7 +202,9 @@ class EventStore:
         if not self.events_path.exists():
             return []
         events: list[Event] = []
-        for line_number, line in enumerate(self.events_path.read_text().splitlines(), start=1):
+        # Split on "\n" only: str.splitlines() also splits on U+2028/U+2029/U+0085, which the
+        # writer leaves unescaped inside a JSON string, and would cut one event in two.
+        for line_number, line in enumerate(self.events_path.read_text().split("\n"), start=1):
             if not line.strip():
                 continue
             try:

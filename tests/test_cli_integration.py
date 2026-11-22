@@ -593,6 +593,32 @@ def test_create_refuses_dirty_repo(tmp_path: Path) -> None:
     assert "dirty working tree" in result.stdout
 
 
+def test_start_accepts_untracked_files_and_names_them(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    (repo / "notes.txt").write_text("not committed\n")
+    result = run_unchecked(
+        ["python", "-m", "goals.cli", "start", "Ship demo", "--agent", "claude"], repo
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Not copied into the new folder" in result.stdout
+    assert "notes.txt" in result.stdout
+
+
+def test_start_still_refuses_a_tracked_change(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    (repo / "notes.txt").write_text("not committed\n")
+    (repo / "README.md").write_text("# Changed\n")
+    result = run_unchecked(
+        ["python", "-m", "goals.cli", "start", "Ship demo", "--agent", "claude"], repo
+    )
+    assert result.returncode == 1
+    assert "dirty working tree" in result.stdout
+
+
 def test_create_refuses_branch_collision(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
