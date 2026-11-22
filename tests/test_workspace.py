@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from goals.git_ops import untracked_paths
 from goals.runtime import (
     active_goal_dir,
     create_goal,
@@ -10,6 +11,7 @@ from goals.runtime import (
     resolve_workspace,
 )
 from goals.storage import GoalsError
+from goals.workflows import render_start_workflow, start_workflow
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -137,3 +139,126 @@ def test_dirty_tree_only_blocks_worktree_not_in_place(tmp_path: Path) -> None:
     # ...but a worktree off a dirty base is refused.
     with pytest.raises(GoalsError, match="dirty working tree"):
         create_goal("worktree blocked", tmp_path, workspace="worktree")
+
+
+# --- untracked files do not block a new working folder -------------------- #
+def test_create_goal_still_refuses_untracked_files_unless_told_otherwise(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "notes.txt").write_text("x")
+    with pytest.raises(GoalsError, match="dirty working tree"):
+        create_goal("strict by default", tmp_path, workspace="worktree")
+
+
+def test_untracked_only_tree_does_not_block_a_worktree_start(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "notes.txt").write_text("x")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "plan.md").write_text("y")
+
+    snapshot = create_goal(
+        "worktree with notes", tmp_path, workspace="worktree", allow_untracked=True
+    )
+
+    worktree = Path(snapshot.topology.worktree_path)
+    assert worktree.is_dir()
+    assert (tmp_path / "notes.txt").exists()  # untracked files stay in the main checkout
+    assert not (worktree / "notes.txt").exists()
+
+
+def test_untracked_files_do_not_hide_a_tracked_change(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "notes.txt").write_text("x")
+    (tmp_path / "README.md").write_text("# changed\n")
+    with pytest.raises(GoalsError, match="dirty working tree"):
+        create_goal("blocked", tmp_path, workspace="worktree", allow_untracked=True)
+
+
+def test_a_staged_new_file_still_blocks_a_worktree_start(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "new.txt").write_text("x")
+    _run(["git", "add", "new.txt"], tmp_path)
+    with pytest.raises(GoalsError, match="dirty working tree"):
+        create_goal("blocked", tmp_path, workspace="worktree", allow_untracked=True)
+
+
+def test_untracked_paths_names_files_inside_new_folders(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    (tmp_path / "docs" / "plans" / "a.md").write_text("x")
+    (tmp_path / "top.txt").write_text("y")
+    (tmp_path / "caf\u00e9 notes.md").write_text("z")
+    (tmp_path / ".agent-workflow").mkdir()
+    (tmp_path / ".agent-workflow" / "x.json").write_text("{}")
+    (tmp_path / "README.md").write_text("# changed\n")  # tracked: never listed
+
+    names = untracked_paths(tmp_path, ignored_prefixes=(".agent-workflow/", ".goals/"))
+
+    assert names == ["caf\u00e9 notes.md", "docs/plans/a.md", "top.txt"]
+
+
+def test_start_message_names_the_files_left_behind(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "notes.txt").write_text("x")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "plan.md").write_text("y")
+
+    text = render_start_workflow(
+        start_workflow("start with notes", tmp_path, agent="claude", workspace="worktree")
+    )
+
+    assert "Not copied into the new folder" in text
+    assert "notes.txt" in text and "docs/plan.md" in text
+
+
+def test_start_message_has_no_left_behind_line_on_a_clean_tree(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+
+    text = render_start_workflow(
+        start_workflow("clean start", tmp_path, agent="claude", workspace="worktree")
+    )
+
+    assert "Not copied" not in text
+
+
+def test_start_message_caps_the_left_behind_list(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    for index in range(7):
+        (tmp_path / f"f{index}.txt").write_text("x")
+
+    text = render_start_workflow(
+        start_workflow("many untracked", tmp_path, agent="claude", workspace="worktree")
+    )
+
+    assert "f0.txt" in text and "f4.txt" in text
+    assert "f5.txt" not in text
+    assert "(+2 more)" in text
+
+
+def test_untracked_paths_skips_the_source_path_of_a_staged_rename(tmp_path: Path) -> None:
+    """`git status -z` follows a rename with its source path as a bare field; here the source
+    is named like an untracked entry, so reading it as one would list a tracked file."""
+    _git_repo(tmp_path)
+    (tmp_path / "?? odd.txt").write_text("a")
+    _run(["git", "add", "-A"], tmp_path)
+    _run(["git", "commit", "-m", "odd name"], tmp_path)
+    _run(["git", "mv", "?? odd.txt", "renamed.txt"], tmp_path)
+    (tmp_path / "x.txt").write_text("y")
+
+    assert untracked_paths(tmp_path) == ["x.txt"]
+
+
+def test_start_message_keeps_odd_file_names_on_one_line(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    try:
+        (tmp_path / "new\nline.txt").write_text("x")
+        (tmp_path / "back`tick.txt").write_text("x")
+    except OSError:
+        pytest.skip("this file system rejects these names")
+
+    text = render_start_workflow(
+        start_workflow("odd names", tmp_path, agent="claude", workspace="worktree")
+    )
+
+    note = [line for line in text.splitlines() if line.startswith("Not copied")]
+    assert len(note) == 1
+    assert "new?line.txt" in note[0] and "back?tick.txt" in note[0]

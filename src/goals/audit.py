@@ -239,7 +239,8 @@ def _legacy_event_warnings(events_path: Path) -> list[str]:
         return []
     warnings: list[str] = []
     known = {member.value for member in EventType}
-    for line_number, line in enumerate(events_path.read_text(encoding="utf-8").splitlines(), start=1):
+    # "\n" only: splitlines() would also cut an event at a raw U+2028/U+2029/U+0085 inside its text.
+    for line_number, line in enumerate(events_path.read_text(encoding="utf-8").split("\n"), start=1):
         if not line.strip():
             continue
         try:

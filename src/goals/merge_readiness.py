@@ -369,7 +369,11 @@ def _merge_risk_findings(snapshot: GoalSnapshot) -> list[MergeReadinessFinding]:
                 ),
                 detail=f"{source}: {text}",
                 suggested_action=(
-                    "Ask the user for the high-risk merge decision in plain language."
+                    "Ask the user for the high-risk merge decision in plain language. "
+                    "If the user already decided, record it with "
+                    f'`goals decision record "<question>" --choice "<what was chosen>" '
+                    f"--by user --private --evidence {source}`; that clears every approval "
+                    f"warning from {source}."
                     if needs_user
                     else "Resolve or record the merge risk before accepting the goal as merge-ready."
                 ),

@@ -126,18 +126,57 @@ def current_branch(repo: Path) -> str:
     return branch
 
 
-def require_clean_repo(repo: Path, *, ignored_prefixes: tuple[str, ...] = ()) -> None:
+def require_clean_repo(
+    repo: Path, *, ignored_prefixes: tuple[str, ...] = (), allow_untracked: bool = False
+) -> None:
+    """Refuse a repo with uncommitted changes. ``allow_untracked`` lets untracked files through
+    (a new worktree is cut from HEAD, so they stay behind in this checkout and block nothing)."""
     result = run_git(["status", "--porcelain"], repo)
     dirty = [
         line
         for line in result.stdout.splitlines()
-        if line and not _ignored_status_line(line, ignored_prefixes)
+        if line
+        and not (allow_untracked and line.startswith("??"))
+        and not _ignored_status_line(line, ignored_prefixes)
     ]
     if dirty:
         raise GoalsError(
             "Refusing to create a goal from a dirty working tree. Commit or stash "
             "your changes first (`git status` to see them)."
         )
+
+
+def untracked_paths(repo: Path, *, ignored_prefixes: tuple[str, ...] = ()) -> list[str]:
+    """Untracked files, each file inside a new folder named, minus Goals' own folders.
+
+    Lists only. A failure to list returns ``[]``, so a courtesy message can never fail a
+    start that already succeeded. ``-z`` output is neither quoted nor split on line
+    separators, so any file name comes back exactly.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+            cwd=repo,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    fields = result.stdout.decode("utf-8", errors="replace").split("\0")
+    names: list[str] = []
+    index = 0
+    while index < len(fields):
+        entry = fields[index]
+        index += 1
+        if len(entry) < 4:  # the empty piece after the last NUL
+            continue
+        status, path = entry[:2], entry[3:]
+        if "R" in status or "C" in status:  # a rename or copy is followed by its source path
+            index += 1
+        if status == "??" and not _matches_prefix(path, ignored_prefixes):
+            names.append(path)
+    return names
 
 
 def has_commits(repo: Path) -> bool:

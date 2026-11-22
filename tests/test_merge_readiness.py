@@ -1,7 +1,8 @@
 from pathlib import Path
+import re
 import subprocess
 
-from goals.issues import analyze_goal_issues
+from goals.issues import analyze_goal_issues, render_issue_report
 from goals.merge_readiness import analyze_merge_readiness, render_merge_readiness_report
 from goals.models import (
     Decision,
@@ -280,6 +281,77 @@ def test_merge_readiness_resolves_risk_with_linked_judgement(tmp_path) -> None:
     assert report.passed is True
     assert report.user_questions == []
     assert report.findings == []
+
+
+# --- an "ask the user" warning that a recorded decision did not clear ---------- #
+def _approval_gap_snapshot(tmp_path, judgements: list[JudgementRecord]) -> GoalSnapshot:
+    return _snapshot(
+        tmp_path,
+        evidence=Evidence(
+            changed_files=["a.md"],
+            checks_run=["x"],
+            acceptance_met=["ok"],
+            confidence=0.9,
+            known_gaps=["Live posting is locked; risk needs user approval."],
+        ),
+        judgements=judgements,
+    )
+
+
+def _decision_about_live_posting(refs: list[str] | None = None) -> JudgementRecord:
+    return JudgementRecord(
+        question="Should live posting stay locked for this goal?",
+        choice="Yes, keep live posting locked.",
+        rationale="The owner decided the risk is not worth it yet.",
+        evidence_refs=refs or [],
+        confidence=0.9,
+    )
+
+
+def test_unlinked_judgement_keeps_the_p0_and_says_how_to_link_it(tmp_path) -> None:
+    snapshot = _approval_gap_snapshot(tmp_path, [_decision_about_live_posting()])
+
+    report = analyze_merge_readiness(snapshot)
+
+    p0 = [finding for finding in report.findings if finding.severity == "p0"]
+    assert len(p0) == 1  # stays strict: a judgement that is not linked does not count
+    assert "goals decision record" in p0[0].suggested_action
+    assert "--evidence phase:P1" in p0[0].suggested_action
+    # the user's own decision, kept on this goal, and the scope of the link is stated
+    assert "--by user --private" in p0[0].suggested_action
+    assert "clears every approval warning from phase:P1" in p0[0].suggested_action
+    # the same hint reaches `goals issues`
+    assert "--evidence phase:P1" in render_issue_report(analyze_goal_issues(snapshot))
+
+
+def test_linking_the_judgement_the_way_the_hint_says_clears_the_p0(tmp_path) -> None:
+    unlinked = analyze_merge_readiness(
+        _approval_gap_snapshot(tmp_path, [_decision_about_live_posting()])
+    )
+    hint = next(f for f in unlinked.findings if f.severity == "p0").suggested_action
+    match = re.search(r"--evidence ([^\s`]+)", hint)
+    assert match is not None
+
+    linked = analyze_merge_readiness(
+        _approval_gap_snapshot(tmp_path, [_decision_about_live_posting([match.group(1)])])
+    )
+
+    assert [finding for finding in linked.findings if finding.severity == "p0"] == []
+
+
+def test_the_hint_names_the_risk_entry_as_the_source(tmp_path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        evidence=Evidence(
+            changed_files=["a.md"], checks_run=["x"], acceptance_met=["ok"], confidence=0.9
+        ),
+        risks=["Live posting needs user approval."],
+    )
+
+    report = analyze_merge_readiness(snapshot)
+
+    p0 = [finding for finding in report.findings if finding.severity == "p0"]
+    assert p0 and "--evidence risk:1" in p0[0].suggested_action
 
 
 def _snapshot(
