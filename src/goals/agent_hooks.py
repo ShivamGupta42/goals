@@ -22,13 +22,12 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.checkpoints import build_current_checkpoint_brief, checkpoint_is_asked
+from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
 from goals.git_ops import find_git_root, goal_worktrees
 from goals.models import (
     Event,
     EventType,
     GateVerdict,
-    GoalBrief,
     GoalSnapshot,
     GoalStatus,
     Phase,
@@ -37,7 +36,6 @@ from goals.models import (
 from goals.portability import render_context_block
 from goals.runtime import (
     MAX_PHASE_ATTEMPTS_ENV,
-    active_goal_dir,
     load_active_snapshot,
     resolve_max_phase_attempts,
 )
@@ -99,10 +97,8 @@ def session_start_payload(cwd: Path) -> str:
     rather than propagating, and any failure in the new search degrades to exactly what this
     hook gave before it looked past the session's own folder.
     """
-    own_dir: Path | None = None
     own: GoalSnapshot | None = None
     try:
-        own_dir = active_goal_dir(cwd)
         own = load_active_snapshot(cwd)
     except Exception:  # noqa: BLE001 - no goal here, or an unreadable one: look elsewhere
         own = None
@@ -111,7 +107,7 @@ def session_start_payload(cwd: Path) -> str:
     except Exception:  # noqa: BLE001 - never crash a session hook; no-op instead
         today = ""
     try:
-        text = _session_start_text(cwd, own_dir, own) or today
+        text = _session_start_text(cwd, own) or today
     except Exception:  # noqa: BLE001 - the search is an extra: fall back to today's block
         text = today
     if not text:
@@ -121,12 +117,12 @@ def session_start_payload(cwd: Path) -> str:
     )
 
 
-def _session_start_text(cwd: Path, own_dir: Path | None, own: GoalSnapshot | None) -> str:
+def _session_start_text(cwd: Path, own: GoalSnapshot | None) -> str:
     """The block to inject, or "" to keep today's (own folder's goal, or nothing)."""
     if own is not None and own.status in _RECORDING_STATUSES:
         # Already in the right folder: the same block as ever, plus where things stand.
         return "\n".join([render_context_block(own), "", *_status_lines(own)])
-    live = _live_goals_elsewhere(cwd, own_dir)
+    live = _live_goals_elsewhere(cwd)
     if not live:
         return ""
     if len(live) > 1:
@@ -136,20 +132,25 @@ def _session_start_text(cwd: Path, own_dir: Path | None, own: GoalSnapshot | Non
         [
             render_context_block(snapshot),
             "",
-            f"Goal folder: {folder} — work in this folder, and run `goals` commands from it. "
-            "This session's own goal (in the folder it started in) is finished, or there is none.",
+            f"Goal folder: {folder} — work in this folder, run `goals` commands from it, and read "
+            f"{folder}/.goals/GOAL.md (not the session folder's). This session's own goal is "
+            "finished, missing or unreadable.",
             *_status_lines(snapshot, folder=folder),
         ]
     )
 
 
-def _live_goals_elsewhere(cwd: Path, own_dir: Path | None) -> list[tuple[Path, GoalSnapshot]]:
-    """Goals in progress in the repo's working folders other than the session's own goal."""
+def _live_goals_elsewhere(cwd: Path) -> list[tuple[Path, GoalSnapshot]]:
+    """Goals in progress in the repo's other working folders, newest first.
+
+    The session's own folder is left out: `goals` commands there act on the folder's most
+    recently updated goal, so they could not be pointed at a second goal in the same folder.
+    """
     found: list[tuple[Path, GoalSnapshot]] = []
-    for tier, _own_checkout in _candidate_goal_dirs(cwd):
+    for tier, is_own_checkout in _candidate_goal_dirs(cwd):
+        if is_own_checkout:
+            continue
         for goal_dir in tier:
-            if own_dir is not None and goal_dir.resolve() == own_dir.resolve():
-                continue
             try:
                 snapshot = EventStore(goal_dir).snapshot()
             except Exception:  # noqa: BLE001 - an unreadable log: skip that folder, keep going
@@ -162,39 +163,44 @@ def _live_goals_elsewhere(cwd: Path, own_dir: Path | None) -> list[tuple[Path, G
 
 def _status_lines(snapshot: GoalSnapshot, *, folder: Path | None = None) -> list[str]:
     """"Waiting on" and "Next" lines: the last thing in the block, so the action is the last read."""
-    brief = build_goal_brief(snapshot)
     where = f" (in {folder})" if folder is not None else ""
-    if brief.waiting_on == "you":
-        question = _open_question(brief)
+    question = _open_question(snapshot)
+    if question is not None:
         return [f"Waiting on: you — {question}", f"Next: ask the user: {question}{where}"]
-    if brief.waiting_on == "agent":
-        return [
-            "Waiting on: the agent (nothing needed from the user)",
-            f"Next: run `{_NEXT_COMMAND}`{where}",
-        ]
-    return ["Waiting on: no one", f"Next: run `goals check`{where}"]
+    return [
+        "Waiting on: the agent (nothing needed from the user)",
+        f"Next: run `{_NEXT_COMMAND}`{where}",
+    ]
 
 
-def _open_question(brief: GoalBrief) -> str:
-    checkpoint = brief.current_checkpoint
-    if checkpoint is not None and checkpoint.waiting_on == "you" and checkpoint.checkpoint_title:
-        text = checkpoint.checkpoint_title
-    elif brief.user_actions:
-        text = brief.user_actions[0].plain_summary
-    else:
-        text = "see `goals brief`"
-    return _one_line(text.removeprefix("Ask the user:").strip())
+def _open_question(snapshot: GoalSnapshot) -> str | None:
+    """What the user has been asked and has not answered yet, or None.
+
+    Reads the saved snapshot only: no git and no writes, because this runs at every session
+    start and after every /compact, and must not touch the repo's other working folders. It sees
+    asked checkpoints and blocking decisions, not merge-readiness findings (`goals brief` has those).
+    """
+    for phase in snapshot.phases:
+        if is_future_phase(snapshot, phase.phase_id):
+            continue  # a later step can't have been asked yet
+        for checkpoint in phase.checkpoints:
+            if checkpoint_waits_on_user(checkpoint):
+                text = checkpoint.title or checkpoint.checkpoint_id
+                return _one_line(text.removeprefix("Ask the user:").strip())
+    if snapshot.status == GoalStatus.BLOCKED:
+        return "a blocking decision is open (run `goals brief` for the question)"
+    return None
 
 
 def _several_goals_text(live: list[tuple[Path, GoalSnapshot]]) -> str:
     lines = [
         "## Goals in progress in this repo",
         "",
-        "This session's own goal (in the folder it started in) is finished, or there is none, "
-        "but these goals are in progress:",
+        "This session's own goal is finished, missing or unreadable, but these goals are in "
+        "progress:",
     ]
     for folder, snapshot in live[:MAX_LISTED_GOALS]:
-        waiting = build_current_checkpoint_brief(snapshot).waiting_on
+        waiting = "you" if _open_question(snapshot) is not None else "the agent"
         lines.append(
             f"- {_one_line(snapshot.objective)} (step {snapshot.current_phase or 'none'}, "
             f"waiting on {waiting}): {folder}"

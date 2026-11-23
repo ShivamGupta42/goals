@@ -318,11 +318,9 @@ def test_finished_goal_in_this_folder_is_not_shown_when_another_is_live(tmp_path
     assert "finished" in context  # says why the session was redirected
 
 
-def test_a_second_live_goal_in_the_same_folder_is_found_without_a_false_claim(
-    tmp_path: Path,
-) -> None:
-    # Older Goals allowed two goals in one folder. Build the live one elsewhere and copy it in, so
-    # that the folder's most recently updated goal (the one the session picks) is the finished one.
+def test_a_second_live_goal_in_the_same_folder_is_left_alone(tmp_path: Path) -> None:
+    # Older Goals allowed two goals in one folder, but `goals` commands there act on the most
+    # recently updated one (the finished one here), so the session cannot be pointed at the other.
     scratch = _base_repo(tmp_path / "scratch")
     create_goal("the second live job", scratch, workspace="in_place")
     base = _base_repo(tmp_path / "base")
@@ -330,9 +328,7 @@ def test_a_second_live_goal_in_the_same_folder_is_found_without_a_false_claim(
     _finish(base)
     live_dir = next((scratch / ".agent-workflow" / "goals").iterdir())
     shutil.copytree(live_dir, base / ".agent-workflow" / "goals" / live_dir.name)
-    context = _context(session_start_payload(base))
-    assert "the second live job" in context and "the old finished job" not in context
-    assert "did not start there" not in context
+    assert session_start_payload(base) == _today(base)
 
 
 def test_session_in_a_finished_worktree_is_pointed_at_the_live_one(tmp_path: Path) -> None:
@@ -377,6 +373,10 @@ def test_own_live_goal_still_wins_and_gets_status_lines(tmp_path: Path) -> None:
     _goal_in_worktree(base, "beta job")
     context = _context(session_start_payload(alpha))
     assert "alpha job" in context and "beta job" not in context
+    # Exactly the old block first, then a blank line and the two status lines.
+    block, _, lines = context.partition("\n\n" + "Waiting on:")
+    assert block == render_context_block(load_active_snapshot(alpha))
+    assert len(("Waiting on:" + lines).splitlines()) == 2
     assert "Goal folder:" not in context  # already in the right folder
     assert "Waiting on:" in context
     assert context.rstrip().splitlines()[-1].startswith("Next:")
@@ -391,26 +391,54 @@ def test_a_failing_status_line_falls_back_to_todays_block(tmp_path: Path, monkey
     def boom(*_args, **_kwargs):
         raise ValueError("unexpected")
 
-    monkeypatch.setattr(agent_hooks, "build_goal_brief", boom)
+    monkeypatch.setattr(agent_hooks, "_open_question", boom)
     assert session_start_payload(alpha) == _today(alpha)
 
 
-def test_waiting_on_you_names_the_open_question(tmp_path: Path) -> None:
-    base = _base_repo(tmp_path / "base")
-    live = _goal_in_worktree(base, "alpha job")
+def _ask_user(folder: Path, title: str) -> None:
+    # An open check for the agent comes first; the question for the user comes second.
     record_checkpoint(
-        live,
+        folder,
+        "P1",
+        "tests",
+        kind=CheckpointKind.EVIDENCE,
+        status=CheckpointStatus.PENDING,
+        required=True,
+        title="Run the full test suite",
+    )
+    record_checkpoint(
+        folder,
         "P1",
         "alignment",
         kind=CheckpointKind.UNDERSTANDING,
         status=CheckpointStatus.NEEDS_USER,
         needs_user=True,
-        title="Does this match what you want?",
+        title=title,
         summary="waiting",
     )
-    context = _context(session_start_payload(base))
-    assert "Waiting on: you" in context
-    assert "Does this match what you want?" in context
+
+
+def test_waiting_on_you_names_the_question_not_an_open_agent_check(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    live = _goal_in_worktree(base, "alpha job")
+    _ask_user(live, "Does this match what you want?")
+    redirected = _context(session_start_payload(base))
+    assert "Waiting on: you — Does this match what you want?" in redirected
+    assert "Next: ask the user: Does this match what you want?" in redirected
+    assert "Run the full test suite" not in redirected
+    # The same goal, seen from its own folder, says the same thing.
+    own = _context(session_start_payload(live))
+    assert "Waiting on: you — Does this match what you want?" in own
+
+
+def test_the_list_says_who_each_goal_is_waiting_on(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    asking = _goal_in_worktree(base, "asking job")
+    _goal_in_worktree(base, "quiet job")
+    _ask_user(asking, "Does this match what you want?")
+    lines = _context(session_start_payload(base)).splitlines()
+    assert any("asking job" in line and "waiting on you" in line for line in lines)
+    assert any("quiet job" in line and "waiting on the agent" in line for line in lines)
 
 
 def test_only_finished_goals_elsewhere_gives_exactly_todays_output(tmp_path: Path) -> None:
@@ -480,6 +508,67 @@ def test_the_only_live_goal_being_corrupt_gives_todays_output(tmp_path: Path) ->
     broken = _goal_in_worktree(base, "broken job")
     (next((broken / ".agent-workflow" / "goals").iterdir()) / "events.jsonl").write_text("not json\n")
     assert session_start_payload(base) == _today(base)
+
+
+def _files_under(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_session_start_only_asks_git_for_the_worktree_list_and_writes_nothing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    base = _base_repo(tmp_path / "base")
+    alpha = _goal_in_worktree(base, "alpha job")
+    for name in ("beta", "gamma"):
+        _goal_in_worktree(base, f"{name} job")
+    asked: list[list[str]] = []
+    real = subprocess.run
+
+    def recording(cmd, *args, **kwargs):
+        if cmd and cmd[0] == "git":
+            asked.append(list(cmd[1:]))
+        return real(cmd, *args, **kwargs)
+
+    for session in (base, alpha):
+        asked.clear()
+        before = _files_under(base / ".git")
+        monkeypatch.setattr(subprocess, "run", recording)
+        assert session_start_payload(session)
+        monkeypatch.setattr(subprocess, "run", real)
+        # Git's own bookkeeping (worktree index files included) must not change either.
+        assert _files_under(base / ".git") == before
+        assert {command[0] for command in asked} <= {"rev-parse", "worktree"}, asked
+
+
+def test_a_worktree_whose_folder_was_deleted_does_not_break_the_block(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    gone = _goal_in_worktree(base, "gone job")
+    live = _goal_in_worktree(base, "live job")
+    shutil.rmtree(gone)  # git still lists it (prunable)
+    redirected = _context(session_start_payload(base))
+    assert "live job" in redirected and f"Goal folder: {live}" in redirected
+    own = _context(session_start_payload(live))
+    assert "Waiting on:" in own  # the status lines survive a stale sibling
+
+
+def test_an_unreadable_own_goal_is_redirected_and_said_so(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    create_goal("the damaged job", base, workspace="in_place")
+    (next((base / ".agent-workflow" / "goals").iterdir()) / "events.jsonl").write_text("not json\n")
+    live = _goal_in_worktree(base, "live job")
+    context = _context(session_start_payload(base))
+    assert f"Goal folder: {live}" in context
+    assert "finished, missing or unreadable" in context
+
+
+def test_the_redirect_points_at_the_live_goals_own_file(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    live = _goal_in_worktree(base, "live job")
+    assert f"{live}/.goals/GOAL.md" in _context(session_start_payload(base))
 
 
 # --- hooks CLI ------------------------------------------------------------- #
