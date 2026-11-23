@@ -136,9 +136,8 @@ def _session_start_text(cwd: Path, own_dir: Path | None, own: GoalSnapshot | Non
         [
             render_context_block(snapshot),
             "",
-            f"Goal folder: {folder} — this session did not start there. The folder it started "
-            "in has no goal in progress (its goal is finished, or it has none). Work in the "
-            "goal folder, and run `goals` commands from it.",
+            f"Goal folder: {folder} — work in this folder, and run `goals` commands from it. "
+            "This session's own goal (in the folder it started in) is finished, or there is none.",
             *_status_lines(snapshot, folder=folder),
         ]
     )
@@ -191,7 +190,8 @@ def _several_goals_text(live: list[tuple[Path, GoalSnapshot]]) -> str:
     lines = [
         "## Goals in progress in this repo",
         "",
-        "The folder this session started in has no goal in progress, but these are:",
+        "This session's own goal (in the folder it started in) is finished, or there is none, "
+        "but these goals are in progress:",
     ]
     for folder, snapshot in live[:MAX_LISTED_GOALS]:
         waiting = build_current_checkpoint_brief(snapshot).waiting_on

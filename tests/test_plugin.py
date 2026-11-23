@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -315,6 +316,23 @@ def test_finished_goal_in_this_folder_is_not_shown_when_another_is_live(tmp_path
     assert "the old finished job" not in context
     assert f"Goal folder: {live}" in context
     assert "finished" in context  # says why the session was redirected
+
+
+def test_a_second_live_goal_in_the_same_folder_is_found_without_a_false_claim(
+    tmp_path: Path,
+) -> None:
+    # Older Goals allowed two goals in one folder. Build the live one elsewhere and copy it in, so
+    # that the folder's most recently updated goal (the one the session picks) is the finished one.
+    scratch = _base_repo(tmp_path / "scratch")
+    create_goal("the second live job", scratch, workspace="in_place")
+    base = _base_repo(tmp_path / "base")
+    create_goal("the old finished job", base, workspace="in_place")
+    _finish(base)
+    live_dir = next((scratch / ".agent-workflow" / "goals").iterdir())
+    shutil.copytree(live_dir, base / ".agent-workflow" / "goals" / live_dir.name)
+    context = _context(session_start_payload(base))
+    assert "the second live job" in context and "the old finished job" not in context
+    assert "did not start there" not in context
 
 
 def test_session_in_a_finished_worktree_is_pointed_at_the_live_one(tmp_path: Path) -> None:
