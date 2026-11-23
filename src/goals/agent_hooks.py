@@ -5,7 +5,9 @@ they are testable in-process. The plugin's ``hooks.json`` just runs the matching
 ``goals hooks ...`` command, so there is no fragile standalone script and no
 second code path.
 
-- **SessionStart** → inject the active goal's context (silent no-op if none).
+- **SessionStart** → inject the context of the goal really in progress: the session's own
+  folder's goal, or, when that one is finished or missing, the goal in progress in another of
+  the repo's working folders (several are listed). Silent no-op if none.
 - **Stop** (opt-in) → block stopping while the current phase still needs the
   agent, so the loop doesn't end mid-phase. Off unless ``GOALS_ENFORCE`` is set.
 - **UserPromptSubmit** → record the user's own typed words in every goal that is
@@ -20,12 +22,22 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.checkpoints import checkpoint_is_asked
+from goals.checkpoints import build_current_checkpoint_brief, checkpoint_is_asked
 from goals.git_ops import find_git_root, goal_worktrees
-from goals.models import Event, EventType, GateVerdict, GoalStatus, Phase, UserMessage
+from goals.models import (
+    Event,
+    EventType,
+    GateVerdict,
+    GoalBrief,
+    GoalSnapshot,
+    GoalStatus,
+    Phase,
+    UserMessage,
+)
 from goals.portability import render_context_block
 from goals.runtime import (
     MAX_PHASE_ATTEMPTS_ENV,
+    active_goal_dir,
     load_active_snapshot,
     resolve_max_phase_attempts,
 )
@@ -67,24 +79,140 @@ _NON_BLOCKING_STATUSES = (
 )
 
 
-def session_start_payload(cwd: Path) -> str:
-    """JSON that injects the active goal block, or "" when there's no goal.
+#: Most goals listed when several are in progress; the rest are only counted.
+MAX_LISTED_GOALS = 5
 
-    A hook must never crash the session, so any failure degrades to a silent
-    no-op (fail-open) rather than propagating.
+#: Longest question or objective kept on one line of the session-start block.
+_LINE_CHARS = 160
+
+_NEXT_COMMAND = "goals next --agent claude"
+
+
+def session_start_payload(cwd: Path) -> str:
+    """JSON that injects the goal this session should work from, or "" when there is none.
+
+    The goal in the session's own folder comes first, as it always has. When that goal is
+    finished or missing, the repo's other working folders are searched for a goal that is really
+    in progress: one is named (with its folder), several are listed so the user can say which.
+
+    A hook must never crash the session, so any failure degrades to a silent no-op (fail-open)
+    rather than propagating, and any failure in the new search degrades to exactly what this
+    hook gave before it looked past the session's own folder.
     """
+    own_dir: Path | None = None
+    own: GoalSnapshot | None = None
     try:
-        snapshot = load_active_snapshot(cwd)
-        return json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": render_context_block(snapshot),
-                }
-            }
-        )
+        own_dir = active_goal_dir(cwd)
+        own = load_active_snapshot(cwd)
+    except Exception:  # noqa: BLE001 - no goal here, or an unreadable one: look elsewhere
+        own = None
+    try:
+        today = render_context_block(own) if own is not None else ""
     except Exception:  # noqa: BLE001 - never crash a session hook; no-op instead
+        today = ""
+    try:
+        text = _session_start_text(cwd, own_dir, own) or today
+    except Exception:  # noqa: BLE001 - the search is an extra: fall back to today's block
+        text = today
+    if not text:
         return ""
+    return json.dumps(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    )
+
+
+def _session_start_text(cwd: Path, own_dir: Path | None, own: GoalSnapshot | None) -> str:
+    """The block to inject, or "" to keep today's (own folder's goal, or nothing)."""
+    if own is not None and own.status in _RECORDING_STATUSES:
+        # Already in the right folder: the same block as ever, plus where things stand.
+        return "\n".join([render_context_block(own), "", *_status_lines(own)])
+    live = _live_goals_elsewhere(cwd, own_dir)
+    if not live:
+        return ""
+    if len(live) > 1:
+        return _several_goals_text(live)
+    folder, snapshot = live[0]
+    return "\n".join(
+        [
+            render_context_block(snapshot),
+            "",
+            f"Goal folder: {folder} — this session did not start there. The folder it started "
+            "in has no goal in progress (its goal is finished, or it has none). Work in the "
+            "goal folder, and run `goals` commands from it.",
+            *_status_lines(snapshot, folder=folder),
+        ]
+    )
+
+
+def _live_goals_elsewhere(cwd: Path, own_dir: Path | None) -> list[tuple[Path, GoalSnapshot]]:
+    """Goals in progress in the repo's working folders other than the session's own goal."""
+    found: list[tuple[Path, GoalSnapshot]] = []
+    for tier, _own_checkout in _candidate_goal_dirs(cwd):
+        for goal_dir in tier:
+            if own_dir is not None and goal_dir.resolve() == own_dir.resolve():
+                continue
+            try:
+                snapshot = EventStore(goal_dir).snapshot()
+            except Exception:  # noqa: BLE001 - an unreadable log: skip that folder, keep going
+                continue
+            if snapshot.status in _RECORDING_STATUSES:
+                found.append((goal_dir.parents[2], snapshot))
+    found.sort(key=lambda item: item[1].last_updated, reverse=True)
+    return found
+
+
+def _status_lines(snapshot: GoalSnapshot, *, folder: Path | None = None) -> list[str]:
+    """"Waiting on" and "Next" lines: the last thing in the block, so the action is the last read."""
+    brief = build_goal_brief(snapshot)
+    where = f" (in {folder})" if folder is not None else ""
+    if brief.waiting_on == "you":
+        question = _open_question(brief)
+        return [f"Waiting on: you — {question}", f"Next: ask the user: {question}{where}"]
+    if brief.waiting_on == "agent":
+        return [
+            "Waiting on: the agent (nothing needed from the user)",
+            f"Next: run `{_NEXT_COMMAND}`{where}",
+        ]
+    return ["Waiting on: no one", f"Next: run `goals check`{where}"]
+
+
+def _open_question(brief: GoalBrief) -> str:
+    checkpoint = brief.current_checkpoint
+    if checkpoint is not None and checkpoint.waiting_on == "you" and checkpoint.checkpoint_title:
+        text = checkpoint.checkpoint_title
+    elif brief.user_actions:
+        text = brief.user_actions[0].plain_summary
+    else:
+        text = "see `goals brief`"
+    return _one_line(text.removeprefix("Ask the user:").strip())
+
+
+def _several_goals_text(live: list[tuple[Path, GoalSnapshot]]) -> str:
+    lines = [
+        "## Goals in progress in this repo",
+        "",
+        "The folder this session started in has no goal in progress, but these are:",
+    ]
+    for folder, snapshot in live[:MAX_LISTED_GOALS]:
+        waiting = build_current_checkpoint_brief(snapshot).waiting_on
+        lines.append(
+            f"- {_one_line(snapshot.objective)} (step {snapshot.current_phase or 'none'}, "
+            f"waiting on {waiting}): {folder}"
+        )
+    hidden = len(live) - MAX_LISTED_GOALS
+    if hidden > 0:
+        lines.append(f"- ...and {hidden} more not shown")
+    lines += [
+        "",
+        "Next: if this conversation has not already settled which goal we are working on, ask "
+        f"the user which one; then work in that goal's folder and run `{_NEXT_COMMAND}` there.",
+    ]
+    return "\n".join(lines)
+
+
+def _one_line(text: str) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= _LINE_CHARS else flat[: _LINE_CHARS - 1].rstrip() + "…"
 
 
 def stop_payload(

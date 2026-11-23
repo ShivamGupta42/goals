@@ -6,8 +6,12 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from goals.agent_hooks import session_start_payload, stop_payload
+from goals.checkpoint_workflows import record_checkpoint
 from goals.cli import app
-from goals.runtime import create_goal
+from goals.models import CheckpointKind, CheckpointStatus, Event, EventType, GoalStatus
+from goals.portability import render_context_block
+from goals.runtime import create_goal, load_active_snapshot
+from goals.storage import EventStore
 
 REPO = Path(__file__).resolve().parents[1]
 runner = CliRunner()
@@ -242,7 +246,234 @@ def test_stop_fails_open_on_unexpected_error(tmp_path: Path, monkeypatch) -> Non
     assert session_start_payload(tmp_path) == ""
 
 
+# --- session start names the goal that is really in progress --------------- #
+def _base_repo(path: Path) -> Path:
+    path.mkdir()
+    for cmd in (
+        ["git", "init", "-q", "-b", "feature"],
+        ["git", "config", "user.email", "t@e.com"],
+        ["git", "config", "user.name", "T"],
+    ):
+        _run(cmd, path)
+    (path / "README.md").write_text("# demo\n")
+    _run(["git", "add", "-A"], path)
+    _run(["git", "commit", "-q", "-m", "init"], path)
+    return path
+
+
+def _goal_in_worktree(base: Path, objective: str) -> Path:
+    return Path(create_goal(objective, base, workspace="worktree").topology.worktree_path)
+
+
+def _finish(folder: Path) -> None:
+    """Accept every phase of the goal in ``folder`` (through the event log), so it is complete."""
+    snapshot = load_active_snapshot(folder)
+    store = EventStore(folder / ".agent-workflow" / "goals" / snapshot.goal_id)
+    for phase in snapshot.phases:
+        store.append(
+            Event(
+                goal_id=snapshot.goal_id,
+                event_type=EventType.PHASE_ACCEPTED,
+                actor="test",
+                payload={"phase_id": phase.phase_id},
+            )
+        )
+    assert load_active_snapshot(folder).status == GoalStatus.COMPLETE
+
+
+def _context(payload: str) -> str:
+    return json.loads(payload)["hookSpecificOutput"]["additionalContext"]
+
+
+def _today(folder: Path) -> str:
+    """The exact payload this hook gave before it looked past the session's own folder."""
+    block = render_context_block(load_active_snapshot(folder))
+    return json.dumps(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": block}}
+    )
+
+
+def test_session_in_base_checkout_is_pointed_at_the_goal_in_a_worktree(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    live = _goal_in_worktree(base, "build the real thing")
+    context = _context(session_start_payload(base))
+    assert "build the real thing" in context
+    assert f"Goal folder: {live}" in context
+    assert "Waiting on:" in context
+    # Goal first, next action last (a long block loses its middle).
+    assert context.index("build the real thing") < context.index("Waiting on:")
+    assert context.rstrip().splitlines()[-1].startswith("Next:")
+
+
+def test_finished_goal_in_this_folder_is_not_shown_when_another_is_live(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    create_goal("the old finished job", base, workspace="in_place")
+    _finish(base)
+    live = _goal_in_worktree(base, "the live job")
+    context = _context(session_start_payload(base))
+    assert "the live job" in context
+    assert "the old finished job" not in context
+    assert f"Goal folder: {live}" in context
+    assert "finished" in context  # says why the session was redirected
+
+
+def test_session_in_a_finished_worktree_is_pointed_at_the_live_one(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    done = _goal_in_worktree(base, "done job")
+    live = _goal_in_worktree(base, "live job")
+    _finish(done)
+    context = _context(session_start_payload(done))
+    assert "live job" in context and "done job" not in context
+    assert f"Goal folder: {live}" in context
+
+
+def test_several_live_goals_are_listed_and_the_user_is_asked_which(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    alpha = _goal_in_worktree(base, "alpha job")
+    beta = _goal_in_worktree(base, "beta job")
+    context = _context(session_start_payload(base))
+    assert "alpha job" in context and "beta job" in context
+    assert str(alpha) in context and str(beta) in context
+    assert "goals:context:start" not in context  # no single goal is named as the active one
+    last = context.rstrip().splitlines()[-1]
+    assert last.startswith("Next:") and "ask the user which" in last
+    # Re-injected after every /compact: must not interrupt work already settled in the chat.
+    assert "already" in last
+
+
+def test_listing_is_capped(tmp_path: Path, monkeypatch) -> None:
+    from goals import agent_hooks
+
+    monkeypatch.setattr(agent_hooks, "MAX_LISTED_GOALS", 2)
+    base = _base_repo(tmp_path / "base")
+    for name in ("one", "two", "three"):
+        _goal_in_worktree(base, f"{name} job")
+    context = _context(session_start_payload(base))
+    assert sum(f"{name} job" in context for name in ("one", "two", "three")) == 2
+    assert "1 more" in context
+
+
+def test_own_live_goal_still_wins_and_gets_status_lines(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    alpha = _goal_in_worktree(base, "alpha job")
+    _goal_in_worktree(base, "beta job")
+    context = _context(session_start_payload(alpha))
+    assert "alpha job" in context and "beta job" not in context
+    assert "Goal folder:" not in context  # already in the right folder
+    assert "Waiting on:" in context
+    assert context.rstrip().splitlines()[-1].startswith("Next:")
+
+
+def test_a_failing_status_line_falls_back_to_todays_block(tmp_path: Path, monkeypatch) -> None:
+    from goals import agent_hooks
+
+    base = _base_repo(tmp_path / "base")
+    alpha = _goal_in_worktree(base, "alpha job")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr(agent_hooks, "build_goal_brief", boom)
+    assert session_start_payload(alpha) == _today(alpha)
+
+
+def test_waiting_on_you_names_the_open_question(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    live = _goal_in_worktree(base, "alpha job")
+    record_checkpoint(
+        live,
+        "P1",
+        "alignment",
+        kind=CheckpointKind.UNDERSTANDING,
+        status=CheckpointStatus.NEEDS_USER,
+        needs_user=True,
+        title="Does this match what you want?",
+        summary="waiting",
+    )
+    context = _context(session_start_payload(base))
+    assert "Waiting on: you" in context
+    assert "Does this match what you want?" in context
+
+
+def test_only_finished_goals_elsewhere_gives_exactly_todays_output(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    create_goal("the old finished job", base, workspace="in_place")
+    _finish(base)
+    done = _goal_in_worktree(base, "another finished job")
+    _finish(done)
+    assert session_start_payload(base) == _today(base)
+
+
+def test_a_goal_that_is_paused_does_not_count_as_in_progress(tmp_path: Path, monkeypatch) -> None:
+    base = _base_repo(tmp_path / "base")
+    _goal_in_worktree(base, "paused job")
+    real = EventStore.snapshot
+
+    def paused(self):
+        snapshot = real(self)
+        snapshot.status = GoalStatus.PAUSED
+        return snapshot
+
+    monkeypatch.setattr(EventStore, "snapshot", paused)
+    assert session_start_payload(base) == ""
+
+
+def test_a_broken_lookup_falls_back_to_exactly_todays_output(tmp_path: Path, monkeypatch) -> None:
+    from goals import agent_hooks
+
+    base = _base_repo(tmp_path / "base")
+    create_goal("the old finished job", base, workspace="in_place")
+    _finish(base)
+    _goal_in_worktree(base, "the live job")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr(agent_hooks, "_live_goals_elsewhere", boom)
+    assert session_start_payload(base) == _today(base)
+
+
+def test_a_broken_lookup_with_no_own_goal_is_silent(tmp_path: Path, monkeypatch) -> None:
+    from goals import agent_hooks
+
+    base = _base_repo(tmp_path / "base")
+    _goal_in_worktree(base, "the live job")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr(agent_hooks, "_live_goals_elsewhere", boom)
+    assert session_start_payload(base) == ""
+
+
+def test_a_corrupt_log_in_another_folder_is_skipped(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    broken = _goal_in_worktree(base, "broken job")
+    _goal_in_worktree(base, "good job")
+    (next((broken / ".agent-workflow" / "goals").iterdir()) / "events.jsonl").write_text("not json\n")
+    context = _context(session_start_payload(base))
+    assert "good job" in context and "broken job" not in context
+
+
+def test_the_only_live_goal_being_corrupt_gives_todays_output(tmp_path: Path) -> None:
+    base = _base_repo(tmp_path / "base")
+    create_goal("the old finished job", base, workspace="in_place")
+    _finish(base)
+    broken = _goal_in_worktree(base, "broken job")
+    (next((broken / ".agent-workflow" / "goals").iterdir()) / "events.jsonl").write_text("not json\n")
+    assert session_start_payload(base) == _today(base)
+
+
 # --- hooks CLI ------------------------------------------------------------- #
+def test_hooks_session_start_names_the_worktree_goal(tmp_path: Path, monkeypatch) -> None:
+    base = _base_repo(tmp_path / "base")
+    live = _goal_in_worktree(base, "build the real thing")
+    monkeypatch.chdir(base)
+    result = runner.invoke(app, ["hooks", "session-start"])
+    assert result.exit_code == 0
+    assert f"Goal folder: {live}" in _context(result.stdout)
+
+
 def test_hooks_session_start_command(tmp_path: Path, monkeypatch) -> None:
     _repo_with_goal(tmp_path)
     monkeypatch.chdir(tmp_path)
