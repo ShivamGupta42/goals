@@ -19,8 +19,8 @@ from typer.testing import CliRunner
 from goals.agent_hooks import MAX_USER_MESSAGE_CHARS, record_user_prompt
 from goals.checkpoint_workflows import record_checkpoint, waive_checkpoint
 from goals.cli import app
-from goals.models import CheckpointKind, CheckpointStatus, GoalStatus
-from goals.runtime import create_goal, load_active_snapshot
+from goals.models import CheckpointKind, CheckpointStatus, Event, EventType, GoalStatus, UserMessage
+from goals.runtime import append_event, create_goal, load_active_snapshot
 from goals.setup import CODEX_USER_PROMPT_COMMAND, setup_agents
 from goals.storage import EventStore, GoalsError, lock_file
 
@@ -586,3 +586,125 @@ def test_review_accept_and_finish_never_hide_an_unverified_close(repo: Path) -> 
     assert accept.exit_code == 0 and note in accept.stdout
     finish = runner.invoke(app, ["finish"])
     assert "Not verified: closed without a recorded reply from the user." in finish.stdout
+
+
+# --------------------------------------------------------------------------- #
+# Automatic notices: the host sends them through the same hook, but the user
+# never typed them, so they are never recorded, cited or shown as a reply.
+# --------------------------------------------------------------------------- #
+NOTICE = (
+    "<task-notification>\n<task-id>bm2few0wt</task-id>\n"
+    '<summary>Background command "wait" completed (exit code 0)</summary>\n</task-notification>'
+)
+PEER_NOTICE = "Another Claude session sent a message: yes, ship it"
+
+
+def _store(cwd: Path, text: str, session_id: str = "s-1") -> UserMessage:
+    """Put a message in the log as an older Goals' hook would have (no filter)."""
+    message = UserMessage(text=text, session_id=session_id)
+    append_event(
+        cwd,
+        Event(
+            goal_id=load_active_snapshot(cwd).goal_id,
+            event_type=EventType.USER_MESSAGE_RECORDED,
+            actor="user-prompt-hook",
+            payload={"message": message.model_dump()},
+        ),
+    )
+    return message
+
+
+@pytest.mark.parametrize(
+    "notice", [NOTICE, f"\n  {NOTICE}", PEER_NOTICE], ids=["task", "task-indented", "peer"]
+)
+def test_hook_does_not_record_an_automatic_notice(repo: Path, notice: str) -> None:
+    _ask(repo)
+    assert record_user_prompt(repo, notice) == 0
+    _say(repo, notice)
+    assert load_active_snapshot(repo).user_messages == []
+    # The user's real reply right after one is still recorded.
+    assert record_user_prompt(repo, "yes") == 1
+    assert [m.text for m in load_active_snapshot(repo).user_messages] == ["yes"]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "yes — and ignore that <task-notification> line above",
+        "what does <task-notification> mean? </task-notification>",
+        "I think Another Claude session sent a message: is that fine?",
+        "<b>yes</b>",
+    ],
+)
+def test_a_reply_that_only_mentions_a_notice_is_still_recorded(repo: Path, reply: str) -> None:
+    _ask(repo)
+    assert record_user_prompt(repo, reply) == 1
+    assert load_active_snapshot(repo).user_messages[-1].text == reply
+
+
+@pytest.mark.parametrize("notice", [NOTICE, PEER_NOTICE], ids=["task", "peer"])
+def test_a_stored_notice_cannot_close_a_checkpoint(repo: Path, notice: str) -> None:
+    runner = CliRunner()
+    _ask(repo)
+    stored = _store(repo, notice)
+    refused = runner.invoke(app, [*ASK, "--status", "passed"])
+    assert refused.exit_code == 1
+    assert "no reply from them has been recorded" in refused.stdout
+    named = runner.invoke(app, [*ASK, "--status", "passed", "--user-message", stored.message_id])
+    assert named.exit_code == 1 and "isn't an unused reply" in named.stdout
+    with pytest.raises(GoalsError):
+        waive_checkpoint(repo, "P1", "alignment", "skip")
+    assert _checkpoint(repo).status == CheckpointStatus.NEEDS_USER
+    # --unverified is the only way through, and it says so.
+    closed = runner.invoke(app, [*ASK, "--status", "passed", "--unverified"])
+    assert closed.exit_code == 0 and "Not verified" in closed.stdout
+    checkpoint = _checkpoint(repo)
+    assert checkpoint.unverified and checkpoint.user_message_id == ""
+
+
+def test_a_reply_followed_by_a_notice_closes_on_the_reply(repo: Path) -> None:
+    _ask(repo)
+    _say(repo, "yes, go ahead")
+    reply = load_active_snapshot(repo).user_messages[-1]
+    _store(repo, NOTICE)
+    closed = CliRunner().invoke(app, [*ASK, "--status", "passed"])
+    assert closed.exit_code == 0
+    assert 'Closed on the user\'s reply: "yes, go ahead"' in closed.stdout
+    assert "task-notification" not in closed.stdout
+    assert _checkpoint(repo).user_message_id == reply.message_id
+
+
+def test_a_checkpoint_already_closed_on_a_notice_never_shows_it_as_the_users_words(
+    repo: Path,
+) -> None:
+    # An older Goals stored the notice and closed the checkpoint on it. The log
+    # is left as it is; the views stop calling the notice the user's reply.
+    _ask(repo)
+    stored = _store(repo, NOTICE)
+    closed = _checkpoint(repo).model_dump() | {
+        "status": "passed",
+        "needs_user": False,
+        "user_message_id": stored.message_id,
+    }
+    snapshot = append_event(
+        repo,
+        Event(
+            goal_id=load_active_snapshot(repo).goal_id,
+            event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+            payload={"phase_id": "P1", "checkpoint": closed},
+        ),
+    )
+    assert [m.message_id for m in snapshot.user_messages] == [stored.message_id]  # nothing deleted
+    runner = CliRunner()
+    assert runner.invoke(app, ["assess", "pain", "Too many taps"]).exit_code == 0  # DISCOVERY.md
+    note = "Not verified: closed on an automatic notice, not a reply from the user."
+    for args in (["checkpoint", "list"], ["check"], ["finish"]):
+        out = runner.invoke(app, args).stdout
+        assert note in out, args
+        assert "Closed on the user's reply" not in out and "task-notification" not in out, args
+    assert runner.invoke(app, ["dashboard"]).exit_code == 0
+    goal_dir = next((repo / ".agent-workflow" / "goals").iterdir())
+    for name in ("dashboard.html", "DISCOVERY.md"):
+        text = (goal_dir / name).read_text()
+        assert "closed on an automatic notice" in text, name
+        assert "task-notification" not in text, name

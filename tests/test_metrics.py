@@ -410,3 +410,21 @@ def test_a_long_list_of_failed_reviews_is_cut_with_a_count(tmp_path: Path) -> No
     assert "Reviews that did not pass (12)" in text
     assert text.count(" fail: reason ") == 10
     assert "(+2 more; see --json)" in text
+
+
+def test_automatic_notices_are_not_counted_as_user_replies(tmp_path: Path) -> None:
+    """Older logs hold host notices the hook stored as if the user typed them."""
+    notice = "<task-notification>\n<task-id>b1</task-id>\n</task-notification>"
+    log = _write_log(
+        tmp_path,
+        "notices",
+        [
+            _event("goal_created"),
+            _event("user_message_recorded", {"message": {"text": "yes"}}),
+            _event("user_message_recorded", {"message": {"text": notice}}),
+            _event("user_message_recorded", {"message": {"text": "why <task-notification>?"}}),
+            _event("user_message_recorded", {"message": "odd shape"}),  # still a stored reply
+        ],
+    )
+
+    assert summarize_log(log).user_replies == 3

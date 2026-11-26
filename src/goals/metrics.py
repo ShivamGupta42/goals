@@ -19,6 +19,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from goals.checkpoints import is_automatic_notice
 from goals.git_ops import find_git_root, list_worktrees
 from goals.proof_summary import PROOF_LABELS
 
@@ -126,7 +127,11 @@ def summarize_log(path: Path) -> GoalMetrics:
         payload = payload if isinstance(payload, dict) else {}
         kind = event["event_type"]
         if kind == "user_message_recorded":
-            replies += 1
+            message = payload.get("message")
+            text = message.get("text") if isinstance(message, dict) else None
+            # A host notice an older Goals stored is not something the user said.
+            if not (isinstance(text, str) and is_automatic_notice(text)):
+                replies += 1
         elif kind == "phase_reviewed":
             review = _review_of(payload)
             if review is None:

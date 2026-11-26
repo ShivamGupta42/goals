@@ -22,7 +22,12 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
+from goals.checkpoints import (
+    checkpoint_is_asked,
+    checkpoint_waits_on_user,
+    is_automatic_notice,
+    is_future_phase,
+)
 from goals.git_ops import find_git_root, goal_worktrees
 from goals.models import (
     Event,
@@ -356,11 +361,12 @@ def record_user_prompt(cwd: Path, prompt: str, *, session_id: str = "") -> int:
       only when exactly one goal is waiting — with two, it's ambiguous, so none.
 
     Only active goals with a checkpoint put to the user record anything, and
-    slash commands (``/goals:next``) are commands, not answers. Returns how many
-    goals recorded it.
+    slash commands (``/goals:next``) are commands, not answers. Neither are the
+    host's own notices (a background task reporting back), which arrive through
+    the same hook. Returns how many goals recorded it.
     """
     text = prompt.strip()
-    if not text or text.startswith("/"):
+    if not text or text.startswith("/") or is_automatic_notice(text):
         return 0
     if len(text) > MAX_USER_MESSAGE_CHARS:
         text = text[: MAX_USER_MESSAGE_CHARS - 1] + "…"
