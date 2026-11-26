@@ -1,6 +1,6 @@
 # Goals improvement plan, round 3: test what other projects offer on small Haiku goals before building it
 
-Snapshot: 2026-11-26, Goals `origin/main` at `004bf71`. **Plan only: nothing in Goals' source is changed.** Three trial runs were made in a throwaway folder (see "Where we stand today"). Continues the [round-2 plan](2026-11-22-improvement-plan-round-2.md). Sources: [comparison.md](../research/loop-engineering/comparison.md) and [cards.md](../research/loop-engineering/cards.md) (12 open-source projects), [findings.md](../research/long-running-agents/findings.md) (29 papers).
+Snapshot: 2026-11-26, Goals `origin/main` at `004bf71`. **Plan only: nothing in Goals' source is changed.** Four trial runs were made in a throwaway folder (see "Where we stand today"). Continues the [round-2 plan](2026-11-22-improvement-plan-round-2.md). Sources: [comparison.md](../research/loop-engineering/comparison.md) and [cards.md](../research/loop-engineering/cards.md) (12 open-source projects), [findings.md](../research/long-running-agents/findings.md) (29 papers).
 
 ## The short answer
 
@@ -47,7 +47,7 @@ None of the round-2 "bring it back" events is recorded: no run that kept spendin
 - The lessons trial (item 5) waits: phase 1 has 1 stored lesson and needs 3.
 - The reviewer advice (item 3) is live. Its window (the next 3 research or docs goals) is open.
 
-**Three trial runs today** **[reproduced today]**, Haiku 5.5 (`claude-haiku-5-5`), Claude Code 2.1.331, Goals from the main checkout (`004bf71`, without PR #53), in a throwaway copy of `examples/todo-app` outside this repo:
+**Trial runs today** **[reproduced today]**, Haiku 5.5 (`claude-haiku-5-5`), Claude Code 2.1.331, Goals from the main checkout (`004bf71`, without PR #53), in a throwaway copy of `examples/todo-app` outside this repo:
 
 | Trial | Goal given | What Haiku did | Time, reported cost |
 |---|---|---|---|
@@ -74,6 +74,8 @@ B=$(mktemp -d) && cp -R /Users/shivamgupta/p_code/goals/examples/todo-app "$B/to
        --allowedTools "Bash(goals:*)" "Bash(git:*)" "Bash(uv:*)" "Bash(python:*)" "Bash(python3:*)" "Bash(pytest:*)" "Bash(cd:*)" "Bash(ls:*)" "Bash(cat:*)" Read Edit Write Glob Grep Skill \
   ; echo "goal folder: $(ls -d "$B"/todo-app-*)"
 ```
+
+I ran this command once as written (trial 4): the goal finished, 3 tests pass, and again no question was asked. So the clear goal skipped the question in 2 of 2 runs.
 
 `--setting-sources project,local` keeps your own hooks and plugins out of the run, and `command claude` skips the shell alias that turns permission checks off.
 
@@ -217,5 +219,5 @@ Everything else in the round-2 "Not now" table stays as it is there.
 - **Each trial was run once, on a weak model, with no person in the chat.** Trial 1's skipped question and trial 2's wait may both be chance. Haiku is not the model your sessions run, replies were scripted, and the permission list refused 1 or 2 commands per run, which changes what the agent does. Item 0's first job is 3 runs of each, and stage 5 (real use) stays for this reason.
 - **A change tuned to pass on Haiku could get worse for stronger models.** The bench can propose an idea again. Only real use keeps it.
 - **Same team on both sides.** I wrote the research, this plan and the test goals. A stronger reviewer model was consulted twice while drafting and its points were applied. No independent review of the plan and no human review has been done yet.
-- **Some facts are weaker than they look.** The peer features are README claims **[peer]**: no peer tool was run. Cost is what Claude Code reports (1 to 3 cents a run on cached input) and is not checked against your bill or usage limit. The copy-paste command above was run once as written. The trials ran the main checkout's code (`004bf71`) without PR #53, so `new-session` tests the new session-start block only after #53 is merged and pulled.
+- **Some facts are weaker than they look.** The peer features are README claims **[peer]**: no peer tool was run. Cost is what Claude Code reports (1 to 3 cents a run on cached input) and is not checked against your bill or usage limit. The trials ran the main checkout's code (`004bf71`) without PR #53, so `new-session` tests the new session-start block only after #53 is merged and pulled.
 - **Time estimates are mine and run high.** Goal (a) took about 40 minutes against 2 h 15 min, goal (b) about 30 minutes against 3 h. Line numbers are from `004bf71` and will drift, so each cite also names its function.
