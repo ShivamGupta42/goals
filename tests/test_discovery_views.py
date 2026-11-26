@@ -318,6 +318,34 @@ def test_the_dashboard_never_claims_a_yes_without_the_users_words(repo: Path) ->
     assert "you said yes" not in html and "closed with no reply from you on record" in html
 
 
+def test_the_dashboard_never_shows_an_automatic_notice_as_the_users_yes(repo: Path) -> None:
+    from goals.checkpoint_workflows import property_state
+    from goals.models import Event, EventType, UserMessage
+    from goals.storage import EventStore
+
+    _invoke("assess", "want", "Works offline", "--proof", "user")
+    for phase_id in ("P1", "P2", "P3"):
+        _accept_quick(repo, phase_id)
+    snapshot = load_active_snapshot(repo)
+    dp = snapshot.desired_properties[0]
+    check = next(c for c in snapshot.phases[3].checkpoints if c.checkpoint_id == dp.property_id)
+    # an older Goals stored a background-task notice and closed the check on it
+    notice = UserMessage(text="<task-notification>\n<task-id>b1</task-id>\n</task-notification>")
+    closed = check.model_dump() | {
+        "status": "passed", "needs_user": False, "user_message_id": notice.message_id,
+    }
+    store = EventStore(_goal_dir(repo))
+    store.append(Event(goal_id=snapshot.goal_id, event_type=EventType.USER_MESSAGE_RECORDED,
+                       payload={"message": notice.model_dump()}))
+    store.append(Event(goal_id=snapshot.goal_id, event_type=EventType.PHASE_CHECKPOINT_RECORDED,
+                       payload={"phase_id": "P4", "checkpoint": closed}))
+    state = property_state(load_active_snapshot(repo), dp)
+    assert state == "closed on an automatic notice, not a reply from you (not verified)"
+    _invoke("dashboard")
+    html = (_goal_dir(repo) / "dashboard.html").read_text()
+    assert "you said yes" not in html and "task-notification" not in html
+
+
 def test_replies_on_record_show_what_the_user_was_asked(repo: Path) -> None:
     _invoke("assess", "pain", "Logging takes too many taps")
     align = ["checkpoint", "record", "P1", "alignment", "--kind", "understanding"]

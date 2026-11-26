@@ -8,6 +8,7 @@ from goals.checkpoints import (
     USER_CHECKPOINT_KINDS,
     build_current_checkpoint_brief,
     checkpoint_is_asked,
+    is_automatic_notice,
     is_future_phase,
     is_user_checkpoint,
     replies_since_asked,
@@ -76,6 +77,8 @@ def checkpoint_provenance(snapshot: GoalSnapshot, checkpoint: PhaseCheckpoint) -
         message = user_message_by_id(snapshot, checkpoint.user_message_id)
         if message is None:
             return f"Cites reply {checkpoint.user_message_id}, not found on this machine."
+        if is_automatic_notice(message.text):
+            return "Not verified: closed on an automatic notice, not a reply from the user."
         return f'Closed on the user\'s reply: "{_clip(message.text)}"'
     if checkpoint.unverified:
         return "Not verified: closed without a recorded reply from the user."
@@ -110,6 +113,8 @@ def property_state(snapshot: GoalSnapshot, wanted: DesiredProperty) -> str:
             # Never claim the user's answer without their words on record (e.g.
             # closed by an older Goals, or a cited reply missing on this machine).
             return "closed with no reply from you on record"
+        if is_automatic_notice(message.text):
+            return "closed on an automatic notice, not a reply from you (not verified)"
         verb = "you said yes" if check.status == CheckpointStatus.PASSED else "you skipped this"
         return f'{verb}: "{_clip(message.text)}"'
 

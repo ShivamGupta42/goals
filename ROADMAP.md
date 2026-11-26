@@ -234,8 +234,12 @@ refusal, keep the provenance labels, and investigate.
 
 - ~~Does the `UserPromptSubmit` payload carry the user's text reliably?~~
   Answered: yes — `prompt` is the raw typed text (slash commands arrive
-  unexpanded; the hook skips them), it fires only for human prompts, and exit 0
-  with no output leaves the prompt untouched. Several open questions: replies
+  unexpanded; the hook skips them), and exit 0 with no output leaves the prompt
+  untouched. Corrected 2026-11-26: it does not fire only for human prompts. The
+  host also runs it for a background task reporting back (`<task-notification>…`,
+  skipped by its opening tag), a message from another session, and a scheduled
+  prompt. A scheduled prompt carries no marker in its text, so it is still
+  recorded as a reply. Several open questions: replies
   bind to the asking session; see Decisions.
 - ~~What user-message hook does Codex expose?~~ Codex 0.156 has `UserPromptSubmit`
   in `hooks.json`; its payload fields are still unverified (see Known limitations).

@@ -18,6 +18,17 @@ USER_CHECKPOINT_KINDS = {
     CheckpointKind.HUMAN_VALIDATION,
     CheckpointKind.APPROVAL,
 }
+#: How text the host sends through the user-prompt hook on its own begins: a
+#: background task reporting back (seen in stored replies), and a message from
+#: another agent session (its wording in Claude Code's session transcripts).
+#: The user never typed these, so they are not replies. Matched at the start
+#: only — a real reply may mention either further in.
+AUTOMATIC_NOTICE_PREFIXES = ("<task-notification>", "Another Claude session sent a message:")
+
+
+def is_automatic_notice(text: str) -> bool:
+    """True for hook text the host wrote itself, not something the user typed."""
+    return text.lstrip().startswith(AUTOMATIC_NOTICE_PREFIXES)
 
 
 def checkpoint_blocks_phase(checkpoint: PhaseCheckpoint) -> bool:
@@ -67,7 +78,8 @@ def replies_since_asked(
     ``asked_at`` is the moment it was (re)asked (``updated_at`` for checkpoints
     recorded before that field). If the asking host session is known, only its
     replies count. A reply already cited by another checkpoint doesn't count:
-    one answer closes one question.
+    one answer closes one question. Neither does an automatic notice an older
+    Goals stored as if the user had typed it.
     """
     if checkpoint is None or not checkpoint_is_asked(checkpoint):
         return []
@@ -83,6 +95,7 @@ def replies_since_asked(
         for m in snapshot.user_messages
         if m.recorded_at > asked_at
         and m.message_id not in cited
+        and not is_automatic_notice(m.text)
         and (not checkpoint.asked_session or m.session_id == checkpoint.asked_session)
     ]
 
