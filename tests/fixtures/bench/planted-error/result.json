@@ -1,0 +1,25 @@
+{
+  "instance": "planted-error",
+  "run": 1,
+  "model_requested": "haiku",
+  "project": "support-notes",
+  "start_files": {
+    "README.md": "f084a5934e330e58478537000af04985d1150858d67c64eb93b2441805604037",
+    "notes.md": "118a18ad19a527f7b95b9cf2a9bdec2f735b0eff88e01e4fdc06251a3743a319"
+  },
+  "run_dir": "/TMP/run",
+  "bench_dir": "/REPO/bench",
+  "repo_name": "REPO",
+  "steps": [
+    {
+      "n": 1,
+      "prompt": "/goals:create Write a 5-line summary of notes.md and save it as summary.md",
+      "fresh_session": true,
+      "session_id": "SESSION-1",
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 76.6
+    }
+  ],
+  "skipped_replies": "the goal was already complete"
+}

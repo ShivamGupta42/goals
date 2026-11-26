@@ -1,0 +1,26 @@
+{
+  "instance": "clear-goal",
+  "run": 1,
+  "model_requested": "haiku",
+  "project": "todo-app",
+  "start_files": {
+    "README.md": "a272705a2c309f956512e8214c3f4ed17ffe99dae0ce8b63e6b881e3a973dfe9",
+    "tests/test_todo.py": "016c7d25f031ea651987b668b5bc746bd281d2bff9e9fb73f0d3c88dc4bc3a70",
+    "todo.py": "5decaab5e0f159e409428ea81859caf0140db0b86df5a1f7f901c96b96b14675"
+  },
+  "run_dir": "/TMP/run",
+  "bench_dir": "/REPO/bench",
+  "repo_name": "REPO",
+  "steps": [
+    {
+      "n": 1,
+      "prompt": "/goals:create Add a remove(title) method to TodoList that deletes the task with that title, with a test",
+      "fresh_session": true,
+      "session_id": "SESSION-1",
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 85.0
+    }
+  ],
+  "skipped_replies": null
+}

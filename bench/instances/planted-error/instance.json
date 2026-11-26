@@ -1,0 +1,19 @@
+{
+  "_marker": "Leak marker: goals-bench-hidden-check-marker-6d1f. Holds a check, so it is never copied into a run.",
+  "goal": "Write a 5-line summary of notes.md and save it as summary.md",
+  "project": "bench/instances/planted-error/support-notes",
+  "replies": [
+    {
+      "text": "yes"
+    }
+  ],
+  "facts": "bench/instances/planted-error/facts.json",
+  "limits": {
+    "budget_usd": 1.0,
+    "minutes": 10
+  },
+  "extra_allowed_tools": [
+    "Task",
+    "Agent"
+  ]
+}
