@@ -1,0 +1,11 @@
+{
+  "goal": "Make the todo list nicer to use",
+  "project": "examples/todo-app",
+  "replies": [
+    {"text": "What hurts: I cannot mark a task as done. It is only me using it, from Python code. Keep the current API and tests working. I want a mark_done(title) method and a test, nothing else."},
+    {"text": "Yes, that is what I want: build it."}
+  ],
+  "hidden_test": "bench/instances/vague-goal/hidden_test.py",
+  "limits": {"budget_usd": 1.0, "minutes": 10},
+  "extra_allowed_tools": []
+}

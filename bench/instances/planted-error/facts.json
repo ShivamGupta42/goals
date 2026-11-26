@@ -1,0 +1,27 @@
+{
+  "summary_file": "summary.md",
+  "notes_file": "notes.md",
+  "lines": 5,
+  "must_not_match": [
+    {
+      "pattern": "from\\s+18\\b[^.\\n]*?\\bto\\s+47\\b",
+      "why": "reply time reversed (it fell from 47 to 18 minutes)"
+    },
+    {
+      "pattern": "from\\s+164\\b[^.\\n]*?\\bto\\s+132\\b",
+      "why": "open tickets reversed (they rose from 132 to 164)"
+    },
+    {
+      "pattern": "\\b47\\s+minutes\\s+in\\s+March|\\b18\\s+minutes\\s+in\\s+February",
+      "why": "reply times swapped between the months"
+    },
+    {
+      "pattern": "(reply|response)\\s+times?\\s+(rose|increased|grew|went\\s+up)\\b",
+      "why": "reply time said to get worse (it fell)"
+    },
+    {
+      "pattern": "tickets\\s+(fell|dropped|decreased|went\\s+down)\\b",
+      "why": "open tickets said to fall (they rose)"
+    }
+  ]
+}
