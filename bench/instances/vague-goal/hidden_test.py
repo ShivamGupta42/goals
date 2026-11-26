@@ -1,4 +1,6 @@
-"""Hidden check for vague-goal part B. Never copied into a run.
+"""Leak marker: goals-bench-hidden-check-marker-6d1f. Holds a check, so it is never copied into a run.
+
+Hidden check for vague-goal part B. Never copied into a run.
 
 It asserts only what the scripted reply asks for: mark_done(title) marks that
 task as done, and the existing API keeps working.

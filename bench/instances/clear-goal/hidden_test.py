@@ -1,4 +1,6 @@
-"""Hidden check for clear-goal (also used by new-session). Never copied into a run.
+"""Leak marker: goals-bench-hidden-check-marker-6d1f. Holds a check, so it is never copied into a run.
+
+Hidden check for clear-goal (also used by new-session). Never copied into a run.
 
 It asserts only what the goal sentence pins down. What happens with duplicate
 titles, a missing title or a different letter case is left to the agent.

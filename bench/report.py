@@ -7,6 +7,8 @@
 Runs are grouped by the code they tested, so a test goal is only ever compared
 with itself. Every figure here is a [bench] result: a weak model, with no
 person in the chat.
+
+Leak marker: goals-bench-hidden-check-marker-6d1f. Holds a check, so it is never copied into a run.
 """
 
 from __future__ import annotations

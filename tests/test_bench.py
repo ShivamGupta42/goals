@@ -347,6 +347,55 @@ def test_a_run_that_reads_the_bench_folder_is_void(tmp_path: Path, record: dict)
     assert "bench folder" in reasons(result)
 
 
+def test_seeing_a_check_through_any_path_is_void(tmp_path: Path) -> None:
+    run_dir = saved_run("clear-goal", tmp_path)
+    add_session_record(run_dir, 1, tool_use("Bash", command="cat ../../g*/b?nch/i*/c*/h*"))
+    add_session_record(run_dir, 1, {"type": "user", "message": {"content": [
+        {"type": "tool_result", "content": f'"""Leak marker: {bench.CANARY}. Holds a check'}]}})
+    result = bench.judge(run_dir)
+    assert verdicts(result) == {"clear-goal": "void"}
+    assert bench.CANARY in reasons(result)
+
+
+def test_every_file_holding_a_check_carries_the_marker_and_no_starting_project_does() -> None:
+    holders = [*(ROOT / "bench" / "instances").glob("*/instance.json"),
+               *(ROOT / "bench" / "instances").glob("*/hidden_test.py"),
+               *(ROOT / "bench" / "instances").glob("*/facts.json"),
+               *(ROOT / "bench" / name for name in ("run.py", "report.py", "README.md"))]
+    assert len(holders) == 11
+    assert all(bench.CANARY in path.read_text() for path in holders)
+    for name in bench.NAMES:
+        project = ROOT / bench.load_instance(name)["project"]
+        assert not any(bench.CANARY in path.read_text(errors="replace")
+                       for path in project.rglob("*") if path.is_file())
+
+
+@pytest.mark.parametrize(
+    ("planted", "content"),
+    [
+        ("pytest.py", "import sys\nsys.exit(0)\n"),
+        ("pyproject.toml", '[tool.pytest.ini_options]\naddopts = "--collect-only"\n'),
+        ("pytest.ini", "[pytest]\naddopts = --collect-only\n"),
+        ("sitecustomize.py", "import os\nos._exit(0)\n"),
+        ("todo_exit.py", ""),  # replaced below: the agent's own module exits early with 0
+    ],
+)
+def test_the_agents_files_cannot_make_a_hidden_test_pass(
+    tmp_path: Path, planted: str, content: str
+) -> None:
+    work = Path(shutil.copytree(work_folder(saved_run("clear-goal", tmp_path), 1), tmp_path / "w"))
+    hidden = ROOT / bench.load_instance("clear-goal")["hidden_test"]
+    assert bench.run_hidden_test(hidden, work)[0] is True  # the real work passes
+    todo = work / "todo.py"
+    if planted == "todo_exit.py":
+        todo.write_text("import os\nos._exit(0)\n")
+    else:
+        todo.write_text(todo.read_text().replace("def remove", "def remove_renamed"))
+        (work / planted).write_text(content)
+    passed, detail = bench.run_hidden_test(hidden, work)
+    assert passed is False, detail
+
+
 def test_reading_the_plugin_folder_outside_bench_is_not_a_leak(tmp_path: Path) -> None:
     run_dir = saved_run("clear-goal", tmp_path)
     add_session_record(run_dir, 1, tool_use("Read", file_path="/REPO/skills/goals-discovery/SKILL.md"))

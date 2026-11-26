@@ -104,3 +104,23 @@ not the same code.
   `~/Documents`.
 - `tests/test_bench.py` tests the checks and the runner on saved runs in
   `tests/fixtures/bench/`, with no model call. Those do run in CI.
+
+## What the isolation does not cover
+
+- **The permission list is not a sandbox.** `python`, `uv` and `git` can run any
+  code as you, with your full environment, so a session could still read or write
+  outside its folder (`~/.goals`, this repo, anything your login can reach). The
+  temp folder, its own `GOALS_HOME` and the folder refusal stop accidents, not a
+  session that goes looking. Not yet done: Claude Code's own sandbox
+  (`--settings` with `sandbox.enabled`) and a cut-down environment for the
+  session. Both change how a run behaves, so they need a real run to check.
+- **The leak check is detection, not prevention.** Hidden checks stay readable
+  under `bench/`. A run is void when a `bench/` path or the leak marker shows up
+  in anything a session ran or read. A session that reads a check through a
+  script without printing it would not be caught.
+- **The judge runs the agent's code.** That is how a hidden test works. Files that
+  could change how pytest starts or what it collects are left out of the judge's
+  copy, Python runs isolated (`-I`) with the judge's own empty config and a
+  cut-down environment, and a pass needs pytest's own "N passed" line.
+
+<!-- Leak marker: goals-bench-hidden-check-marker-6d1f. Holds a check, so it is never copied into a run. -->
