@@ -5,7 +5,9 @@ they are testable in-process. The plugin's ``hooks.json`` just runs the matching
 ``goals hooks ...`` command, so there is no fragile standalone script and no
 second code path.
 
-- **SessionStart** → inject the active goal's context (silent no-op if none).
+- **SessionStart** → inject the context of the goal really in progress: the session's own
+  folder's goal, or, when that one is finished or missing, the goal in progress in another of
+  the repo's working folders (several are listed). Silent no-op if none.
 - **Stop** (opt-in) → block stopping while the current phase still needs the
   agent, so the loop doesn't end mid-phase. Off unless ``GOALS_ENFORCE`` is set.
 - **UserPromptSubmit** → record the user's own typed words in every goal that is
@@ -20,9 +22,17 @@ import os
 from pathlib import Path
 
 from goals.brief import build_goal_brief
-from goals.checkpoints import checkpoint_is_asked
+from goals.checkpoints import checkpoint_is_asked, checkpoint_waits_on_user, is_future_phase
 from goals.git_ops import find_git_root, goal_worktrees
-from goals.models import Event, EventType, GateVerdict, GoalStatus, Phase, UserMessage
+from goals.models import (
+    Event,
+    EventType,
+    GateVerdict,
+    GoalSnapshot,
+    GoalStatus,
+    Phase,
+    UserMessage,
+)
 from goals.portability import render_context_block
 from goals.runtime import (
     MAX_PHASE_ATTEMPTS_ENV,
@@ -67,24 +77,148 @@ _NON_BLOCKING_STATUSES = (
 )
 
 
-def session_start_payload(cwd: Path) -> str:
-    """JSON that injects the active goal block, or "" when there's no goal.
+#: Most goals listed when several are in progress; the rest are only counted.
+MAX_LISTED_GOALS = 5
 
-    A hook must never crash the session, so any failure degrades to a silent
-    no-op (fail-open) rather than propagating.
+#: Longest question or objective kept on one line of the session-start block.
+_LINE_CHARS = 160
+
+_NEXT_COMMAND = "goals next --agent claude"
+
+
+def session_start_payload(cwd: Path) -> str:
+    """JSON that injects the goal this session should work from, or "" when there is none.
+
+    The goal in the session's own folder comes first, as it always has. When that goal is
+    finished or missing, the repo's other working folders are searched for a goal that is really
+    in progress: one is named (with its folder), several are listed so the user can say which.
+
+    A hook must never crash the session, so any failure degrades to a silent no-op (fail-open)
+    rather than propagating, and any failure in the new search degrades to exactly what this
+    hook gave before it looked past the session's own folder.
     """
+    own: GoalSnapshot | None = None
     try:
-        snapshot = load_active_snapshot(cwd)
-        return json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": render_context_block(snapshot),
-                }
-            }
-        )
+        own = load_active_snapshot(cwd)
+    except Exception:  # noqa: BLE001 - no goal here, or an unreadable one: look elsewhere
+        own = None
+    try:
+        today = render_context_block(own) if own is not None else ""
     except Exception:  # noqa: BLE001 - never crash a session hook; no-op instead
+        today = ""
+    try:
+        text = _session_start_text(cwd, own) or today
+    except Exception:  # noqa: BLE001 - the search is an extra: fall back to today's block
+        text = today
+    if not text:
         return ""
+    return json.dumps(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    )
+
+
+def _session_start_text(cwd: Path, own: GoalSnapshot | None) -> str:
+    """The block to inject, or "" to keep today's (own folder's goal, or nothing)."""
+    if own is not None and own.status in _RECORDING_STATUSES:
+        # Already in the right folder: the same block as ever, plus where things stand.
+        return "\n".join([render_context_block(own), "", *_status_lines(own)])
+    live = _live_goals_elsewhere(cwd)
+    if not live:
+        return ""
+    if len(live) > 1:
+        return _several_goals_text(live)
+    folder, snapshot = live[0]
+    return "\n".join(
+        [
+            render_context_block(snapshot),
+            "",
+            f"Goal folder: {folder} — work in this folder, run `goals` commands from it, and read "
+            f"{folder}/.goals/GOAL.md (not the session folder's). This session's own goal is "
+            "finished, missing or unreadable.",
+            *_status_lines(snapshot, folder=folder),
+        ]
+    )
+
+
+def _live_goals_elsewhere(cwd: Path) -> list[tuple[Path, GoalSnapshot]]:
+    """Goals in progress in the repo's other working folders, newest first.
+
+    The session's own folder is left out: `goals` commands there act on the folder's most
+    recently updated goal, so they could not be pointed at a second goal in the same folder.
+    """
+    found: list[tuple[Path, GoalSnapshot]] = []
+    for tier, is_own_checkout in _candidate_goal_dirs(cwd):
+        if is_own_checkout:
+            continue
+        for goal_dir in tier:
+            try:
+                snapshot = EventStore(goal_dir).snapshot()
+            except Exception:  # noqa: BLE001 - an unreadable log: skip that folder, keep going
+                continue
+            if snapshot.status in _RECORDING_STATUSES:
+                found.append((goal_dir.parents[2], snapshot))
+    found.sort(key=lambda item: item[1].last_updated, reverse=True)
+    return found
+
+
+def _status_lines(snapshot: GoalSnapshot, *, folder: Path | None = None) -> list[str]:
+    """"Waiting on" and "Next" lines: the last thing in the block, so the action is the last read."""
+    where = f" (in {folder})" if folder is not None else ""
+    question = _open_question(snapshot)
+    if question is not None:
+        return [f"Waiting on: you — {question}", f"Next: ask the user: {question}{where}"]
+    return [
+        "Waiting on: the agent (nothing needed from the user)",
+        f"Next: run `{_NEXT_COMMAND}`{where}",
+    ]
+
+
+def _open_question(snapshot: GoalSnapshot) -> str | None:
+    """What the user has been asked and has not answered yet, or None.
+
+    Reads the saved snapshot only: no git and no writes, because this runs at every session
+    start and after every /compact, and must not touch the repo's other working folders. It sees
+    asked checkpoints and blocking decisions, not merge-readiness findings (`goals brief` has those).
+    """
+    for phase in snapshot.phases:
+        if is_future_phase(snapshot, phase.phase_id):
+            continue  # a later step can't have been asked yet
+        for checkpoint in phase.checkpoints:
+            if checkpoint_waits_on_user(checkpoint):
+                text = checkpoint.title or checkpoint.checkpoint_id
+                return _one_line(text.removeprefix("Ask the user:").strip())
+    if snapshot.status == GoalStatus.BLOCKED:
+        return "a blocking decision is open (run `goals brief` for the question)"
+    return None
+
+
+def _several_goals_text(live: list[tuple[Path, GoalSnapshot]]) -> str:
+    lines = [
+        "## Goals in progress in this repo",
+        "",
+        "This session's own goal is finished, missing or unreadable, but these goals are in "
+        "progress:",
+    ]
+    for folder, snapshot in live[:MAX_LISTED_GOALS]:
+        waiting = "you" if _open_question(snapshot) is not None else "the agent"
+        lines.append(
+            f"- {_one_line(snapshot.objective)} (step {snapshot.current_phase or 'none'}, "
+            f"waiting on {waiting}): {folder}"
+        )
+    hidden = len(live) - MAX_LISTED_GOALS
+    if hidden > 0:
+        lines.append(f"- ...and {hidden} more not shown")
+    lines += [
+        "",
+        "Next: if this conversation has not already settled which goal we are working on, ask "
+        f"the user which one; then work in that goal's folder and run `{_NEXT_COMMAND}` there.",
+    ]
+    return "\n".join(lines)
+
+
+def _one_line(text: str) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= _LINE_CHARS else flat[: _LINE_CHARS - 1].rstrip() + "…"
 
 
 def stop_payload(
